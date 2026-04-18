@@ -779,6 +779,9 @@ function deptBadge(dept, booked = false) {
 function initTabs() {
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabs = document.querySelectorAll(".tab");
+  const setPortalMode = (tabId) => {
+    document.body.classList.toggle("customer360-landing", tabId === "customer360Tab");
+  };
 
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -789,8 +792,12 @@ function initTabs() {
       const tabId = btn.getAttribute("data-tab");
       const target = document.getElementById(tabId);
       if (target) target.classList.add("active");
+      setPortalMode(tabId);
     });
   });
+
+  const activeTab = document.querySelector(".tab-btn.active")?.getAttribute("data-tab") || "dashboardTab";
+  setPortalMode(activeTab);
 }
 
 function initConfigPanels() {

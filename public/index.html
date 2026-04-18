@@ -110,6 +110,31 @@
       letter-spacing:.03em;
       color:#f7f7f4;
     }
+    body.customer360-landing header{display:none}
+    body.customer360-landing main{max-width:none;padding:0 0 220px}
+    body.customer360-landing .tabs{
+      max-width:1600px;
+      margin:0 auto 8px;
+      padding:10px 24px;
+      background:rgba(18,24,32,.96);
+      border-color:rgba(255,255,255,.04);
+      border-radius:0 0 18px 18px;
+      backdrop-filter:blur(10px);
+    }
+    body.customer360-landing .tab-btn{
+      background:#252c37;
+      color:#d7dee6;
+      border-color:rgba(255,255,255,.05);
+    }
+    body.customer360-landing .tab-btn.active{
+      background:linear-gradient(180deg,#f4c569 0%,#c8923a 100%);
+      color:#1b2029;
+    }
+    body.customer360-landing #customer360Tab{
+      max-width:1600px;
+      margin:0 auto;
+      padding:0 24px;
+    }
     .brand-logo{
       height:72px;
       width:auto;
@@ -262,6 +287,8 @@
       .customer360-timeline::before,.customer360-timeline-item::before{display:none}
       .customer360-timeline-item{margin-left:0}
       .customer360-action-dock{grid-template-columns:1fr}
+      body.customer360-landing .tabs{padding:10px 12px;border-radius:0}
+      body.customer360-landing #customer360Tab{padding:0 12px}
     }
 
     tr.selected-row {
