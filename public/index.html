@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automotive Intelligence AI BDC</title>
+  <style>
+    :root{
+      --navy:#0f2747;
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --line:#e5e7eb;
+      --indigo:#3730a3;
+      --danger:#b91c1c;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;margin:0;background:var(--bg);color:var(--text)}
+    header{background:var(--navy);color:#fff;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+    main{max-width:1600px;margin:0 auto;padding:20px 24px 220px}
+    .tabs{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+    .tab-btn{background:#e5e7eb;color:#111827;border:none;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .tab-btn.active{background:var(--navy);color:#fff}
+    .tab{display:none}
+    .tab.active{display:block}
+    .call-direction-badge{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;text-transform:capitalize}
+    .call-direction-badge.inbound{background:#e0f2fe;color:#0c4a6e}
+    .call-direction-badge.outbound{background:#ede9fe;color:#4c1d95}
+    .cards4{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .card{background:var(--card);border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);padding:18px}
+    .kpi{font-size:28px;font-weight:bold}
+    .muted{color:var(--muted)}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input[type=file], input[type=text], input[type=password], input[type=number], input[type=email], textarea, select, input[type=date]{font-size:14px}
+    input[type=text], input[type=password], input[type=number], input[type=email], textarea, select, input[type=date]{
+      width:100%;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#fff;
+    }
+    textarea{min-height:140px;resize:vertical}
+    button{background:var(--navy);color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer}
+    button.secondary{background:#e5e7eb;color:#111827}
+    button.danger{background:var(--danger)}
+
+    table{
+      width:100%;
+      min-width:1150px;
+      border-collapse:collapse;
+      font-size:14px;
+    }
+
+    th,td{
+      text-align:left;
+      padding:10px 8px;
+      border-bottom:1px solid var(--line);
+      vertical-align:top;
+      white-space:nowrap;
+    }
+
+    th:nth-child(1), td:nth-child(1){min-width:90px;}
+    th:nth-child(2), td:nth-child(2){min-width:90px;}
+    th:nth-child(3), td:nth-child(3){min-width:230px;}
+    th:nth-child(4), td:nth-child(4){min-width:120px;}
+    th:nth-child(5), td:nth-child(5){min-width:110px;}
+    th:nth-child(6), td:nth-child(6){min-width:100px;}
+    th:nth-child(7), td:nth-child(7){min-width:90px;}
+    th:nth-child(8), td:nth-child(8){min-width:80px;}
+    th:nth-child(9), td:nth-child(9){min-width:80px;}
+    th:nth-child(10), td:nth-child(10){min-width:150px;}
+
+    .small{font-size:12px}
+    .pill{display:inline-block;background:#eef2ff;color:var(--indigo);border-radius:999px;padding:4px 10px;font-size:12px;margin:2px}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .preview{background:#0b1020;color:#d1d5db;padding:14px;border-radius:12px;white-space:pre-wrap;min-height:180px}
+    .call-row{cursor:pointer}
+    .call-row:hover{background:#f8fafc}
+    .section{margin-top:18px}
+    audio{width:100%}
+    .brand-header{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+    .brand-logo{
+      height:72px;
+      width:auto;
+      object-fit:contain;
+      background:#fff;
+      padding:6px 10px;
+      border-radius:10px;
+    }
+    .kpi-card{cursor:pointer;border:2px solid transparent;transition:all .15s ease}
+    .kpi-card:hover{transform:translateY(-2px)}
+    .kpi-card.active-filter{border-color:#111827}
+    .service-card{border-left:8px solid #2563eb;}
+    .sales-card{border-left:8px solid #16a34a;}
+    .parts-card{border-left:8px solid #ea580c;}
+    .bdc-card{border-left:8px solid #9333ea;}
+    .booked-card{border-left:8px solid #dc2626;}
+    .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
+    .badge-service{background:#2563eb;}
+    .badge-sales{background:#16a34a;}
+    .badge-parts{background:#ea580c;}
+    .badge-bdc{background:#9333ea;}
+    .badge-booked{background:#dc2626;}
+    .conversation-item{border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;background:#fff}
+    .conversation-item:hover{background:#f8fafc}
+    .unread{
+      background:#fef2f2;
+      border-left:4px solid #dc2626;
+    }
+    .unread-dot{
+      width:10px;
+      height:10px;
+      border-radius:999px;
+      background:#dc2626;
+      display:inline-block;
+    }
+    .conversation-item.unread strong{
+      font-weight:700;
+    }
+    .conversation-thread{background:#f8fafc;color:#111827;border-radius:12px;padding:14px;min-height:340px;max-height:520px;overflow:auto}
+    .msg-bubble{margin-bottom:12px;padding:12px 14px;border-radius:16px;word-break:break-word}
+    .msg-incoming{background:#e5e7eb;color:#111827;border-bottom-left-radius:6px}
+    .msg-outgoing{background:#dbeafe;color:#111827;border-bottom-right-radius:6px}
+    .config-layout{display:grid;grid-template-columns:260px 1fr;gap:20px}
+    .config-nav{display:flex;flex-direction:column;gap:8px}
+    .config-nav button{text-align:left}
+    .config-nav button.active{background:#111827;color:#fff}
+    .config-panel{display:none}
+    .config-panel.active{display:block}
+    .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+    .form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    .row-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .list-box{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}
+    .item-row{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    .item-row:last-child{margin-bottom:0}
+    .secret-note{font-size:12px;color:var(--muted);margin-top:6px}
+    .status-line{margin-top:10px;font-size:13px;color:var(--muted)}
+    .scheduler-board-cell{min-width:180px;border-radius:10px;padding:8px}
+    .scheduler-available{background:#f8fafc;color:#6b7280}
+    .scheduler-booked{background:#dbeafe}
+    .customer360-layout{display:grid;grid-template-columns:320px 1fr;gap:20px}
+    .customer360-sidebar{display:flex;flex-direction:column;gap:12px}
+    .customer360-list{display:flex;flex-direction:column;gap:10px;max-height:760px;overflow:auto}
+    .customer360-item{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;cursor:pointer}
+    .customer360-item.active{border-color:#1d4ed8;box-shadow:0 0 0 2px rgba(29,78,216,.12)}
+    .customer360-meta{font-size:13px;color:var(--muted);margin-top:4px}
+    .customer360-main{display:flex;flex-direction:column;gap:18px}
+    .customer360-hero{display:grid;grid-template-columns:2fr 1fr;gap:18px}
+    .customer360-stack{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .customer360-profile{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+    .customer360-stat{background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:14px}
+    .customer360-stat-value{font-size:24px;font-weight:700}
+    .customer360-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+    .customer360-detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
+    .customer360-detail-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff}
+    .customer360-timeline{display:flex;flex-direction:column;gap:12px}
+    .customer360-timeline-item{padding:14px;border:1px solid var(--line);border-radius:14px;background:#fff}
+    .customer360-mini-list{display:flex;flex-direction:column;gap:10px}
+    .customer360-mini-item{padding:12px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}
+    .customer360-empty{padding:28px;border:1px dashed var(--line);border-radius:14px;color:var(--muted);background:#fff}
+
+    @media (max-width: 1200px){
+      .cards4{grid-template-columns:repeat(3,1fr)}
+      .config-layout{grid-template-columns:1fr}
+      .customer360-layout,.customer360-hero,.customer360-stack{grid-template-columns:1fr}
+    }
+    @media (max-width: 960px){
+      .grid,.split,.cards4,.form-grid,.form-grid-3{grid-template-columns:1fr}
+      .brand-header{align-items:flex-start}
+      .customer360-profile,.customer360-detail-grid{grid-template-columns:1fr}
+    }
+
+    tr.selected-row {
+      background:#e0f2fe;
+    }
+
+    tr:hover {
+      background:#f1f5f9;
+    }
+
+    .phone-cta{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:600;border:none;cursor:pointer}
+    .phone-cta:hover{background:#dbeafe}
+    .phone-cta:disabled{opacity:.55;cursor:not-allowed}
+    .comms-launcher{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:18px;
+      width:min(1120px, calc(100vw - 32px));
+      border-radius:22px;
+      background:linear-gradient(135deg,#0f2747,#173b6d);
+      color:#fff;
+      box-shadow:0 18px 45px rgba(15,39,71,.35);
+      z-index:9998;
+      overflow:hidden;
+    }
+    .comms-launcher.compact{width:auto;min-width:340px}
+    .comms-launcher-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:14px}
+    .comms-launcher-left,.comms-launcher-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .comms-pill{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;border:none;cursor:pointer;font-weight:600}
+    .comms-pill.active{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;box-shadow:0 8px 24px rgba(37,99,235,.28)}
+    .comms-pill.alert{background:#dc2626}
+    .comms-icon-btn{border:none;background:rgba(255,255,255,.12);color:#fff;border-radius:12px;padding:10px 12px;cursor:pointer}
+    .comms-launcher-bar{background:linear-gradient(135deg,#0f2747,#1d4ed8)}
+    .comms-pill.brand{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;box-shadow:0 8px 24px rgba(37,99,235,.28)}
+    .comms-pill.brand img{width:22px;height:22px;border-radius:6px;object-fit:cover;display:block}
+    .comms-pill.brand.unread-pulse{animation:ingridPulse 1.8s infinite}
+    .comms-ai-indicator{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700}
+    .comms-ai-dot{width:8px;height:8px;border-radius:999px;background:#2563eb;animation:ingridPulse 1.2s infinite}
+    @keyframes ingridPulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.72}100%{transform:scale(1);opacity:1}}
+    .comms-body{display:none;background:#fff;color:#1f2937;border-top:1px solid rgba(255,255,255,.12);height:min(62vh,620px)}
+    .comms-launcher.open .comms-body{display:block}
+    .comms-layout{display:grid;grid-template-columns:320px 1fr;height:100%;min-height:0;max-height:none}
+    .comms-sidebar{border-right:1px solid #e5e7eb;display:flex;flex-direction:column;background:#f8fafc;min-height:0;overflow:hidden}
+    .comms-main{display:flex;flex-direction:column;min-width:0;background:#fff;min-height:0;height:100%;overflow:hidden}
+    .comms-search-wrap{padding:14px;border-bottom:1px solid #e5e7eb;background:#fff}
+    .comms-segmented{display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid #e5e7eb;background:#fff}
+    .comms-segmented button{background:#e5e7eb;color:#111827;border:none;border-radius:999px;padding:8px 12px}
+    .comms-segmented button.active{background:#0f2747;color:#fff}
+    .comms-list{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch}
+    .comms-thread-item{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+    .comms-thread-item.active{border-color:#1d4ed8;box-shadow:0 0 0 2px rgba(29,78,216,.12)}
+    .comms-thread-item.unread{border-left:4px solid #dc2626}
+    .comms-thread-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .comms-thread-preview{font-size:13px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .comms-main-header{padding:16px 18px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .comms-main-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .comms-secondary-btn{background:#eff6ff;color:#1d4ed8;border:none;border-radius:10px;padding:10px 12px;cursor:pointer;font-weight:600}
+    .comms-secondary-btn.green{background:#dcfce7;color:#166534}
+    .comms-content{flex:1;display:flex;flex-direction:column;min-height:0;height:0;overflow:hidden}
+    .comms-message-list{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:14px;background:#f8fafc;display:flex;flex-direction:column;gap:12px;min-height:0;height:0;-webkit-overflow-scrolling:touch}
+    .comms-message{max-width:72%;padding:12px 14px;border-radius:18px;background:#e5e7eb;color:#111827;align-self:flex-start;white-space:pre-wrap}
+    .comms-message.outgoing{background:#dbeafe;align-self:flex-end}
+    .comms-message-meta{font-size:12px;color:#6b7280;margin-top:6px}
+    .comms-composer{padding:12px;border-top:1px solid #e5e7eb;background:#fff;display:flex;gap:10px;align-items:flex-end;flex-shrink:0}
+    .comms-composer textarea{min-height:68px;max-height:120px;overflow-y:auto;resize:vertical}
+    .comms-empty{padding:32px;color:#6b7280}
+    .comms-contact-card,.comms-script-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .comms-contact-meta{font-size:13px;color:#6b7280;margin-top:4px}
+    .comms-grid-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .comms-dialer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:18px;overflow:auto}
+    .comms-status-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:12px;font-weight:700}
+    .comms-status-badge.success{background:#dcfce7;color:#166534}
+    .comms-status-badge.warn{background:#fef3c7;color:#92400e}
+    .comms-script-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+    .comms-script-box{padding:18px;overflow:auto}
+    .comms-field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .comms-field label{font-size:12px;color:#6b7280;font-weight:600}
+    .comms-mini{font-size:12px;color:#6b7280}
+    @media (max-width: 980px){
+      .comms-launcher{width:calc(100vw - 16px);bottom:8px}
+      .comms-layout{grid-template-columns:1fr}
+      .comms-sidebar{max-height:220px}
+      .comms-message{max-width:88%}
+      .comms-dialer-grid{grid-template-columns:1fr}
+      main{padding-bottom:340px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand-header">
+      <div>
+        <h1 class="brand-title">Automotive Intelligence AI BDC</h1>
+      </div>
+      <div>
+        <img src="./INGRID.png" alt="INGRID logo" class="brand-logo" />
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="dashboardTab">Call Dashboard</button>
+      <button class="tab-btn" data-tab="campaignTab">Campaign Builder</button>
+      <button class="tab-btn" data-tab="inboxTab">
+        Inbox
+        <span id="inboxUnreadBadge" style="
+          display:none;
+          margin-left:8px;
+          background:#dc2626;
+          color:#fff;
+          border-radius:999px;
+          padding:2px 8px;
+          font-size:12px;
+          font-weight:700;
+        ">0</span>
+      </button>
+      <button class="tab-btn" data-tab="customer360Tab">Customer 360</button>
+      <button class="tab-btn" data-tab="schedulerTab">Appointment Scheduler</button>
+      <button class="tab-btn" data-tab="tasksTab">Tasks</button>
+      <button class="tab-btn" data-tab="configTab">Configuration</button>
+    </div>
+
+    <section id="dashboardTab" class="tab active">
+      <div class="cards4">
+        <div class="card kpi-card" data-filter="all"><div class="muted">Total Calls</div><div id="kpiTotal" class="kpi">0</div></div>
+        <div class="card kpi-card service-card" data-filter="service"><div class="muted">Service Calls</div><div id="kpiService" class="kpi">0</div></div>
+        <div class="card kpi-card sales-card" data-filter="sales"><div class="muted">Sales Calls</div><div id="kpiSales" class="kpi">0</div></div>
+        <div class="card kpi-card parts-card" data-filter="parts"><div class="muted">Parts Calls</div><div id="kpiParts" class="kpi">0</div></div>
+        <div class="card kpi-card bdc-card" data-filter="bdc"><div class="muted">BDC Calls</div><div id="kpiBDC" class="kpi">0</div></div>
+        <div class="card kpi-card booked-card" data-filter="booked"><div class="muted">Booked Appointments</div><div id="kpiBooked" class="kpi">0</div></div>
+      </div>
+
+      <div>
+        <section class="card">
+          <div class="toolbar" style="justify-content:space-between; align-items:center;">
+            <h2 style="margin:0;">Recent Calls</h2>
+
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div id="callsLiveIndicator" style="
+                display:inline-flex;
+                align-items:center;
+                gap:8px;
+                padding:8px 12px;
+                border-radius:999px;
+                background:#ecfdf5;
+                color:#166534;
+                font-size:13px;
+                font-weight:600;
+              ">
+                <span style="
+                  width:8px;
+                  height:8px;
+                  border-radius:999px;
+                  background:#22c55e;
+                  display:inline-block;
+                "></span>
+                Live
+              </div>
+
+              <div id="callsLastUpdated" class="muted" style="font-size:13px;">
+                Last updated: —
+              </div>
+
+              <button id="refreshCallsBtn" class="btn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="toolbar" style="margin:12px 0;">
+            <input id="searchBox" type="text" placeholder="Search customer number, user number, or user name" style="flex:1;min-width:260px" />
+            <input id="dateFrom" type="date" />
+            <input id="dateTo" type="date" />
+          </div>
+
+          <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <button id="todayFilterBtn" class="secondary">Today</button>
+            <button id="yesterdayFilterBtn" class="secondary">Yesterday</button>
+            <button id="last7DaysBtn" class="secondary">Last 7 Days</button>
+            <button id="thisMonthBtn" class="secondary">This Month</button>
+            <button id="clearFilterBtn" class="secondary">Reset</button>
+          </div>
+
+          <div style="overflow:auto; max-height:640px; margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Call SID</th>
+                  <th>From</th>
+                  <th>Direction</th>
+                  <th>Department</th>
+                  <th>Status</th>
+                  <th>Language</th>
+                  <th>Duration</th>
+                  <th>Notes</th>
+                  <th>Recording</th>
+                </tr>
+              </thead>
+              <tbody id="callsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="campaignTab" class="tab">
+      <div class="grid">
+        <section class="card">
+          <h2>Upload customer list</h2>
+          <div class="toolbar">
+            <input id="csvFile" type="file" accept=".csv,text/csv" />
+            <button id="uploadBtn">Upload & Preview</button>
+            <button id="sampleBtn" class="secondary">Download sample CSV</button>
+          </div>
+          <p class="small muted">
+            Only <code>phone</code> is required. Any other CSV columns you upload can be used as merge tags in your script.
+          </p>
+          <div id="uploadStatus" class="muted"></div>
+
+          <div class="section">
+            <h3>Campaign type</h3>
+            <div class="toolbar">
+              <label><input type="radio" name="campaignType" value="dialer" checked /> Outbound Dialer</label>
+              <label><input type="radio" name="campaignType" value="sms" /> Outbound SMS</label>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Script template</h3>
+            <div class="toolbar">
+              <button id="loadVoiceTemplateBtn" class="secondary">Load voice template</button>
+              <button id="loadSmsTemplateBtn" class="secondary">Load SMS template</button>
+              <button id="saveCampaignBtn">Save campaign settings</button>
+            </div>
+            <textarea id="scriptTemplate" placeholder="Use tags like {{first_name}}, {{phone}}, {{make}}, {{model}}, or any other CSV column you uploaded"></textarea>
+          </div>
+
+          <div class="section">
+            <h3>Available tags</h3>
+            <div id="tagList"></div>
+          </div>
+
+          <div class="section">
+            <button id="startCampaignBtn">Start SMS Campaign</button>
+          </div>
+
+          <div class="section">
+            <h3>Last Campaign Run</h3>
+            <div id="campaignRunSummary" class="muted">No campaign run yet.</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Live Preview</h2>
+          <div class="toolbar">
+            <label for="previewRowSelect">Preview row:</label>
+            <select id="previewRowSelect"></select>
+          </div>
+          <div id="campaignMeta" class="muted" style="margin:8px 0 14px;">No upload yet.</div>
+
+          <div class="split">
+            <div>
+              <h3>Rendered script</h3>
+              <div id="renderedPreview" class="preview">Upload a CSV to preview your script.</div>
+            </div>
+            <div>
+              <h3>Selected customer</h3>
+              <div id="rowDetails" class="preview">No row selected.</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Current imported rows</h3>
+            <div style="overflow:auto; max-height:380px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Language</th>
+                    <th>Vehicle</th>
+                    <th>Due Date</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="campaignTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="inboxTab" class="tab">
+      <div class="grid">
+        <section class="card">
+          <div class="toolbar" style="justify-content:space-between; align-items:center;">
+            <h2 style="margin:0">Conversations</h2>
+
+            <div style="display:flex; gap:8px;">
+              <button id="composeSmsBtn" class="btn" onclick="openComposeSmsModal()">Compose Message</button>
+              <button id="refreshInboxBtn" class="secondary" onclick="loadInbox()">Refresh</button>
+            </div>
+          </div>
+          <div class="toolbar" style="margin:12px 0;">
+            <input id="inboxSearchBox" type="text" placeholder="Search by phone or name" style="flex:1;min-width:260px" />
+          </div>
+          <div id="inboxList" style="display:flex; flex-direction:column; gap:10px;"></div>
+        </section>
+
+        <section class="card">
+          <h2>Conversation Thread</h2>
+          <div id="inboxThread" class="conversation-thread">Select a conversation to view messages.</div>
+          <div class="section">
+            <h3>Send Reply</h3>
+            <textarea id="replyMessageBox" placeholder="Type your SMS reply here"></textarea>
+            <div class="toolbar" style="margin-top:10px">
+              <button id="sendReplyBtn">Send SMS Reply</button>
+              <span id="replyStatus" class="small muted"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="customer360Tab" class="tab">
+      <div class="customer360-layout">
+        <section class="card customer360-sidebar">
+          <div class="toolbar" style="justify-content:space-between;align-items:center;">
+            <h2 style="margin:0;">Customer 360</h2>
+            <button id="refreshCustomer360Btn" class="secondary">Refresh</button>
+          </div>
+          <input id="customer360SearchBox" type="text" placeholder="Search customer, phone, email, VIN" />
+          <div id="customer360Summary" class="muted">Loading customer records...</div>
+          <div id="customer360List" class="customer360-list"></div>
+        </section>
+
+        <section class="customer360-main">
+          <section class="card customer360-hero">
+            <div>
+              <div class="customer360-label">Selected Customer</div>
+              <h2 id="customer360Name" style="margin:8px 0 6px;">Select a customer</h2>
+              <div id="customer360Headline" class="muted">Profile, vehicle, communications, and workflow context will appear here.</div>
+              <div id="customer360Profile" class="customer360-profile"></div>
+            </div>
+            <div>
+              <div class="customer360-label">Linked Vehicle</div>
+              <div id="customer360VehicleCard" class="customer360-detail-card" style="margin-top:8px;">
+                <div class="muted">No vehicle selected yet.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="customer360-stack">
+            <div class="card">
+              <div class="toolbar" style="justify-content:space-between;align-items:center;">
+                <h2 style="margin:0;">Open Workflow</h2>
+                <span id="customer360WorkflowSummary" class="small muted"></span>
+              </div>
+              <div id="customer360Workflow" class="customer360-detail-grid"></div>
+            </div>
+
+            <div class="card">
+              <div class="toolbar" style="justify-content:space-between;align-items:center;">
+                <h2 style="margin:0;">Recent Calls</h2>
+                <span id="customer360CallsSummary" class="small muted"></span>
+              </div>
+              <div id="customer360Calls" class="customer360-mini-list"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="toolbar" style="justify-content:space-between;align-items:center;">
+              <h2 style="margin:0;">Notes</h2>
+              <span id="customer360NotesSummary" class="small muted"></span>
+            </div>
+            <div id="customer360Notes" class="customer360-mini-list"></div>
+          </section>
+
+          <section class="card">
+            <div class="toolbar" style="justify-content:space-between;align-items:center;">
+              <h2 style="margin:0;">Unified Timeline</h2>
+              <span id="customer360TimelineSummary" class="small muted"></span>
+            </div>
+            <div id="customer360Timeline" class="customer360-timeline"></div>
+          </section>
+        </section>
+      </div>
+    </section>
+
+    <section id="schedulerTab" class="tab">
+      <div class="grid">
+        <section class="card">
+          <h2>New Appointment</h2>
+          <div class="form-grid">
+            <div class="field"><label>First Name</label><input id="apptFirstName" type="text" /></div>
+            <div class="field"><label>Last Name</label><input id="apptLastName" type="text" /></div>
+            <div class="field"><label>Phone</label><input id="apptPhone" type="text" /></div>
+            <div class="field"><label>Email</label><input id="apptEmail" type="email" /></div>
+            <div class="field"><label>Make</label><input id="apptMake" type="text" /></div>
+            <div class="field"><label>Model</label><input id="apptModel" type="text" /></div>
+            <div class="field"><label>Year</label><input id="apptYear" type="text" /></div>
+            <div class="field"><label>VIN</label><input id="apptVin" type="text" /></div>
+            <div class="field"><label>Mileage</label><input id="apptMileage" type="text" /></div>
+            <div class="field"><label>Service</label><select id="apptService"></select></div>
+            <div class="field"><label>Advisor</label><select id="apptAdvisor"></select></div>
+            <div class="field"><label>Preferred Date</label><input id="apptDate" type="date" /></div>
+            <div class="field"><label>Available Time Slot</label><select id="apptTime"></select></div>
+            <div class="field"><label>Transportation</label><select id="apptTransport"></select></div>
+          </div>
+
+          <div class="section">
+            <label class="small muted">Notes</label>
+            <textarea id="apptNotes" placeholder="Appointment notes"></textarea>
+          </div>
+
+          <div class="toolbar" style="margin-top:10px">
+            <button id="refreshSlotsBtn" class="secondary">Refresh Slots</button>
+            <button id="bookAppointmentBtn">Book Appointment</button>
+            <span id="appointmentStatus" class="small muted"></span>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Booked Appointments</h2>
+          <div id="appointmentSummary" class="muted">No appointments loaded.</div>
+
+          <div style="overflow:auto; max-height:520px; margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Customer</th>
+                  <th>Vehicle</th>
+                  <th>Service</th>
+                  <th>Advisor</th>
+                </tr>
+              </thead>
+              <tbody id="appointmentsTableBody"></tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <div class="toolbar" style="justify-content:space-between">
+              <h2 style="margin:0">Visual Scheduler</h2>
+              <button id="refreshSchedulerBoardBtn" class="secondary">Refresh Board</button>
+            </div>
+            <div id="schedulerBoardStatus" class="small muted" style="margin-top:8px;"></div>
+            <div style="overflow:auto; margin-top:12px;">
+              <table id="schedulerBoardTable">
+                <thead id="schedulerBoardHead"></thead>
+                <tbody id="schedulerBoardBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="tasksTab" class="tab">
+      <div class="grid">
+        <section class="card">
+          <h2>Create Task</h2>
+          <div class="form-grid">
+            <div class="field"><label>Title</label><input id="taskTitle" type="text" /></div>
+            <div class="field"><label>Priority</label>
+              <select id="taskPriority">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div class="field"><label>Due Date</label><input id="taskDueAt" type="datetime-local" /></div>
+          </div>
+          <div class="section">
+            <label class="small muted">Description</label>
+            <textarea id="taskDescription" placeholder="Follow-up details, AI recommendation, or next action"></textarea>
+          </div>
+          <div class="toolbar" style="margin-top:10px">
+            <button id="createTaskBtn">Create Task</button>
+            <span id="taskStatus" class="small muted"></span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="toolbar" style="justify-content:space-between; align-items:center;">
+            <h2 style="margin:0;">Open Tasks</h2>
+            <button id="refreshTasksBtn" class="secondary">Refresh</button>
+          </div>
+          <div id="tasksSummary" class="muted">No tasks loaded.</div>
+          <div style="overflow:auto; max-height:520px; margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Due</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="tasksTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="configTab" class="tab">
+      <div class="config-layout">
+        <section class="card">
+          <h2>Configuration</h2>
+          <div class="config-nav">
+            <button class="config-nav-btn active" data-config-panel="configGeneral">General</button>
+            <button class="config-nav-btn" data-config-panel="configUsers">Users</button>
+            <button class="config-nav-btn" data-config-panel="configAdvisors">Advisors</button>
+            <button class="config-nav-btn" data-config-panel="configScheduler">Scheduler</button>
+            <button class="config-nav-btn" data-config-panel="configTwilio">Twilio</button>
+            <button class="config-nav-btn" data-config-panel="configAi">AI Reception</button>
+            <button class="config-nav-btn" data-config-panel="configFortellis">CDK / Fortellis</button>
+            <button class="config-nav-btn" data-config-panel="configPhones">Phone Numbers</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div id="configGeneral" class="config-panel active">
+            <h2>General</h2>
+            <div class="form-grid">
+              <div class="field"><label>Business Name</label><input id="cfgBusinessName" type="text" /></div>
+              <div class="field"><label>Default Language</label>
+                <select id="cfgDefaultLanguage">
+                  <option value="fr-CA">French (Canada)</option>
+                  <option value="en-US">English (US)</option>
+                </select>
+              </div>
+              <div class="field"><label>Timezone</label><input id="cfgTimezone" type="text" placeholder="America/Montreal" /></div>
+              <div class="field"><label>Demo Mode</label>
+                <select id="cfgDemoMode">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+            </div>
+            <div class="toolbar" style="margin-top:12px">
+              <button data-save-section="general">Save General</button>
+              <span id="configStatusGeneral" class="status-line"></span>
+            </div>
+          </div>
+
+          <div id="configUsers" class="config-panel">
+            <h2>Users</h2>
+            <div class="list-box">
+              <div id="usersList"></div>
+              <div class="row-actions" style="margin-top:10px">
+                <button id="addUserBtn" class="secondary">Add User</button>
+                <button data-save-section="users">Save Users</button>
+                <span id="configStatusUsers" class="status-line"></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="configAdvisors" class="config-panel">
+            <h2>Advisors</h2>
+            <div class="list-box">
+              <div id="advisorsList"></div>
+              <div class="row-actions" style="margin-top:10px">
+                <button id="addAdvisorBtn" class="secondary">Add Advisor</button>
+                <button data-save-section="advisors">Save Advisors</button>
+                <span id="configStatusAdvisors" class="status-line"></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="configScheduler" class="config-panel">
+            <h2>Scheduler</h2>
+            <div class="form-grid-3">
+              <div class="field"><label>Slot Duration (minutes)</label><input id="cfgSlotDuration" type="number" /></div>
+              <div class="field"><label>Buffer Minutes</label><input id="cfgBufferMinutes" type="number" /></div>
+              <div class="field"><label>Max Bookings Per Slot</label><input id="cfgMaxBookingsPerSlot" type="number" /></div>
+            </div>
+            <div class="section">
+              <label class="small muted">Business Hours JSON</label>
+              <textarea id="cfgBusinessHours"></textarea>
+            </div>
+            <div class="section">
+              <label class="small muted">Service Types (one per line)</label>
+              <textarea id="cfgServiceTypes"></textarea>
+            </div>
+            <div class="section">
+              <label class="small muted">Transportation Options (one per line)</label>
+              <textarea id="cfgTransportOptions"></textarea>
+            </div>
+            <div class="section">
+              <label class="small muted">Closed Dates (one YYYY-MM-DD per line)</label>
+              <textarea id="cfgClosedDates"></textarea>
+            </div>
+            <div class="toolbar" style="margin-top:12px">
+              <button data-save-section="scheduler">Save Scheduler</button>
+              <span id="configStatusScheduler" class="status-line"></span>
+            </div>
+          </div>
+
+          <div id="configTwilio" class="config-panel">
+            <h2>Twilio</h2>
+            <div class="form-grid">
+              <div class="field"><label>Account SID</label><input id="cfgTwilioSid" type="text" /></div>
+              <div class="field"><label>Auth Token</label><input id="cfgTwilioToken" type="password" placeholder="Stored securely — leave blank to keep current value" /></div>
+              <div class="field"><label>SMS Number</label><input id="cfgTwilioSmsNumber" type="text" /></div>
+              <div class="field"><label>Voice Number</label><input id="cfgTwilioVoiceNumber" type="text" /></div>
+              <div class="field"><label>SMS Webhook URL</label><input id="cfgTwilioSmsWebhook" type="text" /></div>
+              <div class="field"><label>Voice Webhook URL</label><input id="cfgTwilioVoiceWebhook" type="text" /></div>
+              <div class="field"><label>Recording Callback URL</label><input id="cfgTwilioRecordingCallback" type="text" /></div>
+              <div class="field"><label>Transcription Callback URL</label><input id="cfgTwilioTranscriptionCallback" type="text" /></div>
+            </div>
+            <div class="secret-note">Secret values are not loaded into the browser. Enter a value only to replace the current one.</div>
+            <div class="toolbar" style="margin-top:12px">
+              <button data-save-section="twilio">Save Twilio</button>
+              <span id="configStatusTwilio" class="status-line"></span>
+            </div>
+          </div>
+
+          <div id="configAi" class="config-panel">
+            <h2>AI Reception</h2>
+            <div class="form-grid">
+              <div class="field"><label>Backend Base URL</label><input id="cfgAiBackendUrl" type="text" /></div>
+              <div class="field"><label>Human Fallback Number</label><input id="cfgAiHumanFallback" type="text" /></div>
+              <div class="field"><label>BDC Fallback Number</label><input id="cfgAiBdcFallback" type="text" /></div>
+              <div class="field"><label>Outgoing Voice Route</label><input id="cfgAiOutboundRoute" type="text" /></div>
+            </div>
+            <div class="section"><label class="small muted">Greeting (French)</label><textarea id="cfgAiGreetingFr"></textarea></div>
+            <div class="section"><label class="small muted">Greeting (English)</label><textarea id="cfgAiGreetingEn"></textarea></div>
+            <div class="section"><label class="small muted">Routing Rules JSON</label><textarea id="cfgAiRoutingRules"></textarea></div>
+            <div class="toolbar" style="margin-top:12px">
+              <button data-save-section="aiReception">Save AI Reception</button>
+              <span id="configStatusAiReception" class="status-line"></span>
+            </div>
+          </div>
+
+          <div id="configFortellis" class="config-panel">
+            <h2>CDK / Fortellis</h2>
+            <div class="form-grid">
+              <div class="field"><label>Environment</label><input id="cfgFortellisEnvironment" type="text" /></div>
+              <div class="field"><label>Base API URL</label><input id="cfgFortellisBaseUrl" type="text" /></div>
+              <div class="field"><label>Client ID</label><input id="cfgFortellisClientId" type="text" placeholder="Stored securely — leave blank to keep current value" /></div>
+              <div class="field"><label>Client Secret</label><input id="cfgFortellisClientSecret" type="password" placeholder="Stored securely — leave blank to keep current value" /></div>
+              <div class="field"><label>Subscription ID</label><input id="cfgFortellisSubscriptionKey" type="password" placeholder="Stored securely — leave blank to keep current value" /></div>
+              <div class="field"><label>Dealer ID / Tenant ID</label><input id="cfgFortellisDealerId" type="text" /></div>
+              <div class="field"><label>Redirect URL</label><input id="cfgFortellisRedirectUrl" type="text" /></div>
+              <div class="field"><label>Scopes</label><input id="cfgFortellisScopes" type="text" /></div>
+            </div>
+            <div class="secret-note">Fortellis secrets should be stored in Netlify environment variables. Leave secret fields blank to keep the current secure values.</div>
+            <div class="toolbar" style="margin-top:12px">
+              <button id="testFortellisBtn" class="secondary">Test Fortellis Connection</button>
+              <button data-save-section="fortellis">Save Fortellis</button>
+              <span id="configStatusFortellis" class="status-line"></span>
+            </div>
+          </div>
+
+          <div id="configPhones" class="config-panel">
+            <h2>Phone Numbers</h2>
+            <div class="form-grid">
+              <div class="field"><label>Main Dealership</label><input id="cfgPhoneMain" type="text" /></div>
+              <div class="field"><label>Service</label><input id="cfgPhoneService" type="text" /></div>
+              <div class="field"><label>Sales</label><input id="cfgPhoneSales" type="text" /></div>
+              <div class="field"><label>Parts</label><input id="cfgPhoneParts" type="text" /></div>
+              <div class="field"><label>BDC</label><input id="cfgPhoneBdc" type="text" /></div>
+              <div class="field"><label>Finance</label><input id="cfgPhoneFinance" type="text" /></div>
+              <div class="field"><label>Collision</label><input id="cfgPhoneCollision" type="text" /></div>
+              <div class="field"><label>Twilio SMS</label><input id="cfgPhoneTwilioSms" type="text" /></div>
+              <div class="field"><label>Twilio Voice</label><input id="cfgPhoneTwilioVoice" type="text" /></div>
+            </div>
+            <div class="toolbar" style="margin-top:12px">
+              <button data-save-section="phoneNumbers">Save Phone Numbers</button>
+              <span id="configStatusPhoneNumbers" class="status-line"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="commsDock" class="comms-launcher compact">
+    <div class="comms-launcher-bar">
+      <div class="comms-launcher-left">
+        <button id="commsDockToggle" class="comms-pill brand" type="button"><img src="./INGRID.png" alt="INGRID">INGRID Communication Dock</button>
+        <span id="commsDockSummary" class="comms-mini" style="color:#dbe4f0;">Calls and SMS from one place.</span>
+      </div>
+      <div class="comms-launcher-right">
+        <span id="commsUnreadBadgeDock" class="comms-pill alert" style="display:none;">0 unread</span>
+        <span id="commsCallStateBadge" class="comms-pill" style="display:none;">Phone offline</span>
+        <button id="commsDockCollapseBtn" class="comms-icon-btn" type="button">▾</button>
+      </div>
+    </div>
+    <div class="comms-body">
+      <div class="comms-layout">
+        <aside class="comms-sidebar">
+          <div class="comms-search-wrap">
+            <input id="commsSearchInput" type="text" placeholder="Search name, phone, vehicle, or thread" />
+          </div>
+          <div class="comms-segmented">
+            <button id="commsModeMessagesBtn" type="button" class="active">Messages</button>
+            <button id="commsModeDialerBtn" type="button">Dialer</button>
+          </div>
+          <div id="commsSidebarList" class="comms-list"></div>
+        </aside>
+        <section class="comms-main">
+          <div id="commsMainHeader" class="comms-main-header"></div>
+          <div id="commsMainContent" class="comms-content"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="composeSmsModal" style="
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(17,24,39,0.45);
+    z-index:9999;
+    align-items:center;
+    justify-content:center;
+  ">
+    <div style="
+      width:min(680px, 92vw);
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.2);
+      overflow:hidden;
+    ">
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        padding:16px 18px;
+        border-bottom:1px solid #e5e7eb;
+        background:#f8fafc;
+      ">
+        <div style="font-size:20px; font-weight:700;">New Message</div>
+        <button id="closeComposeSmsBtn" class="secondary">Close</button>
+      </div>
+
+      <div style="padding:18px;">
+        <div style="display:grid; gap:12px;">
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:6px;">To</label>
+            <input
+              id="composePhoneNumber"
+              type="text"
+              placeholder="+1514..."
+              style="width:100%;"
+            />
+          </div>
+
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:6px;">Search customer</label>
+            <input
+              id="composeCustomerSearch"
+              type="text"
+              placeholder="Search by name or phone"
+              style="width:100%;"
+            />
+          </div>
+
+          <div id="composeSearchResults" style="max-height:160px; overflow:auto;"></div>
+
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:6px;">Message</label>
+            <textarea
+              id="composeSmsMessage"
+              placeholder="Type your message here"
+              style="width:100%; min-height:160px; resize:vertical;"
+            ></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span id="composeSmsStatus" class="small muted"></span>
+            <div style="display:flex; gap:8px;">
+              <button id="cancelComposeSmsBtn" class="secondary">Cancel</button>
+              <button id="sendComposeSmsBtn">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="callDetailsModal" style="
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(17,24,39,0.45);
+    z-index:9999;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  ">
+    <div style="
+      width:min(900px, 96vw);
+      max-height:90vh;
+      overflow:auto;
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.2);
+    ">
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        padding:16px 20px;
+        border-bottom:1px solid #e5e7eb;
+        background:#f8fafc;
+        position:sticky;
+        top:0;
+        z-index:1;
+      ">
+        <div style="font-size:20px; font-weight:700;">Call Details</div>
+        <button id="closeCallDetailsModalBtn" class="secondary">Close</button>
+      </div>
+
+      <div style="padding:20px;">
+        <div id="callDetails">
+          <strong>Call Details</strong>
+          <p class="muted">Select a call to view details.</p>
+        </div>
+
+        <div class="section" style="margin-top:20px;">
+          <h3>Internal Notes</h3>
+          <textarea id="notesBox" placeholder="Add internal notes here"></textarea>
+
+          <div class="toolbar" style="margin-top:10px">
+            <button id="saveNotesBtn" onclick="saveNotes()">Save Notes</button>
+            <span id="notesStatus" class="small muted"></span>
+          </div>
+
+          <div class="toolbar" style="margin-top:10px">
+            <button type="button" id="btnBooked" class="secondary">Mark Booked</button>
+            <button type="button" id="btnWrongDept" class="secondary">Wrong Department</button>
+            <button type="button" id="btnFaqLesson" class="secondary">Add FAQ Lesson</button>
+            <button type="button" id="btnCallback" class="secondary">Callback Requested</button>
+            <button type="button" id="btnVip" class="secondary">VIP Caller</button>
+            <button type="button" id="btnEnglish" class="secondary">Prefers English</button>
+            <button type="button" id="btnFrench" class="secondary">Prefers French</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+<script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.12.1/dist/twilio.min.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

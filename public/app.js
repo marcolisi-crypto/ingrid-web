@@ -1,0 +1,3424 @@
+let selectedCallSid = null;
+let currentCalls = [];
+let currentRows = [];
+let currentInboxConversations = [];
+let currentTasks = [];
+let currentAppointments = [];
+let currentCustomers = [];
+let currentVehicles = [];
+let currentCustomerNotes = [];
+let currentCustomerTimeline = [];
+let selectedCustomerId = "";
+let isLoadingInbox = false;
+let readMap = JSON.parse(localStorage.getItem("readConversations") || "{}");
+let activeDepartmentFilter = "all";
+let currentConversationPhone = "";
+let schedulerConfigCache = null;
+let configCache = null;
+let isLoadingCalls = false;
+let isLoadingCustomer360 = false;
+
+const COMM_SCRIPT_LIBRARY = [
+  {
+    id: "service-reminder",
+    name: "Service Reminder",
+    department: "service",
+    description: "One-off AI outbound reminder for due service or maintenance follow-up."
+  },
+  {
+    id: "sales-followup",
+    name: "Sales Follow-up",
+    department: "sales",
+    description: "Re-engage an individual sales lead with a guided AI script."
+  },
+  {
+    id: "appointment-recovery",
+    name: "Missed Appointment Recovery",
+    department: "service",
+    description: "Call a customer back after a missed or abandoned booking attempt."
+  }
+];
+
+const commsState = {
+  isOpen: false,
+  mode: "messages",
+  search: "",
+  selectedPhone: "",
+  selectedContact: null,
+  activeMessages: [],
+  smsDraft: "",
+  smsStatus: "",
+  call: {
+    status: "Phone backend not configured yet",
+    lastAction: "",
+    dialing: false,
+  },
+  scripted: {
+    scriptId: COMM_SCRIPT_LIBRARY[0].id,
+    notes: "",
+    status: "",
+    running: false,
+  },
+
+};
+
+let twilioDevice = null;
+let activeTwilioCall = null;
+let twilioReady = false;
+let twilioMuted = false;
+let twilioRegisterPromise = null;
+let twilioIdentity = "frontdesk-1";
+
+function getInboxReadMap() {
+  try {
+    return JSON.parse(localStorage.getItem("readConversations") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveInboxReadMap(map) {
+  readMap = map || {};
+  localStorage.setItem("readConversations", JSON.stringify(readMap));
+}
+
+function markConversationRead(phone, timestamp = new Date().toISOString()) {
+  const normalized = normalizePhoneNumber(phone);
+  if (!normalized) return;
+  const map = getInboxReadMap();
+  map[normalized] = timestamp;
+  saveInboxReadMap(map);
+}
+
+function getLatestIncomingTimestamp(messages = [], phone = "") {
+  const normalizedPhone = normalizePhoneNumber(phone);
+  const incoming = (messages || [])
+    .filter((msg) => isIncomingMessage(msg, normalizedPhone) && msg.timestamp)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  return incoming[0]?.timestamp || "";
+}
+
+function updateInboxUnreadBadge() {
+  const unreadCount = (currentInboxConversations || []).filter((item) => item.unread).length;
+  const badge = document.getElementById("inboxUnreadBadge");
+  if (badge) {
+    badge.textContent = unreadCount ? String(unreadCount) : "";
+    badge.style.display = unreadCount ? "inline-flex" : "none";
+  }
+  const dockBadge = document.getElementById("commsUnreadBadgeDock");
+  if (dockBadge) {
+    dockBadge.textContent = unreadCount ? `${unreadCount} unread` : "";
+    dockBadge.style.display = unreadCount ? "inline-flex" : "none";
+  }
+  const dockToggle = document.getElementById("commsDockToggle");
+  if (dockToggle) {
+    dockToggle.classList.toggle("unread-pulse", unreadCount > 0);
+  }
+}
+
+async function initTwilioDevice(forceRefresh = false) {
+  if (typeof Twilio === "undefined" || !Twilio?.Device) {
+    setCommsCallStatus("Voice SDK missing", "Load the Twilio Voice SDK script before app.js");
+    throw new Error("Twilio Voice SDK is not loaded.");
+  }
+
+  if (twilioDevice && !forceRefresh) return twilioDevice;
+  if (twilioRegisterPromise && !forceRefresh) return twilioRegisterPromise;
+
+  twilioRegisterPromise = (async () => {
+    setCommsCallStatus("Initializing", "Requesting browser voice token...");
+
+    const res = await fetch("/.netlify/functions/voice-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.token) {
+      throw new Error(data.error || data.message || "Failed to get voice token.");
+    }
+
+    twilioIdentity = data.identity || twilioIdentity;
+
+    if (twilioDevice && forceRefresh) {
+      try { twilioDevice.destroy(); } catch {}
+      twilioDevice = null;
+    }
+
+    twilioDevice = new Twilio.Device(data.token, {
+      logLevel: 1,
+      codecPreferences: ["opus", "pcmu"],
+      fakeLocalDTMF: true,
+      answerOnBridge: true
+    });
+
+    twilioDevice.on("registered", () => {
+      twilioReady = true;
+      setCommsCallStatus("Ready", `Browser registered as ${twilioIdentity}`);
+      renderCommsDock();
+    });
+
+    twilioDevice.on("unregistered", () => {
+      twilioReady = false;
+      setCommsCallStatus("Offline", "Browser device unregistered");
+      renderCommsDock();
+    });
+
+    twilioDevice.on("error", (error) => {
+      console.error("Twilio device error:", error);
+      twilioReady = false;
+      setCommsCallStatus("Error", error?.message || "Twilio device error");
+      renderCommsDock();
+    });
+
+    twilioDevice.on("incoming", (call) => {
+      console.log("🔥 Incoming browser call:", call);
+
+      activeTwilioCall = call;
+      twilioMuted = false;
+      openCommsDock({ mode: "dialer" });
+
+      try {
+        call.accept();
+      } catch (err) {
+        console.error("Auto-answer failed:", err);
+      }
+
+      setCommsCallStatus("Active", "Incoming browser leg auto-accepted");
+      renderCommsDock();
+
+      call.on("accept", () => {
+        setCommsCallStatus("Connected", "Call accepted in browser");
+        renderCommsDock();
+      });
+
+      call.on("disconnect", () => {
+        activeTwilioCall = null;
+        twilioMuted = false;
+        setCommsCallStatus("Ended", "Call disconnected");
+        renderCommsDock();
+      });
+
+      call.on("cancel", () => {
+        activeTwilioCall = null;
+        twilioMuted = false;
+        setCommsCallStatus("Missed", "Incoming call canceled");
+        renderCommsDock();
+      });
+    });
+
+    await twilioDevice.register();
+    return twilioDevice;
+  })();
+
+  try {
+    return await twilioRegisterPromise;
+  } finally {
+    twilioRegisterPromise = null;
+  }
+}
+
+
+const DEFAULT_TAGS = ["phone"];
+
+const DEFAULT_VOICE_TEMPLATE = `Bonjour {{first_name}}, ici BMW MINI Laval.
+
+Nous vous contactons au sujet de votre véhicule.
+Selon notre dossier, un entretien pourrait être dû prochainement.
+
+Souhaitez-vous prendre un rendez-vous?
+
+Hello {{first_name}}, this is BMW MINI Laval.
+
+We are contacting you regarding your vehicle.
+According to our records, maintenance may be due soon.
+
+Would you like to schedule an appointment?`;
+
+const DEFAULT_SMS_TEMPLATE = `Bonjour {{first_name}}, ceci est BMW MINI Laval. Votre {{make}} {{model}} {{year}} est dû pour un service ({{service_due}}). Répondez à ce message ou appelez-nous pour prendre rendez-vous.
+
+Hello {{first_name}}, this is BMW MINI Laval. Your {{make}} {{model}} {{year}} is due for service ({{service_due}}). Reply to this message or call us to book an appointment.`;
+
+const DEFAULT_CONFIG = {
+  general: {
+    businessName: "Automotive Intelligence Technologies",
+    defaultLanguage: "fr-CA",
+    timezone: "America/Montreal",
+    demoMode: "true"
+  },
+  users: [
+    { name: "Admin", email: "admin@example.com", role: "Admin", active: true, permissions: "all" }
+  ],
+  advisors: [
+    { name: "First Available", department: "service", email: "", extension: "", active: true, bookableOnline: true, color: "#2563eb" }
+  ],
+  scheduler: {
+    slotDuration: 30,
+    bufferMinutes: 0,
+    maxBookingsPerSlot: 2,
+    businessHours: {
+      monday: "07:30-17:00",
+      tuesday: "07:30-17:00",
+      wednesday: "07:30-17:00",
+      thursday: "07:30-17:00",
+      friday: "07:30-17:00"
+    },
+    serviceTypes: [
+      "Oil Change",
+      "Brake Service",
+      "Tire Change",
+      "Tire Storage",
+      "Recall Check",
+      "Diagnostic",
+      "Maintenance",
+      "Other"
+    ],
+    transportOptions: [
+      "Wait",
+      "Shuttle",
+      "Drop-Off",
+      "Loaner Request"
+    ],
+    closedDates: []
+  },
+  twilio: {
+    accountSid: "",
+    authToken: "",
+    smsNumber: "",
+    voiceNumber: "",
+    smsWebhook: "",
+    voiceWebhook: "",
+    recordingCallback: "",
+    transcriptionCallback: ""
+  },
+  aiReception: {
+    backendUrl: "",
+    humanFallback: "",
+    bdcFallback: "",
+    outboundRoute: "",
+    greetingFr: "",
+    greetingEn: "",
+    routingRules: {}
+  },
+  fortellis: {
+    environment: "",
+    baseUrl: "",
+    clientId: "",
+    clientSecret: "",
+    subscriptionKey: "",
+    dealerId: "",
+    redirectUrl: "",
+    scopes: ""
+  },
+  phoneNumbers: {
+    main: "",
+    service: "",
+    sales: "",
+    parts: "",
+    bdc: "",
+    finance: "",
+    collision: "",
+    twilioSms: "",
+    twilioVoice: ""
+  }
+};
+
+function formatDisplayDateTime(value) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString();
+}
+
+function customerDisplayName(customer) {
+  return String(customer?.fullName || `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() || "Unnamed Customer");
+}
+
+function vehicleDisplayName(vehicle) {
+  if (!vehicle) return "No linked vehicle";
+  return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") || vehicle.vin || "Vehicle record";
+}
+
+function getCustomerPrimaryVehicle(customer) {
+  if (!customer) return null;
+  const vehicleIds = Array.isArray(customer.vehicleIds) ? customer.vehicleIds : [];
+  return currentVehicles.find((vehicle) => vehicleIds.includes(vehicle.id)) || null;
+}
+
+function customerMatchesSearch(customer, vehicle, query) {
+  if (!query) return true;
+  const haystack = [
+    customerDisplayName(customer),
+    customer?.email || "",
+    ...(customer?.phones || []),
+    vehicle?.vin || "",
+    vehicleDisplayName(vehicle),
+  ].join(" ").toLowerCase();
+  return haystack.includes(query);
+}
+
+async function loadCustomer360() {
+  if (isLoadingCustomer360) return;
+  isLoadingCustomer360 = true;
+
+  try {
+    const [customersRes, vehiclesRes] = await Promise.all([
+      fetch("/.netlify/functions/customers-list"),
+      fetch("/.netlify/functions/vehicles-list")
+    ]);
+
+    const customersData = await customersRes.json();
+    const vehiclesData = await vehiclesRes.json();
+
+    currentCustomers = Array.isArray(customersData.customers) ? customersData.customers : [];
+    currentVehicles = Array.isArray(vehiclesData.vehicles) ? vehiclesData.vehicles : [];
+
+    if (!selectedCustomerId || !currentCustomers.some((customer) => customer.id === selectedCustomerId)) {
+      selectedCustomerId = currentCustomers[0]?.id || "";
+    }
+
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+  } catch (err) {
+    console.error("loadCustomer360 error:", err);
+    const list = document.getElementById("customer360List");
+    const summary = document.getElementById("customer360Summary");
+    if (summary) summary.textContent = err.message || "Failed to load customer records.";
+    if (list) list.innerHTML = `<div class="customer360-empty">Customer 360 is unavailable right now.</div>`;
+  } finally {
+    isLoadingCustomer360 = false;
+  }
+}
+
+async function refreshSelectedCustomer360() {
+  const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
+  if (!customer) {
+    currentCustomerNotes = [];
+    currentCustomerTimeline = [];
+    return;
+  }
+
+  const vehicle = getCustomerPrimaryVehicle(customer);
+  const timelineParams = new URLSearchParams({ customerId: customer.id, limit: "30" });
+  if (vehicle?.id) timelineParams.set("vehicleId", vehicle.id);
+  const notesParams = new URLSearchParams({ customerId: customer.id });
+  if (vehicle?.id) notesParams.set("vehicleId", vehicle.id);
+
+  const [timelineRes, notesRes] = await Promise.all([
+    fetch(`/.netlify/functions/timeline-list?${timelineParams.toString()}`),
+    fetch(`/.netlify/functions/notes-list?${notesParams.toString()}`)
+  ]);
+
+  const timelineData = await timelineRes.json().catch(() => ({}));
+  const notesData = await notesRes.json().catch(() => ({}));
+
+  currentCustomerTimeline = Array.isArray(timelineData.events) ? timelineData.events : [];
+  currentCustomerNotes = Array.isArray(notesData.notes) ? notesData.notes : [];
+}
+
+function renderCustomer360() {
+  renderCustomer360List();
+  renderCustomer360Detail();
+}
+
+function renderCustomer360List() {
+  const list = document.getElementById("customer360List");
+  const summary = document.getElementById("customer360Summary");
+  const query = String(document.getElementById("customer360SearchBox")?.value || "").trim().toLowerCase();
+  if (!list) return;
+
+  const filtered = currentCustomers.filter((customer) => {
+    const vehicle = getCustomerPrimaryVehicle(customer);
+    return customerMatchesSearch(customer, vehicle, query);
+  });
+
+  if (summary) {
+    summary.textContent = filtered.length
+      ? `${filtered.length} customer records loaded from the live DMS backend.`
+      : "No customers match the current search.";
+  }
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="customer360-empty">No customer records match this search.</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map((customer) => {
+    const vehicle = getCustomerPrimaryVehicle(customer);
+    const activeTasks = currentTasks.filter((task) => task.customerId === customer.id && task.status !== "completed").length;
+    const upcomingAppointments = currentAppointments.filter((item) => item.customerId === customer.id && item.status !== "completed").length;
+    const isActive = customer.id === selectedCustomerId;
+
+    return `
+      <div class="customer360-item ${isActive ? "active" : ""}" data-customer360-id="${escapeHtml(customer.id)}">
+        <strong>${escapeHtml(customerDisplayName(customer))}</strong>
+        <div class="customer360-meta">${escapeHtml((customer.phones || []).join(" • ") || customer.email || "No primary contact")}</div>
+        <div class="customer360-meta">${escapeHtml(vehicleDisplayName(vehicle))}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <span class="pill">${activeTasks} open task${activeTasks === 1 ? "" : "s"}</span>
+          <span class="pill">${upcomingAppointments} appointment${upcomingAppointments === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-customer360-id]").forEach((element) => {
+    element.addEventListener("click", async () => {
+      selectedCustomerId = element.getAttribute("data-customer360-id") || "";
+      await refreshSelectedCustomer360();
+      renderCustomer360();
+    });
+  });
+}
+
+function renderCustomer360Detail() {
+  const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
+  const vehicle = getCustomerPrimaryVehicle(customer);
+  const calls = (currentCalls || []).filter((call) => {
+    const phones = customer?.phones || [];
+    return phones.includes(normalizePhoneNumber(call.from || "")) || phones.includes(normalizePhoneNumber(call.to || ""));
+  });
+  const tasks = (currentTasks || []).filter((task) => task.customerId === customer?.id);
+  const appointments = (currentAppointments || []).filter((item) => item.customerId === customer?.id);
+
+  const nameEl = document.getElementById("customer360Name");
+  const headlineEl = document.getElementById("customer360Headline");
+  const profileEl = document.getElementById("customer360Profile");
+  const vehicleEl = document.getElementById("customer360VehicleCard");
+  const workflowEl = document.getElementById("customer360Workflow");
+  const workflowSummaryEl = document.getElementById("customer360WorkflowSummary");
+  const callsEl = document.getElementById("customer360Calls");
+  const callsSummaryEl = document.getElementById("customer360CallsSummary");
+  const notesEl = document.getElementById("customer360Notes");
+  const notesSummaryEl = document.getElementById("customer360NotesSummary");
+  const timelineEl = document.getElementById("customer360Timeline");
+  const timelineSummaryEl = document.getElementById("customer360TimelineSummary");
+
+  if (!customer) {
+    if (nameEl) nameEl.textContent = "Select a customer";
+    if (headlineEl) headlineEl.textContent = "Profile, vehicle, communications, and workflow context will appear here.";
+    if (profileEl) profileEl.innerHTML = "";
+    if (vehicleEl) vehicleEl.innerHTML = `<div class="muted">No vehicle selected yet.</div>`;
+    if (workflowEl) workflowEl.innerHTML = `<div class="customer360-empty">Choose a customer to load tasks and appointments.</div>`;
+    if (callsEl) callsEl.innerHTML = `<div class="customer360-empty">Choose a customer to load call activity.</div>`;
+    if (notesEl) notesEl.innerHTML = `<div class="customer360-empty">Choose a customer to load notes.</div>`;
+    if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
+    return;
+  }
+
+  if (nameEl) nameEl.textContent = customerDisplayName(customer);
+  if (headlineEl) {
+    headlineEl.textContent = `${customer.preferredLanguage || "Language n/a"} • ${(customer.phones || []).join(" • ") || customer.email || "No contact info"} • ${vehicleDisplayName(vehicle)}`;
+  }
+  if (profileEl) {
+    profileEl.innerHTML = `
+      <div class="customer360-stat">
+        <div class="customer360-label">Open Tasks</div>
+        <div class="customer360-stat-value">${tasks.filter((task) => task.status !== "completed").length}</div>
+      </div>
+      <div class="customer360-stat">
+        <div class="customer360-label">Appointments</div>
+        <div class="customer360-stat-value">${appointments.length}</div>
+      </div>
+      <div class="customer360-stat">
+        <div class="customer360-label">Timeline Events</div>
+        <div class="customer360-stat-value">${currentCustomerTimeline.length}</div>
+      </div>
+    `;
+  }
+  if (vehicleEl) {
+    vehicleEl.innerHTML = vehicle ? `
+      <strong>${escapeHtml(vehicleDisplayName(vehicle))}</strong>
+      <div class="customer360-meta">${escapeHtml(vehicle.vin || "VIN unavailable")}</div>
+      <div class="customer360-meta">Mileage: ${escapeHtml(vehicle.mileage ?? "-")}</div>
+      <div class="customer360-meta">Status: ${escapeHtml(vehicle.status || "active")}</div>
+    ` : `<div class="muted">No linked vehicle record yet.</div>`;
+  }
+
+  if (workflowSummaryEl) {
+    workflowSummaryEl.textContent = `${tasks.length} task(s) • ${appointments.length} appointment(s)`;
+  }
+  if (workflowEl) {
+    workflowEl.innerHTML = `
+      <div class="customer360-detail-card">
+        <div class="customer360-label">Tasks</div>
+        <div class="customer360-mini-list" style="margin-top:10px;">
+          ${tasks.length ? tasks.map((task) => `
+            <div class="customer360-mini-item">
+              <strong>${escapeHtml(task.title || "Task")}</strong>
+              <div class="customer360-meta">${escapeHtml(task.status || "open")} • ${escapeHtml(task.priority || "normal")}</div>
+              <div class="customer360-meta">${escapeHtml(task.description || "")}</div>
+            </div>
+          `).join("") : `<div class="customer360-empty">No tasks linked to this customer.</div>`}
+        </div>
+      </div>
+      <div class="customer360-detail-card">
+        <div class="customer360-label">Appointments</div>
+        <div class="customer360-mini-list" style="margin-top:10px;">
+          ${appointments.length ? appointments.map((item) => `
+            <div class="customer360-mini-item">
+              <strong>${escapeHtml(item.service || "Appointment")}</strong>
+              <div class="customer360-meta">${escapeHtml(item.date || "")} ${escapeHtml(item.time || "")} • ${escapeHtml(item.advisor || "Advisor TBD")}</div>
+              <div class="customer360-meta">${escapeHtml(item.transport || "Transport not set")} • ${escapeHtml(item.status || "scheduled")}</div>
+            </div>
+          `).join("") : `<div class="customer360-empty">No appointments linked to this customer.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  if (callsSummaryEl) {
+    callsSummaryEl.textContent = `${calls.length} call(s)`;
+  }
+  if (callsEl) {
+    callsEl.innerHTML = calls.length ? calls.map((call) => `
+      <div class="customer360-mini-item">
+        <strong>${escapeHtml(call.routedDepartment || "communications")} • ${escapeHtml(call.status || "completed")}</strong>
+        <div class="customer360-meta">${escapeHtml(formatDisplayDateTime(call.startedAt || call.updatedAt))}</div>
+        <div class="customer360-meta">${escapeHtml(call.transcript || call.notes || "No transcript captured.")}</div>
+      </div>
+    `).join("") : `<div class="customer360-empty">No call history linked to this customer yet.</div>`;
+  }
+
+  if (notesSummaryEl) {
+    notesSummaryEl.textContent = `${currentCustomerNotes.length} note(s)`;
+  }
+  if (notesEl) {
+    notesEl.innerHTML = currentCustomerNotes.length ? currentCustomerNotes.map((note) => `
+      <div class="customer360-mini-item">
+        <strong>${escapeHtml(note.noteType || "internal")}</strong>
+        <div class="customer360-meta">${escapeHtml(formatDisplayDateTime(note.updatedAtUtc || note.createdAtUtc))}</div>
+        <div>${escapeHtml(note.body || "")}</div>
+      </div>
+    `).join("") : `<div class="customer360-empty">No notes linked to this customer yet.</div>`;
+  }
+
+  if (timelineSummaryEl) {
+    timelineSummaryEl.textContent = `${currentCustomerTimeline.length} event(s)`;
+  }
+  if (timelineEl) {
+    timelineEl.innerHTML = currentCustomerTimeline.length ? currentCustomerTimeline.map((event) => `
+      <div class="customer360-timeline-item">
+        <div class="toolbar" style="justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div>
+            <strong>${escapeHtml(event.title || event.eventType || "Timeline event")}</strong>
+            <div class="customer360-meta">${escapeHtml(event.eventType || "")} • ${escapeHtml(event.department || event.sourceSystem || "ingrid")}</div>
+          </div>
+          <div class="customer360-meta">${escapeHtml(formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc))}</div>
+        </div>
+        <div style="margin-top:10px;">${escapeHtml(event.body || "")}</div>
+      </div>
+    `).join("") : `<div class="customer360-empty">No timeline events linked to this customer yet.</div>`;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatVehicle(row) {
+  return [row.year, row.make, row.model].filter(Boolean).join(" ");
+}
+
+function normalizeDept(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function isBooked(call) {
+  const notes = String(call.notes || "").toLowerCase();
+  const transcript = String(call.transcript || "").toLowerCase();
+  const status = String(call.status || "").toLowerCase();
+  const intent = String(call.detectedIntent || "").toLowerCase();
+
+  return (
+    notes.includes("booked") ||
+    notes.includes("appointment booked") ||
+    notes.includes("rendez-vous pris") ||
+    transcript.includes("appointment booked") ||
+    transcript.includes("booked appointment") ||
+    transcript.includes("rendez-vous pris") ||
+    status === "booked" ||
+    intent.includes("booked")
+  );
+}
+
+function deptBadge(dept, booked = false) {
+  if (booked) return `<span class="badge badge-booked">Booked</span>`;
+
+  const d = normalizeDept(dept);
+  if (d.includes("service")) return `<span class="badge badge-service">Service</span>`;
+  if (d.includes("sales")) return `<span class="badge badge-sales">Sales</span>`;
+  if (d.includes("parts")) return `<span class="badge badge-parts">Parts</span>`;
+  if (d.includes("bdc")) return `<span class="badge badge-bdc">BDC</span>`;
+  if (d.includes("sms")) return `<span class="badge badge-bdc">SMS</span>`;
+  return escapeHtml(dept || "");
+}
+
+function initTabs() {
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const tabs = document.querySelectorAll(".tab");
+
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabButtons.forEach((b) => b.classList.remove("active"));
+      tabs.forEach((t) => t.classList.remove("active"));
+      btn.classList.add("active");
+
+      const tabId = btn.getAttribute("data-tab");
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add("active");
+    });
+  });
+}
+
+function initConfigPanels() {
+  document.querySelectorAll(".config-nav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".config-nav-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".config-panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.configPanel)?.classList.add("active");
+    });
+  });
+}
+
+function initKpiFilters() {
+  document.querySelectorAll(".kpi-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      activeDepartmentFilter = card.dataset.filter || "all";
+      document.querySelectorAll(".kpi-card").forEach((c) => c.classList.remove("active-filter"));
+      card.classList.add("active-filter");
+      loadCalls();
+    });
+  });
+
+  const allCard = document.querySelector('.kpi-card[data-filter="all"]');
+  if (allCard) allCard.classList.add("active-filter");
+}
+
+function appendNoteLine(text) {
+  const notesBox = document.getElementById("notesBox");
+  if (!notesBox) return;
+  const current = notesBox.value.trim();
+  notesBox.value = current ? `${current}\n${text}` : text;
+}
+
+function wireTrainingButtons() {
+  document.getElementById("btnBooked")?.addEventListener("click", () => appendNoteLine("Outcome: Booked appointment"));
+  document.getElementById("btnWrongDept")?.addEventListener("click", () => {
+    appendNoteLine("Routing issue: Wrong department");
+    appendNoteLine("Correct Department: ");
+  });
+  document.getElementById("btnFaqLesson")?.addEventListener("click", () => appendNoteLine("FAQ Lesson: "));
+  document.getElementById("btnCallback")?.addEventListener("click", () => appendNoteLine("Outcome: Callback requested"));
+  document.getElementById("btnVip")?.addEventListener("click", () => appendNoteLine("Caller Type: VIP"));
+  document.getElementById("btnEnglish")?.addEventListener("click", () => appendNoteLine("Language Preference: English"));
+  document.getElementById("btnFrench")?.addEventListener("click", () => appendNoteLine("Language Preference: French"));
+}
+
+function filterCalls(calls) {
+  const q = (document.getElementById("searchBox")?.value || "").toLowerCase().trim();
+  const fromDate = document.getElementById("dateFrom")?.value || "";
+  const toDate = document.getElementById("dateTo")?.value || "";
+
+  return calls.filter((call) => {
+    const haystack = [
+      call.from,
+      call.to,
+      call.userName,
+      call.userNumber,
+      call.callSid,
+      call.routedDepartment,
+      call.detectedIntent,
+      call.notes,
+      call.transcript
+    ].join(" ").toLowerCase();
+
+    const matchesSearch = !q || haystack.includes(q);
+
+const callDateRaw = call.startedAt || call.updatedAt || "";
+const callDateObj = callDateRaw ? new Date(callDateRaw) : null;
+
+const callDate =
+  callDateObj && !isNaN(callDateObj.getTime())
+    ? callDateObj.toISOString().slice(0, 10)
+    : "";
+
+const matchesFrom = !fromDate || (callDate && callDate >= fromDate);
+const matchesTo = !toDate || (callDate && callDate <= toDate);
+
+const dept = normalizeDept(call.routedDepartment);
+const booked = isBooked(call);
+
+let matchesDepartment = true;
+if (activeDepartmentFilter === "service") matchesDepartment = dept.includes("service");
+if (activeDepartmentFilter === "sales") matchesDepartment = dept.includes("sales");
+if (activeDepartmentFilter === "parts") matchesDepartment = dept.includes("parts");
+if (activeDepartmentFilter === "bdc") matchesDepartment = dept.includes("bdc");
+if (activeDepartmentFilter === "booked") matchesDepartment = booked;
+
+    return matchesSearch && matchesFrom && matchesTo && matchesDepartment;
+  });
+}
+
+function updateKpis() {
+  const calls = filterCalls(currentCalls || []);
+  
+  console.log("updateKpis currentCalls:", calls);
+
+  const total = calls.length;
+
+  const serviceCalls = calls.filter((c) =>
+    String(c.routedDepartment || "").toLowerCase() === "service"
+  );
+  const salesCalls = calls.filter((c) =>
+    String(c.routedDepartment || "").toLowerCase() === "sales"
+  );
+  const partsCalls = calls.filter((c) =>
+    String(c.routedDepartment || "").toLowerCase() === "parts"
+  );
+  const bdcCalls = calls.filter((c) =>
+    String(c.routedDepartment || "").toLowerCase() === "bdc"
+  );
+
+  const bookedCalls = calls.filter((c) => {
+    const notes = String(c.notes || "").toLowerCase();
+    const status = String(c.status || "").toLowerCase();
+    return notes.includes("booked") || status.includes("booked");
+  });
+
+  const totalEl = document.getElementById("kpiTotal");
+  const serviceEl = document.getElementById("kpiService");
+  const salesEl = document.getElementById("kpiSales");
+  const partsEl = document.getElementById("kpiParts");
+  const bdcEl = document.getElementById("kpiBDC");
+  const bookedEl = document.getElementById("kpiBooked");
+
+  console.log("KPI elements found:", {
+    totalEl: !!totalEl,
+    serviceEl: !!serviceEl,
+    salesEl: !!salesEl,
+    partsEl: !!partsEl,
+    bdcEl: !!bdcEl,
+    bookedEl: !!bookedEl,
+  });
+
+  console.log("KPI counts:", {
+    total,
+    service: serviceCalls.length,
+    sales: salesCalls.length,
+    parts: partsCalls.length,
+    bdc: bdcCalls.length,
+    booked: bookedCalls.length,
+  });
+
+  if (totalEl) totalEl.textContent = String(total);
+  if (serviceEl) serviceEl.textContent = String(serviceCalls.length);
+  if (salesEl) salesEl.textContent = String(salesCalls.length);
+  if (partsEl) partsEl.textContent = String(partsCalls.length);
+  if (bdcEl) bdcEl.textContent = String(bdcCalls.length);
+  if (bookedEl) bookedEl.textContent = String(bookedCalls.length);
+}
+function getDeptBadge(dept) {
+  if (!dept) return "-";
+
+  const colors = {
+    service: "#3b82f6",
+    sales: "#22c55e",
+    parts: "#f97316",
+    bdc: "#a855f7",
+  };
+
+  const color = colors[String(dept).toLowerCase()] || "#999";
+
+  return `<span style="
+    padding:4px 8px;
+    border-radius:6px;
+    background:${color}20;
+    color:${color};
+    font-weight:600;
+  ">${dept}</span>`;
+}
+function setCallsLiveIndicator(state = "live") {
+  const el = document.getElementById("callsLiveIndicator");
+  if (!el) return;
+
+  if (state === "loading") {
+    el.style.background = "#eff6ff";
+    el.style.color = "#1d4ed8";
+    el.innerHTML = `
+      <span style="
+        width:8px;
+        height:8px;
+        border-radius:999px;
+        background:#3b82f6;
+        display:inline-block;
+      "></span>
+      Refreshing
+    `;
+    return;
+  }
+
+  if (state === "error") {
+    el.style.background = "#fef2f2";
+    el.style.color = "#991b1b";
+    el.innerHTML = `
+      <span style="
+        width:8px;
+        height:8px;
+        border-radius:999px;
+        background:#ef4444;
+        display:inline-block;
+      "></span>
+      Error
+    `;
+    return;
+  }
+
+  el.style.background = "#ecfdf5";
+  el.style.color = "#166534";
+  el.innerHTML = `
+    <span style="
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#22c55e;
+      display:inline-block;
+    "></span>
+    Live
+  `;
+}
+function updateCallsLastUpdated() {
+  const el = document.getElementById("callsLastUpdated");
+  if (!el) return;
+
+  const now = new Date();
+  const text = now.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  el.textContent = `Last updated: ${text}`;
+}
+function openCallDetailsModal() {
+  const modal = document.getElementById("callDetailsModal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeCallDetailsModal() {
+  const modal = document.getElementById("callDetailsModal");
+  if (modal) modal.style.display = "none";
+}
+async function loadCalls() {
+  if (isLoadingCalls) return;
+  isLoadingCalls = true;
+
+  try {
+    const res = await fetch("/.netlify/functions/api-calls");
+    const data = await res.json();
+
+    currentCalls = (data.calls || []).filter((call) => {
+      return String(call.callSid || "").startsWith("CA");
+    });
+
+    console.log("Loaded calls:", currentCalls);
+
+    updateKpis();
+
+    const body = document.getElementById("callsTableBody");
+    if (!body) {
+      console.error("callsTableBody not found");
+      return;
+    }
+
+    body.innerHTML = "";
+
+    const filtered = filterCalls(currentCalls || []);
+    console.log("Filtered calls:", filtered);
+
+    if (!filtered.length) {
+      body.innerHTML = `
+        <tr>
+          <td colspan="11" class="muted">No calls match the current filters.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    filtered.forEach((call) => {
+      const tr = document.createElement("tr");
+
+      if (call.notes && call.notes.trim()) {
+        tr.style.borderLeft = "4px solid #f59e0b";
+        tr.style.background = "#fffbeb";
+      }
+
+      const startedAt = call.startedAt || call.updatedAt || null;
+      const duration = call.duration ? `${call.duration}s` : "-";
+      const department = call.routedDepartment || "-";
+
+      const recording = call.recordingUrl
+        ? `<audio controls src="${escapeHtml(call.recordingUrl)}" style="width:140px; height:32px;"></audio>`
+        : "-";
+
+      const notesIndicator = getNotesIndicator(call.notes);
+
+      const direction = getCallDirection(call);
+
+      tr.innerHTML = `
+        <td>${escapeHtml(formatDateOnly(startedAt))}</td>
+        <td>${escapeHtml(formatTimeOnly(startedAt))}</td>
+        <td>${escapeHtml(call.callSid || "-")}</td>
+        <td>${formatCallPhoneCell(call.from)}</td>
+        <td><span class="call-direction-badge ${direction === "outbound" ? "outbound" : "inbound"}">${escapeHtml(direction)}</span></td>
+        <td>${escapeHtml(department)}</td>
+        <td>${escapeHtml(call.status || "-")}</td>
+        <td>${escapeHtml(call.language || "-")}</td>
+        <td>${escapeHtml(duration)}</td>
+        <td>${notesIndicator}</td>
+        <td>${recording}</td>
+      `;
+
+      tr.style.cursor = "pointer";
+
+   tr.onclick = () => {
+  document.querySelectorAll("#callsTableBody tr").forEach((row) => {
+    row.classList.remove("selected-row");
+  });
+
+  tr.classList.add("selected-row");
+  selectedCallSid = call.callSid;
+
+  showCallDetails(call);
+  openCallDetailsModal();
+
+  const notesBox = document.getElementById("notesBox");
+  if (notesBox) notesBox.value = call.notes ?? "";
+
+  const notesStatus = document.getElementById("notesStatus");
+  if (notesStatus) notesStatus.textContent = "";
+};
+
+      body.appendChild(tr);
+    });
+
+    setCallsLiveIndicator("live");
+    updateCallsLastUpdated();
+    if (selectedCustomerId) renderCustomer360Detail();
+  } catch (err) {
+    console.error("❌ loadCalls error:", err);
+    setCallsLiveIndicator("error");
+  } finally {
+    isLoadingCalls = false;
+  }
+}
+function formatDateOnly(date) {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString();
+}
+
+function formatTimeOnly(date) {
+  if (!date) return "-";
+  return new Date(date).toLocaleTimeString();
+}
+
+
+function getCallDirection(call) {
+  const raw = String(call.direction || call.callDirection || call.directionLabel || "").toLowerCase();
+  const from = normalizePhoneNumber(call.from || "");
+  const to = normalizePhoneNumber(call.to || "");
+  const knownOutboundNumbers = ["14504979243"];
+
+  if (knownOutboundNumbers.includes(from.replace(/^\+/, ""))) return "outbound";
+  if (raw.includes("out")) return "outbound";
+  if (raw.includes("in")) return "inbound";
+
+  const twilioVoiceNumber = normalizePhoneNumber(window.__TWILIO_VOICE_NUMBER__ || "");
+  if (twilioVoiceNumber) {
+    if (from === twilioVoiceNumber) return "outbound";
+    if (to === twilioVoiceNumber) return "inbound";
+  }
+
+  return from ? "inbound" : "-";
+}
+
+function showCallDetails(call) {
+  const panel = document.getElementById("callDetails");
+  if (!panel) return;
+
+  panel.innerHTML = `
+<h3>Call Details • ${escapeHtml(call.from || "-")}</h3>
+
+<p><strong>From:</strong> ${formatCallPhoneCell(call.from)}</p>
+<p><strong>To:</strong> ${formatCallPhoneCell(call.to)}</p>
+<p><strong>Status:</strong> ${call.status || "-"}</p>
+<p><strong>Direction:</strong> ${getCallDirection(call)}</p>
+<p><strong>Department:</strong> ${call.routedDepartment || "-"}</p>
+<p><strong>Language:</strong> ${call.language || "-"}</p>
+<p><strong>Duration:</strong> ${call.duration || "-"} sec</p>
+
+${
+  call.recordingUrl
+    ? `<audio controls src="${call.recordingUrl}" style="margin-top:10px; width:100%;"></audio>`
+    : `<div style="margin-top:10px; color:#6b7280;">No recording available</div>`
+}
+
+<!-- ✅ TRANSCRIPT BLOCK -->
+<div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
+  <h4 style="margin:0 0 8px 0;">Transcript</h4>
+  <div style="
+    white-space:pre-wrap;
+    background:#f9fafb;
+    border:1px solid #e5e7eb;
+    border-radius:10px;
+    padding:12px;
+    min-height:100px;
+  ">
+    ${call.transcript || "No transcript available yet."}
+  </div>
+</div>
+
+<!-- EXISTING SMS BLOCK -->
+<div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
+  <h4 style="margin:0 0 8px 0;">Send SMS</h4>
+
+  <div style="font-size:13px; color:#6b7280; margin-bottom:8px;">
+    To: ${call.from || "-"}
+  </div>
+
+  <textarea
+    id="callSmsBox"
+    placeholder="Type your message here"
+    style="width:100%; min-height:80px;"
+  ></textarea>
+
+  <div style="margin-top:10px;">
+    <button onclick="sendSmsToSelectedCall()">Send SMS</button>
+    <span id="callSmsStatus" style="margin-left:10px;"></span>
+  </div>
+</div>
+`;
+
+  const notesBox = document.getElementById("notesBox");
+  if (notesBox) notesBox.value = call.notes ?? "";
+
+  const notesStatus = document.getElementById("notesStatus");
+  if (notesStatus) notesStatus.textContent = "";
+}
+
+function getNotesIndicator(notes) {
+  const hasNotes = String(notes || "").trim().length > 0;
+
+  if (!hasNotes) {
+    return `<span style="color:#9ca3af;">—</span>`;
+  }
+
+  return `<span style="
+    display:inline-block;
+    padding:4px 8px;
+    border-radius:999px;
+    background:#fef3c7;
+    color:#92400e;
+    font-size:12px;
+    font-weight:600;
+  ">📝 Note</span>`;
+}
+async function sendSmsToSelectedCall() {
+  const selected = currentCalls.find(c => c.callSid === selectedCallSid);
+  const message = document.getElementById("callSmsBox")?.value;
+
+  if (!selected || !message) return;
+
+  const status = document.getElementById("callSmsStatus");
+
+  try {
+    if (status) status.textContent = "Sending...";
+
+    const res = await fetch("/.netlify/functions/send-sms-reply", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        to: selected.from,
+        message
+      })
+    });
+
+    if (!res.ok) throw new Error();
+
+    // ✅ SUCCESS
+    if (status) status.textContent = "Sent ✅";
+
+    // optional: clear box
+    const box = document.getElementById("callSmsBox");
+    if (box) box.value = "";
+
+  } catch (err) {
+    console.error("SMS failed:", err);
+
+    if (status) status.textContent = "Failed ❌";
+  }
+}
+async function showCall(callSid) {
+  try {
+    selectedCallSid = callSid;
+
+    const res = await fetch(`/.netlify/functions/api-call?callSid=${encodeURIComponent(callSid)}`);
+    const call = await res.json();
+
+    if (!res.ok) {
+      throw new Error(call.error || "Failed to load call");
+    }
+
+    const panel = document.getElementById("callDetails");
+    if (!panel) return;
+
+    panel.innerHTML = `
+      <h3>Call Details • ${escapeHtml(call.from || "-")}</h3>
+
+      <p><strong>From:</strong> ${escapeHtml(call.from || "-")}</p>
+      <p><strong>To:</strong> ${escapeHtml(call.to || "-")}</p>
+      <p><strong>Status:</strong> ${escapeHtml(call.status || "-")}</p>
+      <p><strong>Department:</strong> ${escapeHtml(call.routedDepartment || "-")}</p>
+      <p><strong>Language:</strong> ${escapeHtml(call.language || "-")}</p>
+      <p><strong>Duration:</strong> ${escapeHtml(call.duration || "-")} sec</p>
+
+      ${
+        call.recordingUrl
+          ? `<audio controls src="${escapeHtml(call.recordingUrl)}" style="margin-top:10px; width:100%;"></audio>`
+          : `<div style="margin-top:10px; color:#6b7280;">No recording available</div>`
+      }
+
+      <div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
+        <h4 style="margin:0 0 8px 0;">Transcript</h4>
+        <div style="
+          white-space:pre-wrap;
+          background:#f9fafb;
+          border:1px solid #e5e7eb;
+          border-radius:10px;
+          padding:12px;
+          min-height:140px;
+          max-height:320px;
+          overflow:auto;
+          line-height:1.45;
+        ">
+          ${escapeHtml(call.transcript || "No transcript available yet.")}
+        </div>
+      </div>
+
+      <div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
+        <h4 style="margin:0 0 8px 0;">Send SMS</h4>
+
+        <div style="font-size:13px; color:#6b7280; margin-bottom:8px;">
+          To: ${escapeHtml(call.from || "-")}
+        </div>
+
+        <textarea
+          id="callSmsBox"
+          placeholder="Type your message here"
+          style="width:100%; min-height:80px;"
+        ></textarea>
+
+        <div style="margin-top:10px;">
+          <button onclick="sendSmsToSelectedCall()">Send SMS</button>
+          <span id="callSmsStatus" style="margin-left:10px;"></span>
+        </div>
+      </div>
+    `;
+
+    // ✅ load notes into textarea (RIGHT SIDE PANEL)
+    const notesBox = document.getElementById("notesBox");
+    if (notesBox) notesBox.value = call.notes || "";
+
+    const notesStatus = document.getElementById("notesStatus");
+    if (notesStatus) notesStatus.textContent = "";
+
+  } catch (err) {
+    console.error("showCall error:", err);
+
+    const panel = document.getElementById("callDetails");
+    if (panel) {
+      panel.innerHTML = `
+        <div style="color:#991b1b; background:#fef2f2; border:1px solid #fecaca; padding:12px; border-radius:10px;">
+          Failed to load call details.
+        </div>
+      `;
+    }
+  }
+}
+async function saveNotes() {
+  if (!selectedCallSid) {
+    alert("Select a call first");
+    return;
+  }
+
+  const notesBox = document.getElementById("notesBox");
+  const notesStatus = document.getElementById("notesStatus");
+  const notes = notesBox ? notesBox.value : "";
+
+  try {
+    if (notesStatus) notesStatus.textContent = "Saving...";
+
+    const res = await fetch("/.netlify/functions/api-update-call", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        callSid: selectedCallSid,
+        notes,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to save notes");
+    }
+
+    const updatedCall = data.call || {};
+
+    const index = currentCalls.findIndex((c) => c.callSid === selectedCallSid);
+    if (index !== -1) {
+      currentCalls[index] = {
+        ...currentCalls[index],
+        ...updatedCall,
+        notes,
+      };
+    }
+
+    await loadCalls();
+
+    const selected = currentCalls.find((c) => c.callSid === selectedCallSid);
+    if (selected) {
+      showCallDetails(selected);
+    }
+
+    if (notesBox) notesBox.value = notes;
+    if (notesStatus) notesStatus.textContent = "Saved ✅";
+  } catch (err) {
+    console.error("❌ Failed to save notes", err);
+    if (notesStatus) notesStatus.textContent = "Save failed";
+  }
+}
+
+function renderTags(tags = DEFAULT_TAGS) {
+  const tagList = document.getElementById("tagList");
+  if (!tagList) return;
+  tagList.innerHTML = "";
+  tags.forEach((tag) => {
+    const span = document.createElement("span");
+    span.className = "pill";
+    span.textContent = `{{${tag}}}`;
+    tagList.appendChild(span);
+  });
+}
+
+function applyTemplate(template, row) {
+  return String(template || "").replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => row?.[key] ?? "");
+}
+
+function setCampaignType(type) {
+  const radio = document.querySelector(`input[name="campaignType"][value="${type}"]`);
+  if (radio) radio.checked = true;
+}
+
+function getCampaignType() {
+  const radio = document.querySelector('input[name="campaignType"]:checked');
+  return radio ? radio.value : "dialer";
+}
+
+function updateStartButtonLabel() {
+  const btn = document.getElementById("startCampaignBtn");
+  if (!btn) return;
+  btn.textContent = getCampaignType() === "dialer" ? "Start Dialer Campaign" : "Start SMS Campaign";
+}
+
+function updateCampaignPreview() {
+  const select = document.getElementById("previewRowSelect");
+  const template = document.getElementById("scriptTemplate")?.value || "";
+  const preview = document.getElementById("renderedPreview");
+  const details = document.getElementById("rowDetails");
+
+  if (!preview || !details) return;
+
+  if (!currentRows.length) {
+    preview.textContent = "Upload a CSV to preview your script.";
+    details.textContent = "No row selected.";
+    return;
+  }
+
+  const row = currentRows[Number(select?.value) || 0];
+  preview.textContent = applyTemplate(template, row);
+  details.textContent = JSON.stringify(row, null, 2);
+}
+
+async function loadCampaign() {
+  try {
+    const [campaignRes, settingsRes] = await Promise.all([
+      fetch("/.netlify/functions/campaign-preview"),
+      fetch("/.netlify/functions/campaign-settings"),
+    ]);
+
+    const campaignData = await campaignRes.json();
+    const settingsData = await settingsRes.json();
+
+    currentRows = campaignData.rows || [];
+
+    const templateBox = document.getElementById("scriptTemplate");
+    if (templateBox) templateBox.value = settingsData.scriptTemplate || DEFAULT_VOICE_TEMPLATE;
+
+    setCampaignType(settingsData.campaignType || "dialer");
+    updateStartButtonLabel();
+
+    const meta = document.getElementById("campaignMeta");
+    const body = document.getElementById("campaignTableBody");
+    const select = document.getElementById("previewRowSelect");
+
+    if (body) body.innerHTML = "";
+    if (select) select.innerHTML = "";
+
+    if (!currentRows.length) {
+      if (meta) meta.textContent = "No upload yet.";
+      renderTags(DEFAULT_TAGS);
+      updateCampaignPreview();
+      return;
+    }
+
+    const headers = Array.from(new Set(currentRows.flatMap((r) => Object.keys(r))));
+    renderTags(headers.length ? headers : DEFAULT_TAGS);
+
+    if (meta) meta.textContent = `${currentRows.length} rows loaded • Uploaded ${new Date(campaignData.uploadedAt).toLocaleString()}`;
+
+    currentRows.forEach((row, idx) => {
+      if (select) {
+        const displayName = String(((row.first_name || "") + " " + (row.last_name || "")).trim()).trim() || row.phone || `Row ${idx + 1}`;
+        const option = document.createElement("option");
+        option.value = idx;
+        option.textContent = `${idx + 1}. ${displayName}`;
+        select.appendChild(option);
+      }
+
+      if (body) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHtml(String(((row.first_name || "") + " " + (row.last_name || "")).trim()))}</td>
+          <td>${escapeHtml(row.phone || "")}</td>
+          <td>${escapeHtml(row.language || "")}</td>
+          <td>${escapeHtml(formatVehicle(row))}</td>
+          <td>${escapeHtml(row.service_due_date || "")}</td>
+          <td>${escapeHtml(row.service_due_reason || "")}</td>
+        `;
+        body.appendChild(tr);
+      }
+    });
+
+    updateCampaignPreview();
+  } catch (err) {
+    console.error("loadCampaign error:", err);
+  }
+}
+
+async function uploadCampaign() {
+  try {
+    const file = document.getElementById("csvFile")?.files?.[0];
+    const status = document.getElementById("uploadStatus");
+
+    if (!file) {
+      if (status) status.textContent = "Please choose a CSV file first.";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    if (status) status.textContent = "Uploading...";
+
+    const res = await fetch("/.netlify/functions/upload-campaign", { method: "POST", body: formData });
+    const data = await res.json();
+
+    if (status) status.textContent = res.ok ? `Upload complete. ${data.rowsImported} rows imported.` : data.error || "Upload failed.";
+
+    if (res.ok) await loadCampaign();
+  } catch (err) {
+    console.error("uploadCampaign error:", err);
+  }
+}
+
+async function saveCampaignSettings() {
+  try {
+    const status = document.getElementById("uploadStatus");
+    const res = await fetch("/.netlify/functions/save-campaign-settings", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        campaignType: getCampaignType(),
+        scriptTemplate: document.getElementById("scriptTemplate")?.value || "",
+      }),
+    });
+
+    const data = await res.json();
+    if (status) status.textContent = res.ok ? "Campaign settings saved." : data.error || "Could not save settings.";
+  } catch (err) {
+    console.error("saveCampaignSettings error:", err);
+  }
+}
+
+async function startCampaign() {
+  try {
+    const status = document.getElementById("uploadStatus");
+    if (status) status.textContent = "Saving campaign settings...";
+
+    const saveRes = await fetch("/.netlify/functions/save-campaign-settings", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        campaignType: getCampaignType(),
+        scriptTemplate: document.getElementById("scriptTemplate")?.value || "",
+      }),
+    });
+
+    const saveData = await saveRes.json();
+    if (!saveRes.ok) {
+      if (status) status.textContent = `Campaign failed: ${saveData.error || "Could not save settings."}`;
+      return;
+    }
+
+    if (status) status.textContent = "Starting campaign...";
+
+    const res = await fetch("/.netlify/functions/start-campaign", { method: "POST" });
+    const data = await res.json();
+
+    if (!res.ok) {
+      const details = data.error || data.message || JSON.stringify(data);
+      if (status) status.textContent = `Campaign failed: ${details}`;
+      return;
+    }
+
+    if (data.summary?.failed > 0) {
+      const firstFailure = data.summary.results?.find((r) => r.status === "failed");
+      if (status && firstFailure) status.textContent = `Campaign failed: ${firstFailure.error || "Unknown error"}`;
+    } else if (status) {
+      const verb = data.summary?.campaignType === "dialer" ? "Queued" : "Sent";
+      status.textContent = `Campaign complete. ${verb}: ${data.summary.sent}, Failed: ${data.summary.failed}`;
+    }
+
+    await loadLastCampaignRun();
+    await loadInbox();
+  } catch (err) {
+    const status = document.getElementById("uploadStatus");
+    if (status) status.textContent = `Campaign failed: ${err.message}`;
+  }
+}
+
+async function loadLastCampaignRun() {
+  try {
+    const res = await fetch("/.netlify/functions/last-campaign-run");
+    const data = await res.json();
+    const target = document.getElementById("campaignRunSummary");
+    if (!target) return;
+
+    if (!data?.runAt) {
+      target.innerHTML = "No campaign run yet.";
+      return;
+    }
+
+    const label = data.campaignType === "dialer" ? "Queued" : "Sent";
+    target.innerHTML = `
+      <div><strong>Last Run:</strong> ${escapeHtml(data.runAt || "")}</div>
+      <div><strong>Type:</strong> ${escapeHtml(data.campaignType || "")}</div>
+      <div><strong>Total:</strong> ${escapeHtml(String(data.total || 0))}</div>
+      <div><strong>${label}:</strong> ${escapeHtml(String(data.sent || 0))}</div>
+      <div><strong>Failed:</strong> ${escapeHtml(String(data.failed || 0))}</div>
+    `;
+  } catch (err) {
+    console.error("loadLastCampaignRun error:", err);
+  }
+}
+
+function downloadSample() {
+  const sample = `phone,first_name,make,model,year,service_due
++15146084115,Nick,BMW,X5,2022,Oil Change
++15145551234,Sarah,MINI,Cooper,2021,Brake Service
+`;
+  const blob = new Blob([sample], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "campaign_sample.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapePreviewText(value) {
+  return escapeHtml(String(value || "").slice(0, 120));
+}
+
+function formatTimestamp(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return "";
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+function getConversationPhone(msg, twilioNumber) {
+  const normalize = (v) => String(v || "").replace(/\D/g, "");
+  const from = normalize(msg.from);
+  const to = normalize(msg.to);
+  const mine = normalize(twilioNumber);
+
+  if (from === mine) return msg.to || "";
+  return msg.from || "";
+}
+function openComposeSmsModal() {
+  const modal = document.getElementById("composeSmsModal");
+  const status = document.getElementById("composeSmsStatus");
+  const phone = document.getElementById("composePhoneNumber");
+  const search = document.getElementById("composeCustomerSearch");
+  const msg = document.getElementById("composeSmsMessage");
+  const results = document.getElementById("composeSearchResults");
+
+  if (modal) modal.style.display = "flex";
+  if (status) status.textContent = "";
+  if (phone) phone.value = "";
+  if (search) search.value = "";
+  if (msg) msg.value = "";
+  if (results) results.innerHTML = "";
+
+  phone?.focus();
+}
+
+function closeComposeSmsModal() {
+  const modal = document.getElementById("composeSmsModal");
+  if (modal) modal.style.display = "none";
+}
+
+function selectComposeCustomer(phone) {
+  const phoneInput = document.getElementById("composePhoneNumber");
+  const results = document.getElementById("composeSearchResults");
+  if (phoneInput) phoneInput.value = phone;
+  if (results) results.innerHTML = "";
+}
+
+function searchComposeCustomers() {
+  const q = String(
+    document.getElementById("composeCustomerSearch")?.value || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const results = document.getElementById("composeSearchResults");
+  if (!results) return;
+
+  if (!q) {
+    results.innerHTML = "";
+    return;
+  }
+
+  const cards = Array.isArray(currentInboxConversations)
+    ? currentInboxConversations
+    : [];
+
+  const matches = cards
+    .filter((c) => {
+      const haystack = `${c.phone || ""} ${c.displayName || ""} ${c.preview || ""}`.toLowerCase();
+      return haystack.includes(q);
+    })
+    .slice(0, 8);
+
+  if (!matches.length) {
+    results.innerHTML = `<div class="muted" style="padding:8px 0;">No matches found.</div>`;
+    return;
+  }
+
+  results.innerHTML = matches
+    .map((c) => `
+      <div
+        style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:8px; cursor:pointer; background:#fff;"
+        onclick="selectComposeCustomer('${String(c.phone || "").replace(/'/g, "\\'")}')"
+      >
+        <div style="font-weight:600;">${c.displayName || c.phone || "-"}</div>
+        <div class="muted">${c.phone || ""}</div>
+      </div>
+    `)
+    .join("");
+}
+
+async function sendComposedSms() {
+  const phoneInput = document.getElementById("composePhoneNumber");
+  const msgInput = document.getElementById("composeSmsMessage");
+  const status = document.getElementById("composeSmsStatus");
+
+  const to = String(phoneInput?.value || "").trim();
+  const message = String(msgInput?.value || "").trim();
+
+  if (!to || !message) {
+    if (status) status.textContent = "Enter phone number and message.";
+    return;
+  }
+
+  try {
+    if (status) status.textContent = "Sending...";
+
+    const res = await fetch("/.netlify/functions/send-sms-reply", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ to, message })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to send SMS");
+    }
+
+    if (status) status.textContent = "Sent ✅";
+    if (msgInput) msgInput.value = "";
+
+    await loadInbox();
+    currentConversationPhone = to;
+    await loadInboxThread(to);
+
+    closeComposeSmsModal();
+  } catch (err) {
+    console.error("sendComposedSms error:", err);
+    if (status) status.textContent = "Send failed";
+  }
+}
+function isIncomingMessage(msg, phone) {
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+  const normalizedFrom = String(msg?.from || "").replace(/\D/g, "");
+  const type = String(msg?.type || "").toLowerCase();
+
+  if (type === "sms") return true;
+  if (type === "sms-reply" || type === "sms-outbound") return false;
+
+  return normalizedFrom === normalizedPhone;
+}
+
+function isConversationUnread(messages, phone) {
+  const normalizedPhone = normalizePhoneNumber(phone);
+  const latestIncoming = getLatestIncomingTimestamp(messages, normalizedPhone);
+  if (!latestIncoming) return false;
+
+  const readMap = getInboxReadMap();
+  const lastRead = readMap[normalizedPhone];
+
+  if (!lastRead) return true;
+
+  return new Date(latestIncoming) > new Date(lastRead);
+}
+
+async function loadInbox() {
+  if (isLoadingInbox) return;
+  isLoadingInbox = true;
+
+  try {
+    const res = await fetch("/.netlify/functions/inbox-list");
+    const data = await res.json();
+
+    const list = document.getElementById("inboxList");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const q = (document.getElementById("inboxSearchBox")?.value || "")
+      .toLowerCase()
+      .trim();
+
+    const baseConversations = data.conversations || [];
+
+    const seen = new Set();
+    const uniqueConversations = baseConversations.filter((c) => {
+      if (seen.has(c.phone)) return false;
+      seen.add(c.phone);
+      return true;
+    });
+
+    const conversationsWithUnread = await Promise.all(
+      uniqueConversations.map(async (item) => {
+        try {
+          const threadRes = await fetch(
+            `/.netlify/functions/inbox-thread?phone=${encodeURIComponent(item.phone)}`
+          );
+          const threadData = await threadRes.json();
+          const messages = threadData.messages || [];
+
+          return {
+            ...item,
+            preview: String(item.lastMessage || item.message || item.body || "").trim(),
+            unread: isConversationUnread(messages, item.phone),
+          };
+        } catch (err) {
+          console.error("Unread check failed for", item.phone, err);
+          return {
+            ...item,
+            preview: String(item.lastMessage || item.message || item.body || "").trim(),
+            unread: false,
+          };
+        }
+      })
+    );
+
+    const conversations = conversationsWithUnread
+      .filter((item) => item.preview.length > 0)
+      .filter((item) => {
+        const haystack = `${item.phone} ${item.displayName} ${item.preview}`.toLowerCase();
+        return !q || haystack.includes(q);
+      });
+
+    currentInboxConversations = conversations;
+    updateInboxUnreadBadge();
+    syncCommsSelection();
+    renderCommsDock();
+
+    if (conversations.length && !currentConversationPhone) {
+  loadInboxThread(conversations[0].phone);
+}
+    if (!conversations.length) {
+      list.innerHTML = `<div class="muted">No conversations yet.</div>`;
+      renderCommsDock();
+      return;
+    }
+
+    conversations.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = `conversation-item ${item.unread ? "unread" : ""}`;
+
+      row.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              ${item.unread ? `<span class="unread-dot"></span>` : ""}
+              <strong>${item.displayName || item.phone}</strong>
+            </div>
+            <div class="muted">${item.phone}</div>
+            <div style="margin-top:6px;">${item.preview || ""}</div>
+          </div>
+          <div class="muted small">${formatTimestamp(item.lastTimestamp)}</div>
+        </div>
+      `;
+
+     row.onclick = async () => {
+  currentConversationPhone = item.phone;
+
+  markConversationRead(item.phone);
+
+  await loadInboxThread(item.phone);
+
+  item.unread = false;
+  row.classList.remove("unread");
+
+  const dot = row.querySelector(".unread-dot");
+  if (dot) dot.remove();
+
+  updateInboxUnreadBadge();
+  syncCommsSelection();
+  renderCommsDock();
+};
+      list.appendChild(row);
+    });
+  } catch (err) {
+    console.error("loadInbox error:", err);
+  } finally {
+    isLoadingInbox = false;
+  }
+}
+async function loadInboxThread(phone) {
+  try {
+    currentConversationPhone = phone;
+
+    const res = await fetch(`/.netlify/functions/inbox-thread?phone=${encodeURIComponent(phone)}`);
+    const data = await res.json();
+    const thread = document.getElementById("inboxThread");
+    if (!thread) return;
+
+    console.log("inbox-thread response:", data);
+
+    const messages = (data.messages || [])
+      .map((msg) => ({
+        ...msg,
+        displayBody: String(
+          msg.body ??
+          msg.message ??
+          msg.response ??
+          ""
+        ).trim(),
+      }))
+      .filter((msg) => {
+        return (
+          (msg.type === "sms" || msg.type === "sms-reply" || msg.type === "sms-outbound" || msg.type === "outgoing") &&
+          msg.displayBody.length > 0
+        );
+      })
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    commsState.selectedPhone = phone;
+    commsState.activeMessages = messages;
+    syncCommsSelection();
+
+    const latestIncoming = getLatestIncomingTimestamp(messages, phone);
+    markConversationRead(phone, latestIncoming || new Date().toISOString());
+    currentInboxConversations = (currentInboxConversations || []).map((item) => {
+      const same = normalizePhoneNumber(item.phone) === normalizePhoneNumber(phone);
+      return same ? { ...item, unread: false } : item;
+    });
+    updateInboxUnreadBadge();
+
+    if (!messages.length) {
+      thread.innerHTML = `<div class="muted">No text messages found.</div>`;
+      renderCommsDock();
+      return;
+    }
+
+    thread.innerHTML = messages.map((msg) => {
+      const normalizedPhone = String(phone || "").replace(/\D/g, "");
+      const normalizedFrom = String(msg.from || "").replace(/\D/g, "");
+      const type = String(msg.type || "").toLowerCase();
+
+      const isIncoming = type === "sms" || type === "sms-incoming"
+        ? true
+        : type === "sms-reply" || type === "outgoing" || type === "sms-outbound"
+        ? false
+        : normalizedFrom === normalizedPhone;
+
+      return `
+        <div style="display:flex; justify-content:${isIncoming ? "flex-start" : "flex-end"}; margin-bottom:12px;">
+          <div class="msg-bubble ${isIncoming ? "msg-incoming" : "msg-outgoing"}" style="max-width:75%;">
+            <div class="small muted" style="margin-bottom:6px;">
+              ${isIncoming ? "Incoming" : "Outgoing"} • ${escapeHtml(formatTimestamp(msg.timestamp))}
+            </div>
+            <div>${escapeHtml(msg.displayBody || "(No text)")}</div>
+            ${
+              msg.recordingUrl
+                ? `<div style="margin-top:8px;"><audio controls src="${escapeHtml(msg.recordingUrl)}"></audio></div>`
+                : ""
+            }
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    thread.scrollTop = thread.scrollHeight;
+    document.getElementById("replyMessageBox")?.focus();
+
+    const replyStatus = document.getElementById("replyStatus");
+    if (replyStatus) replyStatus.textContent = `Replying to ${phone}`;
+    renderCommsDock();
+  } catch (err) {
+    console.error("loadInboxThread error:", err);
+  }
+}
+
+async function sendInboxReply() {
+  try {
+    const replyBox = document.getElementById("replyMessageBox");
+    const replyStatus = document.getElementById("replyStatus");
+
+    if (!currentConversationPhone) {
+      if (replyStatus) replyStatus.textContent = "Select a conversation first.";
+      return;
+    }
+
+    const message = replyBox?.value || "";
+    if (!message.trim()) {
+      if (replyStatus) replyStatus.textContent = "Enter a message first.";
+      return;
+    }
+
+    if (replyStatus) replyStatus.textContent = "Sending...";
+
+    const res = await fetch("/.netlify/functions/send-sms-reply", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ to: currentConversationPhone, message }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (replyStatus) replyStatus.textContent = data.error || "Failed to send.";
+      return;
+    }
+
+    if (replyBox) replyBox.value = "";
+    if (replyStatus) replyStatus.textContent = "Reply sent.";
+
+    await loadInboxThread(currentConversationPhone);
+    await loadInbox();
+    renderCommsDock();
+  } catch (err) {
+    const replyStatus = document.getElementById("replyStatus");
+    if (replyStatus) replyStatus.textContent = err.message;
+  }
+}
+
+function safeParseJson(text, fallback) {
+  try {
+    return text ? JSON.parse(text) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function setValue(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value ?? "";
+}
+
+function getValue(id) {
+  return document.getElementById(id)?.value ?? "";
+}
+
+function makeUserRow(user = {}) {
+  const div = document.createElement("div");
+  div.className = "item-row";
+  div.innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>Name</label><input class="cfg-user-name" type="text" value="${escapeHtml(user.name || "")}" /></div>
+      <div class="field"><label>Email</label><input class="cfg-user-email" type="email" value="${escapeHtml(user.email || "")}" /></div>
+      <div class="field"><label>Role</label><input class="cfg-user-role" type="text" value="${escapeHtml(user.role || "")}" /></div>
+      <div class="field"><label>Permissions</label><input class="cfg-user-permissions" type="text" value="${escapeHtml(user.permissions || "")}" /></div>
+      <div class="field"><label>Active</label>
+        <select class="cfg-user-active">
+          <option value="true" ${user.active ? "selected" : ""}>Active</option>
+          <option value="false" ${!user.active ? "selected" : ""}>Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="row-actions" style="margin-top:8px">
+      <button type="button" class="secondary cfg-remove-user">Remove</button>
+    </div>
+  `;
+  div.querySelector(".cfg-remove-user")?.addEventListener("click", () => div.remove());
+  return div;
+}
+
+function makeAdvisorRow(advisor = {}) {
+  const div = document.createElement("div");
+  div.className = "item-row";
+  div.innerHTML = `
+    <div class="form-grid-3">
+      <div class="field"><label>Name</label><input class="cfg-advisor-name" type="text" value="${escapeHtml(advisor.name || "")}" /></div>
+      <div class="field"><label>Department</label><input class="cfg-advisor-department" type="text" value="${escapeHtml(advisor.department || "")}" /></div>
+      <div class="field"><label>Email</label><input class="cfg-advisor-email" type="email" value="${escapeHtml(advisor.email || "")}" /></div>
+      <div class="field"><label>Extension</label><input class="cfg-advisor-extension" type="text" value="${escapeHtml(advisor.extension || "")}" /></div>
+      <div class="field"><label>Color</label><input class="cfg-advisor-color" type="text" value="${escapeHtml(advisor.color || "")}" /></div>
+      <div class="field"><label>Active</label>
+        <select class="cfg-advisor-active">
+          <option value="true" ${advisor.active ? "selected" : ""}>Active</option>
+          <option value="false" ${!advisor.active ? "selected" : ""}>Inactive</option>
+        </select>
+      </div>
+      <div class="field"><label>Bookable Online</label>
+        <select class="cfg-advisor-bookable">
+          <option value="true" ${advisor.bookableOnline ? "selected" : ""}>Yes</option>
+          <option value="false" ${!advisor.bookableOnline ? "selected" : ""}>No</option>
+        </select>
+      </div>
+    </div>
+    <div class="row-actions" style="margin-top:8px">
+      <button type="button" class="secondary cfg-remove-advisor">Remove</button>
+    </div>
+  `;
+  div.querySelector(".cfg-remove-advisor")?.addEventListener("click", () => div.remove());
+  return div;
+}
+
+function collectUsers() {
+  return [...document.querySelectorAll("#usersList .item-row")].map((row) => ({
+    name: row.querySelector(".cfg-user-name")?.value || "",
+    email: row.querySelector(".cfg-user-email")?.value || "",
+    role: row.querySelector(".cfg-user-role")?.value || "",
+    permissions: row.querySelector(".cfg-user-permissions")?.value || "",
+    active: (row.querySelector(".cfg-user-active")?.value || "true") === "true",
+  }));
+}
+
+function collectAdvisors() {
+  return [...document.querySelectorAll("#advisorsList .item-row")].map((row) => ({
+    name: row.querySelector(".cfg-advisor-name")?.value || "",
+    department: row.querySelector(".cfg-advisor-department")?.value || "",
+    email: row.querySelector(".cfg-advisor-email")?.value || "",
+    extension: row.querySelector(".cfg-advisor-extension")?.value || "",
+    color: row.querySelector(".cfg-advisor-color")?.value || "",
+    active: (row.querySelector(".cfg-advisor-active")?.value || "true") === "true",
+    bookableOnline: (row.querySelector(".cfg-advisor-bookable")?.value || "true") === "true",
+  }));
+}
+
+function populateUsers(users) {
+  const container = document.getElementById("usersList");
+  if (!container) return;
+  container.innerHTML = "";
+  (users || []).forEach((u) => container.appendChild(makeUserRow(u)));
+}
+
+function populateAdvisors(advisors) {
+  const container = document.getElementById("advisorsList");
+  if (!container) return;
+  container.innerHTML = "";
+  (advisors || []).forEach((a) => container.appendChild(makeAdvisorRow(a)));
+}
+
+function fillConfigForm(config) {
+  configCache = config;
+
+  setValue("cfgBusinessName", config.general?.businessName);
+  setValue("cfgDefaultLanguage", config.general?.defaultLanguage);
+  setValue("cfgTimezone", config.general?.timezone);
+  setValue("cfgDemoMode", config.general?.demoMode);
+
+  populateUsers(config.users || []);
+  populateAdvisors(config.advisors || []);
+
+  setValue("cfgSlotDuration", config.scheduler?.slotDuration);
+  setValue("cfgBufferMinutes", config.scheduler?.bufferMinutes);
+  setValue("cfgMaxBookingsPerSlot", config.scheduler?.maxBookingsPerSlot);
+  setValue("cfgBusinessHours", JSON.stringify(config.scheduler?.businessHours || {}, null, 2));
+  setValue("cfgServiceTypes", (config.scheduler?.serviceTypes || []).join("\n"));
+  setValue("cfgTransportOptions", (config.scheduler?.transportOptions || []).join("\n"));
+  setValue("cfgClosedDates", (config.scheduler?.closedDates || []).join("\n"));
+
+  setValue("cfgTwilioSid", config.twilio?.accountSid);
+  setValue("cfgTwilioToken", "");
+  setValue("cfgTwilioSmsNumber", config.twilio?.smsNumber);
+  setValue("cfgTwilioVoiceNumber", config.twilio?.voiceNumber);
+  setValue("cfgTwilioSmsWebhook", config.twilio?.smsWebhook);
+  setValue("cfgTwilioVoiceWebhook", config.twilio?.voiceWebhook);
+  setValue("cfgTwilioRecordingCallback", config.twilio?.recordingCallback);
+  setValue("cfgTwilioTranscriptionCallback", config.twilio?.transcriptionCallback);
+
+  setValue("cfgAiBackendUrl", config.aiReception?.backendUrl);
+  setValue("cfgAiHumanFallback", config.aiReception?.humanFallback);
+  setValue("cfgAiBdcFallback", config.aiReception?.bdcFallback);
+  setValue("cfgAiOutboundRoute", config.aiReception?.outboundRoute);
+  setValue("cfgAiGreetingFr", config.aiReception?.greetingFr);
+  setValue("cfgAiGreetingEn", config.aiReception?.greetingEn);
+  setValue("cfgAiRoutingRules", JSON.stringify(config.aiReception?.routingRules || {}, null, 2));
+
+  setValue("cfgFortellisEnvironment", config.fortellis?.environment);
+  setValue("cfgFortellisBaseUrl", config.fortellis?.baseUrl);
+  setValue("cfgFortellisClientId", "");
+  setValue("cfgFortellisClientSecret", "");
+  setValue("cfgFortellisSubscriptionKey", "");
+  setValue("cfgFortellisDealerId", config.fortellis?.dealerId);
+  setValue("cfgFortellisRedirectUrl", config.fortellis?.redirectUrl);
+  setValue("cfgFortellisScopes", config.fortellis?.scopes);
+
+  setValue("cfgPhoneMain", config.phoneNumbers?.main);
+  setValue("cfgPhoneService", config.phoneNumbers?.service);
+  setValue("cfgPhoneSales", config.phoneNumbers?.sales);
+  setValue("cfgPhoneParts", config.phoneNumbers?.parts);
+  setValue("cfgPhoneBdc", config.phoneNumbers?.bdc);
+  setValue("cfgPhoneFinance", config.phoneNumbers?.finance);
+  setValue("cfgPhoneCollision", config.phoneNumbers?.collision);
+  setValue("cfgPhoneTwilioSms", config.phoneNumbers?.twilioSms);
+  setValue("cfgPhoneTwilioVoice", config.phoneNumbers?.twilioVoice);
+}
+
+function buildSectionPayload(section) {
+  if (section === "general") {
+    return {
+      businessName: getValue("cfgBusinessName"),
+      defaultLanguage: getValue("cfgDefaultLanguage"),
+      timezone: getValue("cfgTimezone"),
+      demoMode: getValue("cfgDemoMode"),
+    };
+  }
+
+  if (section === "users") return collectUsers();
+  if (section === "advisors") return collectAdvisors();
+
+  if (section === "scheduler") {
+    return {
+      slotDuration: Number(getValue("cfgSlotDuration") || 30),
+      bufferMinutes: Number(getValue("cfgBufferMinutes") || 0),
+      maxBookingsPerSlot: Number(getValue("cfgMaxBookingsPerSlot") || 2),
+      businessHours: safeParseJson(getValue("cfgBusinessHours"), {}),
+      serviceTypes: getValue("cfgServiceTypes").split("\n").map(s => s.trim()).filter(Boolean),
+      transportOptions: getValue("cfgTransportOptions").split("\n").map(s => s.trim()).filter(Boolean),
+      closedDates: getValue("cfgClosedDates").split("\n").map(s => s.trim()).filter(Boolean),
+    };
+  }
+
+  if (section === "twilio") {
+    return {
+      accountSid: getValue("cfgTwilioSid"),
+      authToken: getValue("cfgTwilioToken"),
+      smsNumber: getValue("cfgTwilioSmsNumber"),
+      voiceNumber: getValue("cfgTwilioVoiceNumber"),
+      smsWebhook: getValue("cfgTwilioSmsWebhook"),
+      voiceWebhook: getValue("cfgTwilioVoiceWebhook"),
+      recordingCallback: getValue("cfgTwilioRecordingCallback"),
+      transcriptionCallback: getValue("cfgTwilioTranscriptionCallback"),
+    };
+  }
+
+  if (section === "aiReception") {
+    return {
+      backendUrl: getValue("cfgAiBackendUrl"),
+      humanFallback: getValue("cfgAiHumanFallback"),
+      bdcFallback: getValue("cfgAiBdcFallback"),
+      outboundRoute: getValue("cfgAiOutboundRoute"),
+      greetingFr: getValue("cfgAiGreetingFr"),
+      greetingEn: getValue("cfgAiGreetingEn"),
+      routingRules: safeParseJson(getValue("cfgAiRoutingRules"), {}),
+    };
+  }
+
+  if (section === "fortellis") {
+    return {
+      environment: getValue("cfgFortellisEnvironment"),
+      baseUrl: getValue("cfgFortellisBaseUrl"),
+      clientId: getValue("cfgFortellisClientId"),
+      clientSecret: getValue("cfgFortellisClientSecret"),
+      subscriptionKey: getValue("cfgFortellisSubscriptionKey"),
+      dealerId: getValue("cfgFortellisDealerId"),
+      redirectUrl: getValue("cfgFortellisRedirectUrl"),
+      scopes: getValue("cfgFortellisScopes"),
+    };
+  }
+
+  if (section === "phoneNumbers") {
+    return {
+      main: getValue("cfgPhoneMain"),
+      service: getValue("cfgPhoneService"),
+      sales: getValue("cfgPhoneSales"),
+      parts: getValue("cfgPhoneParts"),
+      bdc: getValue("cfgPhoneBdc"),
+      finance: getValue("cfgPhoneFinance"),
+      collision: getValue("cfgPhoneCollision"),
+      twilioSms: getValue("cfgPhoneTwilioSms"),
+      twilioVoice: getValue("cfgPhoneTwilioVoice"),
+    };
+  }
+
+  return {};
+}
+
+async function loadConfig() {
+  try {
+    const res = await fetch("/.netlify/functions/config-get");
+    const data = await res.json();
+    fillConfigForm(data.config || DEFAULT_CONFIG);
+    schedulerConfigCache = data.config?.scheduler || DEFAULT_CONFIG.scheduler;
+    await hydrateSchedulerFromConfig();
+  } catch (err) {
+    console.error("loadConfig error:", err);
+    fillConfigForm(DEFAULT_CONFIG);
+    schedulerConfigCache = DEFAULT_CONFIG.scheduler;
+    await hydrateSchedulerFromConfig();
+  }
+}
+
+async function saveConfigSection(section) {
+  const statusMap = {
+    general: "configStatusGeneral",
+    users: "configStatusUsers",
+    advisors: "configStatusAdvisors",
+    scheduler: "configStatusScheduler",
+    twilio: "configStatusTwilio",
+    aiReception: "configStatusAiReception",
+    fortellis: "configStatusFortellis",
+    phoneNumbers: "configStatusPhoneNumbers",
+  };
+
+  const statusEl = document.getElementById(statusMap[section]);
+  if (statusEl) statusEl.textContent = "Saving...";
+
+  try {
+    const payload = buildSectionPayload(section);
+    const res = await fetch("/.netlify/functions/config-save", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ section, value: payload }),
+    });
+
+    const data = await res.json();
+    if (statusEl) statusEl.textContent = res.ok ? "Saved." : (data.error || "Save failed.");
+
+    if (res.ok) {
+      await loadConfig();
+      await loadScheduler();
+    }
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err.message;
+  }
+}
+
+async function testFortellisConnection() {
+  const statusEl = document.getElementById("configStatusFortellis");
+  if (statusEl) statusEl.textContent = "Testing...";
+
+  try {
+    const res = await fetch("/.netlify/functions/fortellis-test");
+    const data = await res.json();
+
+    if (statusEl) {
+      statusEl.textContent = res.ok ? "Fortellis connection successful." : (data.error || "Fortellis test failed.");
+    }
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err.message;
+  }
+}
+
+async function hydrateSchedulerFromConfig() {
+  const cfg = schedulerConfigCache || DEFAULT_CONFIG.scheduler;
+  const serviceSelect = document.getElementById("apptService");
+  const advisorSelect = document.getElementById("apptAdvisor");
+  const transportSelect = document.getElementById("apptTransport");
+
+  if (serviceSelect) {
+    serviceSelect.innerHTML = "";
+    (cfg.serviceTypes || []).forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      serviceSelect.appendChild(opt);
+    });
+  }
+
+  if (advisorSelect) {
+    advisorSelect.innerHTML = "";
+    const advisors = (configCache?.advisors || DEFAULT_CONFIG.advisors).filter((a) => a.active);
+    advisors.forEach((a) => {
+      const opt = document.createElement("option");
+      opt.value = a.name;
+      opt.textContent = a.name;
+      advisorSelect.appendChild(opt);
+    });
+  }
+
+  if (transportSelect) {
+    transportSelect.innerHTML = "";
+    (cfg.transportOptions || []).forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t;
+      opt.textContent = t;
+      transportSelect.appendChild(opt);
+    });
+  }
+}
+
+async function loadScheduler() {
+  await loadAppointments();
+  await refreshAppointmentSlots();
+  await loadSchedulerBoard();
+}
+
+async function refreshAppointmentSlots() {
+  try {
+    const date = getValue("apptDate");
+    const advisor = getValue("apptAdvisor");
+
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (advisor) params.set("advisor", advisor);
+
+    const res = await fetch(`/.netlify/functions/appointment-slots?${params.toString()}`);
+    const data = await res.json();
+
+    const select = document.getElementById("apptTime");
+    if (!select) return;
+
+    select.innerHTML = "";
+    (data.slots || []).forEach((slot) => {
+      const opt = document.createElement("option");
+      opt.value = slot;
+      opt.textContent = slot;
+      select.appendChild(opt);
+    });
+
+    if (!data.slots?.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "No slots available";
+      select.appendChild(opt);
+    }
+  } catch (err) {
+    console.error("refreshAppointmentSlots error:", err);
+  }
+}
+
+async function bookAppointment() {
+  try {
+    const status = document.getElementById("appointmentStatus");
+    if (status) status.textContent = "Booking...";
+
+    const payload = {
+      firstName: getValue("apptFirstName"),
+      lastName: getValue("apptLastName"),
+      phone: getValue("apptPhone"),
+      email: getValue("apptEmail"),
+      make: getValue("apptMake"),
+      model: getValue("apptModel"),
+      year: getValue("apptYear"),
+      vin: getValue("apptVin"),
+      mileage: getValue("apptMileage"),
+      service: getValue("apptService"),
+      advisor: getValue("apptAdvisor"),
+      date: getValue("apptDate"),
+      time: getValue("apptTime"),
+      transport: getValue("apptTransport"),
+      notes: getValue("apptNotes"),
+    };
+
+    const res = await fetch("/.netlify/functions/book-appointment", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (status) {
+      status.textContent = res.ok ? `Booked. Confirmation: ${data.confirmationNumber || ""}` : (data.error || "Booking failed.");
+    }
+
+    if (res.ok) {
+      await loadAppointments();
+      await refreshAppointmentSlots();
+      await loadSchedulerBoard();
+    }
+  } catch (err) {
+    const status = document.getElementById("appointmentStatus");
+    if (status) status.textContent = err.message;
+  }
+}
+
+async function loadAppointments() {
+  try {
+    const res = await fetch("/.netlify/functions/appointments-list");
+    const data = await res.json();
+    const body = document.getElementById("appointmentsTableBody");
+    const summary = document.getElementById("appointmentSummary");
+    if (!body) return;
+
+    body.innerHTML = "";
+    const items = data.appointments || [];
+    currentAppointments = items;
+
+    if (summary) {
+      summary.textContent = items.length ? `${items.length} appointments loaded.` : "No appointments loaded.";
+    }
+
+    items.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(item.date || "")}</td>
+        <td>${escapeHtml(item.time || "")}</td>
+        <td>${escapeHtml(`${item.firstName || ""} ${item.lastName || ""}`.trim())}</td>
+        <td>${escapeHtml([item.year, item.make, item.model].filter(Boolean).join(" "))}</td>
+        <td>${escapeHtml(item.service || "")}</td>
+        <td>${escapeHtml(item.advisor || "")}</td>
+      `;
+      body.appendChild(tr);
+    });
+
+    if (selectedCustomerId) renderCustomer360Detail();
+  } catch (err) {
+    console.error("loadAppointments error:", err);
+  }
+}
+
+async function loadTasks() {
+  try {
+    const res = await fetch("/.netlify/functions/tasks-list");
+    const data = await res.json();
+    const body = document.getElementById("tasksTableBody");
+    const summary = document.getElementById("tasksSummary");
+    if (!body) return;
+
+    currentTasks = data.tasks || [];
+    body.innerHTML = "";
+
+    if (summary) {
+      summary.textContent = currentTasks.length
+        ? `${currentTasks.length} tasks loaded.`
+        : "No tasks loaded.";
+    }
+
+    if (!currentTasks.length) {
+      body.innerHTML = `<tr><td colspan="5" class="muted">No tasks yet.</td></tr>`;
+      return;
+    }
+
+    currentTasks.forEach((task) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(task.title || "")}</td>
+        <td>${escapeHtml(task.priority || "normal")}</td>
+        <td>${escapeHtml(task.status || "open")}</td>
+        <td>${escapeHtml(task.dueAtUtc ? new Date(task.dueAtUtc).toLocaleString() : "-")}</td>
+        <td>
+          ${task.status === "completed"
+            ? `<span class="muted">Done</span>`
+            : `<button class="secondary" onclick="completeTask('${escapeHtml(task.id)}')">Complete</button>`}
+        </td>
+      `;
+      body.appendChild(tr);
+    });
+
+    if (selectedCustomerId) renderCustomer360();
+  } catch (err) {
+    console.error("loadTasks error:", err);
+  }
+}
+
+async function createTask() {
+  const status = document.getElementById("taskStatus");
+
+  try {
+    if (status) status.textContent = "Creating...";
+
+    const payload = {
+      title: getValue("taskTitle"),
+      description: getValue("taskDescription"),
+      priority: getValue("taskPriority"),
+      dueAtUtc: getValue("taskDueAt") ? new Date(getValue("taskDueAt")).toISOString() : null,
+    };
+
+    const res = await fetch("/.netlify/functions/tasks-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to create task");
+
+    if (status) status.textContent = "Created ✅";
+    ["taskTitle", "taskDescription", "taskDueAt"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+
+    await loadTasks();
+  } catch (err) {
+    console.error("createTask error:", err);
+    if (status) status.textContent = err.message || "Create failed";
+  }
+}
+
+async function completeTask(taskId) {
+  try {
+    const res = await fetch("/.netlify/functions/tasks-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId, status: "completed" }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to update task");
+    await loadTasks();
+  } catch (err) {
+    console.error("completeTask error:", err);
+  }
+}
+
+async function loadSchedulerBoard() {
+  try {
+    const date = getValue("apptDate") || new Date().toISOString().slice(0, 10);
+    const status = document.getElementById("schedulerBoardStatus");
+    const head = document.getElementById("schedulerBoardHead");
+    const body = document.getElementById("schedulerBoardBody");
+
+    if (!head || !body) return;
+    if (status) status.textContent = "Loading board...";
+
+    const res = await fetch(`/.netlify/functions/scheduler-board?date=${encodeURIComponent(date)}`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (status) status.textContent = data.error || "Could not load scheduler board.";
+      return;
+    }
+
+    if (data.closed) {
+      head.innerHTML = "";
+      body.innerHTML = "";
+      if (status) status.textContent = `Closed on ${date}`;
+      return;
+    }
+
+    const advisors = data.advisors || [];
+    const slots = data.slots || [];
+    const appointments = data.appointments || [];
+
+    head.innerHTML = `
+      <tr>
+        <th style="min-width:100px;">Time</th>
+        ${advisors.map((a) => `<th>${escapeHtml(a.name)}</th>`).join("")}
+      </tr>
+    `;
+
+    body.innerHTML = slots.map((slot) => {
+      const cols = advisors.map((advisor) => {
+        const match = appointments.find((a) => a.time === slot && a.advisor === advisor.name);
+
+        if (!match) {
+          return `<td><div class="scheduler-board-cell scheduler-available">Available</div></td>`;
+        }
+
+        return `
+          <td>
+            <div class="scheduler-board-cell scheduler-booked">
+              <div><strong>${escapeHtml(`${match.firstName || ""} ${match.lastName || ""}`.trim())}</strong></div>
+              <div class="small">${escapeHtml([match.year, match.make, match.model].filter(Boolean).join(" "))}</div>
+              <div class="small">${escapeHtml(match.service || "")}</div>
+              <div class="small muted">${escapeHtml(match.phone || "")}</div>
+            </div>
+          </td>
+        `;
+      }).join("");
+
+      return `<tr><td><strong>${escapeHtml(slot)}</strong></td>${cols}</tr>`;
+    }).join("");
+
+    if (status) status.textContent = `${appointments.length} appointments on ${date}`;
+  } catch (err) {
+    const status = document.getElementById("schedulerBoardStatus");
+    if (status) status.textContent = err.message;
+    console.error("loadSchedulerBoard error:", err);
+  }
+}
+
+
+function normalizePhoneNumber(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("+")) return `+${raw.slice(1).replace(/\D/g, "")}`;
+  const digits = raw.replace(/\D/g, "");
+  return digits ? `+${digits}` : "";
+}
+
+function formatPhonePretty(value = "") {
+  const normalized = normalizePhoneNumber(value);
+  if (!normalized) return value || "-";
+  const digits = normalized.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+${digits[0]} (${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7,11)}`;
+  }
+  return normalized;
+}
+
+function formatCallPhoneCell(phone) {
+  const normalized = normalizePhoneNumber(phone);
+  if (!normalized) return escapeHtml(phone || "-");
+  const label = formatPhonePretty(phone);
+  return `<button type="button" class="phone-cta" onclick="event.stopPropagation(); openDialerForPhone('${escapeHtml(normalized)}')">📞 ${escapeHtml(label)}</button>`;
+}
+
+function formatShortTimestamp(ts) {
+  if (!ts) return "";
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function syncCommsSelection() {
+  const selectedPhone = normalizePhoneNumber(commsState.selectedPhone || currentConversationPhone);
+  if (!selectedPhone) {
+    commsState.selectedContact = null;
+    return;
+  }
+
+  commsState.selectedPhone = selectedPhone;
+  const normalizedDigits = selectedPhone.replace(/\D/g, "");
+  const conversation = (currentInboxConversations || []).find((item) => normalizePhoneNumber(item.phone).replace(/\D/g, "") === normalizedDigits);
+  const relatedCall = (currentCalls || []).find((item) => normalizePhoneNumber(item.from).replace(/\D/g, "") === normalizedDigits);
+
+  commsState.selectedContact = {
+    phone: selectedPhone,
+    displayName: conversation?.displayName || relatedCall?.userName || formatPhonePretty(selectedPhone),
+    preview: conversation?.preview || conversation?.lastMessage || "",
+    lastTimestamp: conversation?.lastTimestamp || relatedCall?.startedAt || relatedCall?.updatedAt || "",
+    department: relatedCall?.routedDepartment || "",
+    language: relatedCall?.language || "",
+    source: conversation ? "inbox" : relatedCall ? "calls" : "manual",
+  };
+}
+
+function getCommsContacts() {
+  const map = new Map();
+
+  (currentInboxConversations || []).forEach((item) => {
+    const phone = normalizePhoneNumber(item.phone);
+    if (!phone) return;
+    map.set(phone, {
+      phone,
+      displayName: item.displayName || formatPhonePretty(phone),
+      preview: item.preview || item.lastMessage || "",
+      lastTimestamp: item.lastTimestamp || "",
+      source: "inbox",
+      unread: !!item.unread,
+      department: "",
+      language: "",
+    });
+  });
+
+  (currentCalls || []).forEach((item) => {
+    const phone = normalizePhoneNumber(item.from);
+    if (!phone) return;
+    const existing = map.get(phone) || {
+      phone,
+      displayName: item.userName || formatPhonePretty(phone),
+      preview: "",
+      lastTimestamp: item.startedAt || item.updatedAt || "",
+      source: "calls",
+      unread: false,
+    };
+
+    existing.department = existing.department || item.routedDepartment || "";
+    existing.language = existing.language || item.language || "";
+    existing.lastTimestamp = existing.lastTimestamp || item.startedAt || item.updatedAt || "";
+    if (!existing.preview && item.transcript) {
+      existing.preview = String(item.transcript).slice(0, 90);
+    }
+    map.set(phone, existing);
+  });
+
+  const q = String(commsState.search || "").trim().toLowerCase();
+  return Array.from(map.values())
+    .filter((item) => {
+      if (!q) return true;
+      const haystack = `${item.displayName || ""} ${item.phone || ""} ${item.preview || ""} ${item.department || ""}`.toLowerCase();
+      return haystack.includes(q);
+    })
+    .sort((a, b) => {
+      const aTs = a.lastTimestamp ? new Date(a.lastTimestamp).getTime() : 0;
+      const bTs = b.lastTimestamp ? new Date(b.lastTimestamp).getTime() : 0;
+      return bTs - aTs;
+    });
+}
+
+function getSelectedScript() {
+  return COMM_SCRIPT_LIBRARY.find((item) => item.id === commsState.scripted.scriptId) || COMM_SCRIPT_LIBRARY[0];
+}
+
+function updateCommsDockChrome() {
+  const dock = document.getElementById("commsDock");
+  const badge = document.getElementById("commsUnreadBadgeDock");
+  const callBadge = document.getElementById("commsCallStateBadge");
+  const toggle = document.getElementById("commsDockToggle");
+  const summary = document.getElementById("commsDockSummary");
+  const collapseBtn = document.getElementById("commsDockCollapseBtn");
+  if (!dock) return;
+
+  dock.classList.toggle("open", !!commsState.isOpen);
+  dock.classList.toggle("compact", !commsState.isOpen);
+  if (toggle) toggle.textContent = commsState.isOpen ? "💬 INGRID Communication Dock" : "💬 INGRID Communication Dock";
+  if (summary) {
+    const contact = commsState.selectedContact?.displayName || formatPhonePretty(commsState.selectedPhone || "") || "";
+    summary.textContent = commsState.isOpen
+      ? (contact ? `${contact} selected • ${commsState.mode}` : `Mode: ${commsState.mode}`)
+      : "Calls and SMS from one place.";
+  }
+  if (collapseBtn) collapseBtn.textContent = commsState.isOpen ? "▾" : "▴";
+
+  const unreadCount = (currentInboxConversations || []).filter((item) => item.unread).length;
+  if (badge) {
+    badge.style.display = unreadCount ? "inline-flex" : "none";
+    badge.textContent = `${unreadCount} unread`;
+  }
+
+  if (callBadge) {
+    const status = String(commsState.call.status || "").trim();
+    if (!status) {
+      callBadge.style.display = "none";
+    } else {
+      callBadge.style.display = "inline-flex";
+      callBadge.textContent = status;
+      callBadge.className = "comms-pill";
+      if (/connected|ready|active/i.test(status)) callBadge.classList.add("active");
+      if (/offline|failed|error/i.test(status)) callBadge.classList.add("alert");
+    }
+  }
+}
+
+function renderCommsSidebar() {
+  const sidebar = document.getElementById("commsSidebarList");
+  if (!sidebar) return;
+
+  const contacts = getCommsContacts();
+  if (!contacts.length) {
+    sidebar.innerHTML = `<div class="comms-empty">No conversations or contacts match your search yet.</div>`;
+    return;
+  }
+
+  sidebar.innerHTML = contacts.map((item) => {
+    const phone = normalizePhoneNumber(item.phone);
+    const isActive = normalizePhoneNumber(commsState.selectedPhone) === phone;
+    const unreadClass = item.unread ? "unread" : "";
+    return `
+      <div class="comms-thread-item ${isActive ? "active" : ""} ${unreadClass}" onclick="selectCommsContact('${escapeHtml(phone)}', '${escapeHtml(commsState.mode)}')">
+        <div class="comms-thread-top">
+          <strong>${escapeHtml(item.displayName || formatPhonePretty(phone))}</strong>
+          <span class="comms-mini">${escapeHtml(formatShortTimestamp(item.lastTimestamp))}</span>
+        </div>
+        <div class="comms-mini">${escapeHtml(formatPhonePretty(phone))}</div>
+        <div class="comms-thread-preview">${escapeHtml(item.preview || item.department || "Open communications")}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderCommsMessages() {
+  const header = document.getElementById("commsMainHeader");
+  const content = document.getElementById("commsMainContent");
+  if (!header || !content) return;
+
+  syncCommsSelection();
+  const contact = commsState.selectedContact;
+  header.innerHTML = `
+    <div>
+      <div style="font-size:22px;font-weight:700;">${escapeHtml(contact?.displayName || "Select a thread")}</div>
+      <div class="comms-mini">${escapeHtml(contact?.phone ? formatPhonePretty(contact.phone) : "Choose any conversation or search a contact")}</div>
+    </div>
+    <div class="comms-main-actions">
+      <button type="button" class="comms-secondary-btn" onclick="openDialerForPhone('${escapeHtml(contact?.phone || "")}')">📞 Call</button>
+    </div>
+  `;
+
+  if (!contact?.phone) {
+    content.innerHTML = `<div class="comms-empty">Pick a conversation from the left, or search a customer to start messaging.</div>`;
+    return;
+  }
+
+  const messages = Array.isArray(commsState.activeMessages) ? commsState.activeMessages : [];
+  content.innerHTML = `
+    <div class="comms-message-list" id="commsMessageList">
+      ${messages.length ? messages.map((msg) => {
+        const normalizedPhone = normalizePhoneNumber(contact.phone).replace(/\D/g, "");
+        const normalizedFrom = normalizePhoneNumber(msg.from || "").replace(/\D/g, "").replace(/^\+/, "");
+        const type = String(msg.type || "").toLowerCase();
+        const outgoing = type === "sms-reply" || type === "outgoing" ? true : !(type === "sms" || type === "sms-incoming" || normalizedFrom === normalizedPhone);
+        return `
+          <div class="comms-message ${outgoing ? "outgoing" : ""}">
+            <div>${escapeHtml(msg.displayBody || msg.body || "")}</div>
+            <div class="comms-message-meta">${outgoing ? "Outgoing" : "Incoming"} • ${escapeHtml(formatTimestamp(msg.timestamp))}</div>
+          </div>
+        `;
+      }).join("") : `<div class="comms-empty">No SMS history loaded yet for this customer.</div>`}
+    </div>
+    ${/ai|thinking|drafting/i.test(commsState.smsStatus || "") ? `<div class="comms-ai-indicator" style="margin:0 12px 10px 12px;"><span class="comms-ai-dot"></span>INGRID is typing…</div>` : ``}
+    <div class="comms-composer">
+      <textarea id="commsSmsComposer" placeholder="Type your SMS reply here">${escapeHtml(commsState.smsDraft || "")}</textarea>
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:130px;">
+        <button type="button" onclick="sendCommsSms()">Send SMS</button>
+        <span id="commsSmsStatus" class="comms-mini">${escapeHtml(commsState.smsStatus || `Replying to ${formatPhonePretty(contact.phone)}`)}</span>
+      </div>
+    </div>
+  `;
+  const list = document.getElementById("commsMessageList");
+  if (list) list.scrollTop = list.scrollHeight;
+
+  const composer = document.getElementById("commsSmsComposer");
+  if (composer) {
+    composer.addEventListener("input", (event) => {
+      commsState.smsDraft = event.target.value || "";
+    });
+  }
+}
+
+function renderCommsContacts() {
+  const header = document.getElementById("commsMainHeader");
+  const content = document.getElementById("commsMainContent");
+  if (!header || !content) return;
+
+  header.innerHTML = `
+    <div>
+      <div style="font-size:22px;font-weight:700;">Contacts</div>
+      <div class="comms-mini">Search from inbox threads and recent caller history now. CRM enrichment can plug in later without redesigning this dock.</div>
+    </div>
+    <div class="comms-status-badge warn">CRM integration intentionally deferred</div>
+  `;
+
+  const contacts = getCommsContacts();
+  content.innerHTML = `
+    <div class="comms-script-box">
+      ${contacts.length ? contacts.map((item) => {
+        const phone = normalizePhoneNumber(item.phone);
+        return `
+          <div class="comms-contact-card" style="margin-bottom:12px;">
+            <div>
+              <div style="font-size:18px;font-weight:700;">${escapeHtml(item.displayName || formatPhonePretty(phone))}</div>
+              <div class="comms-contact-meta">${escapeHtml(formatPhonePretty(phone))}</div>
+              <div class="comms-contact-meta">${escapeHtml(item.preview || item.department || "Recent customer activity")}</div>
+            </div>
+            <div class="comms-grid-actions">
+              <button type="button" class="comms-secondary-btn green" onclick="openDialerForPhone('${escapeHtml(phone)}')">Call</button>
+              <button type="button" class="comms-secondary-btn" onclick="openSmsForPhone('${escapeHtml(phone)}')">SMS</button>
+              <button type="button" class="comms-secondary-btn" onclick="openScriptedForPhone('${escapeHtml(phone)}')">Scripted</button>
+            </div>
+          </div>
+        `;
+      }).join("") : `<div class="comms-empty">No contacts available yet. Start with any caller or inbox thread and this list will grow automatically.</div>`}
+    </div>
+  `;
+}
+
+function renderCommsDialer() {
+  const header = document.getElementById("commsMainHeader");
+  const content = document.getElementById("commsMainContent");
+  if (!header || !content) return;
+
+  syncCommsSelection();
+  const contact = commsState.selectedContact;
+  const phone = normalizePhoneNumber(commsState.selectedPhone || contact?.phone || "");
+  const activeLabel = activeTwilioCall ? "Connected" : twilioReady ? "Ready" : "Offline";
+  const statusClass = /ready|connected/i.test(commsState.call.status || activeLabel)
+    ? "success"
+    : /error|offline|failed/i.test(commsState.call.status || "")
+    ? "warn"
+    : "warn";
+
+  header.innerHTML = `
+    <div>
+      <div style="font-size:22px;font-weight:700;">Automotive Intelligence Dialer</div>
+    </div>
+    <div class="comms-status-badge ${statusClass}">${escapeHtml(commsState.call.status || activeLabel)}</div>
+  `;
+
+  content.innerHTML = `
+    <div class="comms-dialer-grid">
+      <div class="card" style="padding:16px;box-shadow:none;border:1px solid #e5e7eb;">
+        <div class="comms-field">
+          <label>Number</label>
+          <input id="commsDialerNumber" type="text" value="${escapeHtml(phone)}" placeholder="+1514..." />
+        </div>
+        <div class="comms-field">
+          <label>Selected Contact</label>
+          <div class="comms-mini">${escapeHtml(contact?.displayName || "Manual entry")}</div>
+        </div>
+        <div class="comms-script-actions">
+          <button type="button" onclick="startCommsCall()">Start Call</button>
+          <button type="button" class="secondary" onclick="answerCommsCall()">Answer</button>
+          <button type="button" class="secondary" onclick="muteCommsCall()">${twilioMuted ? "Unmute" : "Mute"}</button>
+          <button type="button" class="danger" onclick="hangupCommsCall()">Hang up</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCommsScripted() {
+  const header = document.getElementById("commsMainHeader");
+  const content = document.getElementById("commsMainContent");
+  if (!header || !content) return;
+
+  syncCommsSelection();
+  const contact = commsState.selectedContact;
+  const script = getSelectedScript();
+
+  header.innerHTML = `
+    <div>
+      <div style="font-size:22px;font-weight:700;">Scripted Outbound</div>
+      <div class="comms-mini">Use the same voice pipeline as campaigns, but launch a single AI outbound call from anywhere in the app.</div>
+    </div>
+    <div class="comms-status-badge ${commsState.scripted.running ? "success" : "warn"}">${escapeHtml(commsState.scripted.status || "Ready")}</div>
+  `;
+
+  content.innerHTML = `
+    <div class="comms-script-box">
+      <div class="comms-contact-card" style="margin-bottom:14px;">
+        <div>
+          <div style="font-size:18px;font-weight:700;">${escapeHtml(contact?.displayName || "No contact selected")}</div>
+          <div class="comms-contact-meta">${escapeHtml(contact?.phone ? formatPhonePretty(contact.phone) : "Choose a contact first")}</div>
+          <div class="comms-contact-meta">${escapeHtml(contact?.department || "Department can be inferred from the selected script")}</div>
+        </div>
+        <div class="comms-grid-actions">
+          <button type="button" class="comms-secondary-btn" onclick="setCommsMode('contacts')">Find contact</button>
+          <button type="button" class="comms-secondary-btn green" onclick="openDialerForPhone('${escapeHtml(contact?.phone || "")}')">Manual Call</button>
+        </div>
+      </div>
+
+      <div class="comms-field">
+        <label>Script</label>
+        <select id="commsScriptSelect" onchange="updateCommsScriptSelection(this.value)">
+          ${COMM_SCRIPT_LIBRARY.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === script.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="comms-mini" style="margin-bottom:16px;">${escapeHtml(script.description)}</div>
+      <div class="comms-field">
+        <label>Operator notes / variables</label>
+        <textarea id="commsScriptNotes" placeholder="Optional personalization, service due note, last conversation context, or booking goal">${escapeHtml(commsState.scripted.notes || "")}</textarea>
+      </div>
+      <div class="comms-script-actions">
+        <button type="button" onclick="startScriptedOutbound()">Start AI Scripted Call</button>
+        <button type="button" class="secondary" onclick="prefillScriptFromSelection()">Use selected contact context</button>
+      </div>
+      <div class="comms-mini" style="margin-top:12px;">This UI is live now. The final behavior is designed to call the same outbound backend used by your campaign dialer.</div>
+    </div>
+  `;
+}
+
+function renderCommsDock() {
+  updateCommsDockChrome();
+
+  ["messages", "dialer"].forEach((mode) => {
+    const map = {
+      messages: "commsModeMessagesBtn",
+      contacts: "commsModeContactsBtn",
+      dialer: "commsModeDialerBtn",
+      scripted: "commsModeScriptedBtn",
+    };
+    const el = document.getElementById(map[mode]);
+    if (el) el.classList.toggle("active", commsState.mode === mode);
+  });
+
+  renderCommsSidebar();
+
+  if (commsState.mode === "dialer") return renderCommsDialer();
+  return renderCommsMessages();
+}
+
+function setCommsMode(mode = "messages") {
+  commsState.mode = mode;
+  commsState.isOpen = true;
+  renderCommsDock();
+}
+
+function openCommsDock(options = {}) {
+  if (typeof options === "string") options = { mode: options };
+  commsState.isOpen = true;
+  if (options.mode) commsState.mode = options.mode;
+  if (options.search !== undefined) commsState.search = options.search;
+  if (options.phone) {
+    const normalized = normalizePhoneNumber(options.phone);
+    commsState.selectedPhone = normalized;
+    currentConversationPhone = normalized;
+    if (commsState.mode === "messages") {
+      loadInboxThread(normalized);
+    }
+  }
+  syncCommsSelection();
+  renderCommsDock();
+}
+
+function toggleCommsDock() {
+  commsState.isOpen = !commsState.isOpen;
+  renderCommsDock();
+}
+
+function selectCommsContact(phone, preferredMode = "messages") {
+  const normalized = normalizePhoneNumber(phone);
+  commsState.selectedPhone = normalized;
+  currentConversationPhone = normalized;
+  commsState.mode = preferredMode;
+  commsState.isOpen = true;
+  syncCommsSelection();
+  if (preferredMode === "messages") {
+    loadInboxThread(normalized);
+  }
+  renderCommsDock();
+}
+
+async function sendCommsSms() {
+  const phone = normalizePhoneNumber(commsState.selectedPhone || currentConversationPhone);
+  const box = document.getElementById("commsSmsComposer");
+  const message = String(box?.value || commsState.smsDraft || "").trim();
+  if (!phone) {
+    commsState.smsStatus = "Choose a customer first.";
+    return renderCommsDock();
+  }
+  if (!message) {
+    commsState.smsStatus = "Enter a message first.";
+    return renderCommsDock();
+  }
+
+  commsState.smsDraft = message;
+  commsState.smsStatus = "Sending...";
+  renderCommsDock();
+
+  try {
+    const res = await fetch("/.netlify/functions/send-sms-reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: phone, message }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to send SMS.");
+
+    commsState.smsDraft = "";
+    commsState.smsStatus = `SMS sent to ${formatPhonePretty(phone)}`;
+    await loadInboxThread(phone);
+    await loadInbox();
+  } catch (err) {
+    commsState.smsStatus = err.message || "Failed to send SMS.";
+    renderCommsDock();
+  }
+}
+
+function setCommsCallStatus(status, action = "") {
+  commsState.call.status = status;
+  if (action) commsState.call.lastAction = action;
+  renderCommsDock();
+}
+
+async function startCommsCall() {
+  const phone = normalizePhoneNumber(document.getElementById("commsDialerNumber")?.value || commsState.selectedPhone || "");
+  if (!phone) {
+    return setCommsCallStatus("Missing number", "Enter a valid number first");
+  }
+
+  try {
+    commsState.call.dialing = true;
+    setCommsCallStatus("Connecting", `Requesting browser registration for ${phone}`);
+    await initTwilioDevice();
+
+    const res = await fetch("/.netlify/functions/voice-outbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: phone,
+        mode: "manual-softphone",
+        initiatedBy: "dashboard-dock",
+        source: "communications-dock",
+        agentIdentity: twilioIdentity || "frontdesk-1"
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || "Voice backend returned an error.");
+
+    setCommsCallStatus("Calling", data.callSid ? `Outbound requested • ${data.callSid}` : `Outbound requested for ${phone}`);
+  } catch (err) {
+    console.error("startCommsCall error:", err);
+    setCommsCallStatus("Error", err.message || "Unable to start the browser call");
+  } finally {
+    commsState.call.dialing = false;
+    renderCommsDock();
+  }
+}
+
+function answerCommsCall() {
+  if (!activeTwilioCall) {
+    return setCommsCallStatus("No incoming leg", "Start a call first or wait for the browser leg to ring");
+  }
+  try {
+    activeTwilioCall.accept();
+    setCommsCallStatus("Connected", "Browser call accepted");
+  } catch (err) {
+    console.error("answerCommsCall error:", err);
+    setCommsCallStatus("Error", err.message || "Could not answer the call");
+  }
+}
+
+function hangupCommsCall() {
+  try {
+    if (activeTwilioCall) {
+      activeTwilioCall.disconnect();
+      activeTwilioCall = null;
+    }
+    if (twilioDevice) {
+      twilioDevice.disconnectAll();
+    }
+    twilioMuted = false;
+    setCommsCallStatus("Ended", "Call disconnected");
+  } catch (err) {
+    console.error("hangupCommsCall error:", err);
+    setCommsCallStatus("Error", err.message || "Could not hang up the call");
+  }
+}
+
+function muteCommsCall() {
+  if (!activeTwilioCall) {
+    return setCommsCallStatus("No active call", "Connect a call before muting");
+  }
+  try {
+    twilioMuted = !twilioMuted;
+    activeTwilioCall.mute(twilioMuted);
+    setCommsCallStatus(twilioMuted ? "Muted" : "Connected", twilioMuted ? "Microphone muted" : "Microphone live");
+  } catch (err) {
+    console.error("muteCommsCall error:", err);
+    setCommsCallStatus("Error", err.message || "Could not change mute state");
+  }
+}
+
+function updateCommsScriptSelection(value) {
+  commsState.scripted.scriptId = value;
+  renderCommsDock();
+}
+
+function prefillScriptFromSelection() {
+  syncCommsSelection();
+  const contact = commsState.selectedContact;
+  const lines = [];
+  if (contact?.displayName) lines.push(`Customer: ${contact.displayName}`);
+  if (contact?.phone) lines.push(`Phone: ${formatPhonePretty(contact.phone)}`);
+  if (contact?.department) lines.push(`Department: ${contact.department}`);
+  if (contact?.preview) lines.push(`Recent context: ${contact.preview}`);
+  commsState.scripted.notes = lines.join("\n");
+  renderCommsDock();
+}
+
+async function startScriptedOutbound() {
+  syncCommsSelection();
+  const phone = normalizePhoneNumber(commsState.selectedPhone || "");
+  const script = getSelectedScript();
+  const notesValue = String(document.getElementById("commsScriptNotes")?.value || commsState.scripted.notes || "").trim();
+  commsState.scripted.notes = notesValue;
+
+  if (!phone) {
+    commsState.scripted.status = "Select a customer before starting a scripted outbound call.";
+    return renderCommsDock();
+  }
+
+  commsState.scripted.running = true;
+  commsState.scripted.status = `Launching ${script.name}...`;
+  renderCommsDock();
+
+  try {
+    const res = await fetch("/.netlify/functions/voice-outbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: phone,
+        mode: "scripted-outbound",
+        initiatedBy: "dashboard-dock",
+        source: "communications-dock",
+        scriptId: script.id,
+        notes: notesValue,
+        department: script.department,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Scripted outbound failed.");
+    commsState.scripted.status = data.callSid ? `${script.name} requested • ${data.callSid}` : `${script.name} request sent to backend.`;
+  } catch (err) {
+    commsState.scripted.status = err.message || "Scripted outbound is not wired yet.";
+  } finally {
+    commsState.scripted.running = false;
+    renderCommsDock();
+  }
+}
+
+function openDialerForPhone(phone) {
+  openCommsDock({ mode: "dialer", phone });
+  initTwilioDevice().catch((err) => {
+    console.error("Twilio init from dialer open failed:", err);
+  });
+}
+
+function openSmsForPhone(phone) {
+  openCommsDock({ mode: "messages", phone });
+}
+
+function openScriptedForPhone(phone) {
+  openCommsDock({ mode: "scripted", phone });
+}
+
+function initCommsDock() {
+  document.getElementById("commsDockToggle")?.addEventListener("click", toggleCommsDock);
+  document.getElementById("commsDockCollapseBtn")?.addEventListener("click", toggleCommsDock);
+  document.getElementById("commsModeMessagesBtn")?.addEventListener("click", () => setCommsMode("messages"));
+  document.getElementById("commsModeDialerBtn")?.addEventListener("click", async () => {
+    setCommsMode("dialer");
+    try {
+      await initTwilioDevice();
+    } catch (err) {
+      console.error("Twilio init on dialer open failed:", err);
+    }
+  });
+  document.getElementById("commsSearchInput")?.addEventListener("input", (event) => {
+    commsState.search = event.target.value || "";
+    renderCommsDock();
+  });
+  setCommsCallStatus("Idle", "Dial or text from one place");
+  renderCommsDock();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initTabs();
+  initConfigPanels();
+  initKpiFilters();
+  wireTrainingButtons();
+  initCommsDock();
+
+  setInterval(() => {
+    loadInbox();
+  }, 5000);
+
+  document.getElementById("refreshCallsBtn")?.addEventListener("click", loadCalls);
+
+  document.getElementById("refreshCallsBtn")?.addEventListener("click", loadCalls);
+
+  document.getElementById("closeCallDetailsModalBtn")?.addEventListener("click", closeCallDetailsModal);
+
+document.getElementById("callDetailsModal")?.addEventListener("click", (e) => {
+  if (e.target?.id === "callDetailsModal") {
+    closeCallDetailsModal();
+  }
+});
+
+// ✅ ADD THIS BLOCK RIGHT HERE
+document.getElementById("todayFilterBtn")?.addEventListener("click", () => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const fromEl = document.getElementById("dateFrom");
+  const toEl = document.getElementById("dateTo");
+
+  if (fromEl) fromEl.value = today;
+  if (toEl) toEl.value = today;
+
+  loadCalls();
+});
+
+document.getElementById("yesterdayFilterBtn")?.addEventListener("click", () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toISOString().slice(0, 10);
+
+  const fromEl = document.getElementById("dateFrom");
+  const toEl = document.getElementById("dateTo");
+
+  if (fromEl) fromEl.value = yesterday;
+  if (toEl) toEl.value = yesterday;
+
+  loadCalls();
+});
+
+document.getElementById("last7DaysBtn")?.addEventListener("click", () => {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 6);
+
+  const fromStr = from.toISOString().slice(0, 10);
+  const toStr = to.toISOString().slice(0, 10);
+
+  const fromEl = document.getElementById("dateFrom");
+  const toEl = document.getElementById("dateTo");
+
+  if (fromEl) fromEl.value = fromStr;
+  if (toEl) toEl.value = toStr;
+
+  loadCalls();
+});
+
+document.getElementById("thisMonthBtn")?.addEventListener("click", () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const today = now.toISOString().slice(0, 10);
+  const firstDay = `${year}-${month}-01`;
+
+  const fromEl = document.getElementById("dateFrom");
+  const toEl = document.getElementById("dateTo");
+
+  if (fromEl) fromEl.value = firstDay;
+  if (toEl) toEl.value = today;
+
+  loadCalls();
+});
+
+document.getElementById("clearFilterBtn")?.addEventListener("click", () => {
+  const fromEl = document.getElementById("dateFrom");
+  const toEl = document.getElementById("dateTo");
+  const searchEl = document.getElementById("searchBox");
+
+  if (fromEl) fromEl.value = "";
+  if (toEl) toEl.value = "";
+  if (searchEl) searchEl.value = "";
+
+  loadCalls();
+});
+
+document.getElementById("searchBox")?.addEventListener("input", loadCalls);
+document.getElementById("dateFrom")?.addEventListener("change", loadCalls);
+document.getElementById("dateTo")?.addEventListener("change", loadCalls);
+  document.getElementById("saveNotesBtn")?.addEventListener("click", saveNotes);
+
+  document.getElementById("uploadBtn")?.addEventListener("click", uploadCampaign);
+  document.getElementById("sampleBtn")?.addEventListener("click", downloadSample);
+
+  document.getElementById("loadVoiceTemplateBtn")?.addEventListener("click", () => {
+    const box = document.getElementById("scriptTemplate");
+    if (box) box.value = DEFAULT_VOICE_TEMPLATE;
+    setCampaignType("dialer");
+    updateCampaignPreview();
+    updateStartButtonLabel();
+  });
+
+  document.getElementById("loadSmsTemplateBtn")?.addEventListener("click", () => {
+    const box = document.getElementById("scriptTemplate");
+    if (box) box.value = DEFAULT_SMS_TEMPLATE;
+    setCampaignType("sms");
+    updateCampaignPreview();
+    updateStartButtonLabel();
+  });
+
+  document.getElementById("saveCampaignBtn")?.addEventListener("click", saveCampaignSettings);
+  document.getElementById("startCampaignBtn")?.addEventListener("click", startCampaign);
+  document.getElementById("previewRowSelect")?.addEventListener("change", updateCampaignPreview);
+  document.getElementById("scriptTemplate")?.addEventListener("input", updateCampaignPreview);
+
+  document.querySelectorAll('input[name="campaignType"]').forEach((el) =>
+    el.addEventListener("change", () => {
+      updateCampaignPreview();
+      updateStartButtonLabel();
+    })
+  );
+
+document.getElementById("refreshInboxBtn")?.addEventListener("click", loadInbox);
+document.getElementById("inboxSearchBox")?.addEventListener("input", loadInbox);
+document.getElementById("sendReplyBtn")?.addEventListener("click", sendInboxReply);
+document.getElementById("refreshCustomer360Btn")?.addEventListener("click", loadCustomer360);
+document.getElementById("customer360SearchBox")?.addEventListener("input", renderCustomer360List);
+
+// 👇 ADD YOUR COMPOSE LISTENERS HERE
+document.getElementById("composeSmsBtn")?.addEventListener("click", openComposeSmsModal);
+document.getElementById("floatingComposeBtn")?.addEventListener("click", openComposeSmsModal);
+document.getElementById("closeComposeSmsBtn")?.addEventListener("click", closeComposeSmsModal);
+document.getElementById("cancelComposeSmsBtn")?.addEventListener("click", closeComposeSmsModal);
+document.getElementById("sendComposeSmsBtn")?.addEventListener("click", sendComposedSms);
+document.getElementById("composeCustomerSearch")?.addEventListener("input", searchComposeCustomers);
+
+  document.getElementById("refreshSlotsBtn")?.addEventListener("click", refreshAppointmentSlots);
+  document.getElementById("apptDate")?.addEventListener("change", async () => {
+    await refreshAppointmentSlots();
+    await loadSchedulerBoard();
+  });
+  document.getElementById("apptAdvisor")?.addEventListener("change", async () => {
+    await refreshAppointmentSlots();
+    await loadSchedulerBoard();
+  });
+  document.getElementById("bookAppointmentBtn")?.addEventListener("click", bookAppointment);
+  document.getElementById("refreshSchedulerBoardBtn")?.addEventListener("click", loadSchedulerBoard);
+  document.getElementById("createTaskBtn")?.addEventListener("click", createTask);
+  document.getElementById("refreshTasksBtn")?.addEventListener("click", loadTasks);
+
+  document.getElementById("addUserBtn")?.addEventListener("click", () => {
+    document.getElementById("usersList")?.appendChild(makeUserRow());
+  });
+
+  document.getElementById("addAdvisorBtn")?.addEventListener("click", () => {
+    document.getElementById("advisorsList")?.appendChild(makeAdvisorRow());
+  });
+
+  document.querySelectorAll("[data-save-section]").forEach((btn) => {
+    btn.addEventListener("click", () => saveConfigSection(btn.dataset.saveSection));
+  });
+
+  document.getElementById("testFortellisBtn")?.addEventListener("click", testFortellisConnection);
+
+  document.getElementById("refreshCallsBtn")?.addEventListener("click", loadCalls);
+
+  updateStartButtonLabel();
+  loadCalls();
+  setInterval(loadCalls, 10000);
+  loadCampaign();
+  loadLastCampaignRun();
+  loadInbox();
+  loadConfig();
+  loadScheduler();
+  loadTasks();
+  loadCustomer360();
+});

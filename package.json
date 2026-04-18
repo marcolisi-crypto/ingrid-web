@@ -1,0 +1,9 @@
+{
+  "name": "ait-netlify-dashboard-full",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.2.0",
+    "twilio": "^5.0.0"
+  }
+}

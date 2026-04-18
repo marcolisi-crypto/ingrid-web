@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIT Appointment Scheduler</title>
+  <style>
+    :root {
+      --ait-navy: #0d2340;
+      --ait-blue: #1d4f91;
+      --ait-light: #f5f7fb;
+      --ait-border: #d9e1ee;
+      --ait-text: #1c2430;
+      --ait-success: #1f7a3d;
+      --ait-error: #b42318;
+      --ait-muted: #6b7280;
+      --ait-white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--ait-light);
+      color: var(--ait-text);
+    }
+
+    .wrap {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: var(--ait-white);
+      border: 1px solid var(--ait-border);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(13, 35, 64, 0.08);
+    }
+
+    .header {
+      background: linear-gradient(135deg, var(--ait-navy), var(--ait-blue));
+      color: white;
+      padding: 28px 24px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.9;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      font-size: 15px;
+      opacity: 0.92;
+      max-width: 680px;
+    }
+
+    .lang-switch {
+      display: inline-flex;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      padding: 4px;
+      gap: 4px;
+    }
+
+    .lang-switch button {
+      border: 0;
+      background: transparent;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .lang-switch button.active {
+      background: white;
+      color: var(--ait-navy);
+    }
+
+    .body {
+      padding: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--ait-border);
+      border-radius: 12px;
+      padding: 13px 14px;
+      font-size: 15px;
+      outline: none;
+      background: white;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--ait-blue);
+      box-shadow: 0 0 0 3px rgba(29, 79, 145, 0.12);
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .slot-panel {
+      margin-top: 22px;
+      border-top: 1px solid var(--ait-border);
+      padding-top: 22px;
+    }
+
+    .slot-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .slot-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ait-navy);
+    }
+
+    .slot-meta {
+      color: var(--ait-muted);
+      font-size: 14px;
+    }
+
+    .slot-actions {
+      margin-top: 8px;
+      margin-bottom: 14px;
+    }
+
+    .secondary-btn,
+    .primary-btn {
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 700;
+      padding: 13px 16px;
+      font-size: 15px;
+    }
+
+    .secondary-btn {
+      background: #eef3fb;
+      color: var(--ait-navy);
+    }
+
+    .primary-btn {
+      width: 100%;
+      background: var(--ait-navy);
+      color: white;
+      margin-top: 22px;
+    }
+
+    .primary-btn:disabled,
+    .secondary-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .slots {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .slot-btn {
+      border: 1px solid var(--ait-border);
+      background: white;
+      color: var(--ait-text);
+      border-radius: 12px;
+      padding: 12px 10px;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .slot-btn:hover {
+      border-color: var(--ait-blue);
+    }
+
+    .slot-btn.selected {
+      background: var(--ait-navy);
+      border-color: var(--ait-navy);
+      color: white;
+    }
+
+    .helper,
+    .status {
+      font-size: 14px;
+      margin-top: 8px;
+    }
+
+    .helper {
+      color: var(--ait-muted);
+    }
+
+    .status {
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-top: 18px;
+      display: none;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.success {
+      background: #edf8f0;
+      color: var(--ait-success);
+      border: 1px solid #b7e0c2;
+    }
+
+    .status.error {
+      background: #fef3f2;
+      color: var(--ait-error);
+      border: 1px solid #f2c1bb;
+    }
+
+    .confirm-box {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 14px;
+      background: #f7f9fc;
+      border: 1px solid var(--ait-border);
+      display: none;
+    }
+
+    .confirm-box.show {
+      display: block;
+    }
+
+    .confirm-title {
+      font-weight: 700;
+      color: var(--ait-navy);
+      margin-bottom: 10px;
+    }
+
+    .confirm-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 8px 14px;
+      font-size: 14px;
+    }
+
+    .confirm-grid div:nth-child(odd) {
+      color: var(--ait-muted);
+      font-weight: 700;
+    }
+
+    @media (max-width: 700px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .confirm-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .wrap {
+        margin: 20px auto;
+        padding: 14px;
+      }
+
+      .body,
+      .header {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="header">
+        <div class="header-top">
+          <div>
+            <div class="brand">Automotive Intelligence Technologies</div>
+            <h1 id="pageTitle">Book an Appointment</h1>
+            <div class="subtitle" id="pageSubtitle">
+              Choose a date, select an available time slot, and submit your appointment request.
+            </div>
+          </div>
+
+          <div class="lang-switch">
+            <button type="button" id="langEnBtn" class="active">EN</button>
+            <button type="button" id="langFrBtn">FR</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="body">
+        <form id="appointmentForm">
+          <div class="grid">
+            <div class="field">
+              <label for="name" id="labelName">Full Name</label>
+              <input id="name" name="name" type="text" required />
+            </div>
+
+            <div class="field">
+              <label for="phone" id="labelPhone">Phone</label>
+              <input id="phone" name="phone" type="tel" required />
+            </div>
+
+            <div class="field">
+              <label for="email" id="labelEmail">Email</label>
+              <input id="email" name="email" type="email" />
+            </div>
+
+            <div class="field">
+              <label for="service" id="labelService">Service</label>
+              <select id="service" name="service" required>
+                <option value="" id="servicePlaceholder">Select a service</option>
+                <option value="maintenance" data-i18n-en="Maintenance" data-i18n-fr="Entretien">Maintenance</option>
+                <option value="repair" data-i18n-en="Repair" data-i18n-fr="Réparation">Repair</option>
+                <option value="consultation" data-i18n-en="Consultation" data-i18n-fr="Consultation">Consultation</option>
+                <option value="diagnostic" data-i18n-en="Diagnostic" data-i18n-fr="Diagnostic">Diagnostic</option>
+                <option value="tire" data-i18n-en="Tire Service" data-i18n-fr="Service de pneus">Tire Service</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="date" id="labelDate">Preferred Date</label>
+              <input id="date" name="date" type="date" required />
+              <div class="helper" id="dateHelper">Select a date to load available times.</div>
+            </div>
+
+            <div class="field">
+              <label for="selectedTimeDisplay" id="labelTime">Selected Time</label>
+              <input id="selectedTimeDisplay" type="text" readonly placeholder="No time selected yet" />
+              <input id="time" name="time" type="hidden" required />
+            </div>
+
+            <div class="field full">
+              <label for="vehicle" id="labelVehicle">Vehicle</label>
+              <input id="vehicle" name="vehicle" type="text" placeholder="Year / Make / Model / VIN (optional)" />
+            </div>
+
+            <div class="field full">
+              <label for="notes" id="labelNotes">Notes</label>
+              <textarea id="notes" name="notes" placeholder="Tell us anything important about your visit."></textarea>
+            </div>
+          </div>
+
+          <div class="slot-panel">
+            <div class="slot-header">
+              <div>
+                <div class="slot-title" id="slotsTitle">Available Time Slots</div>
+                <div class="slot-meta" id="slotsMeta">Choose a date to see availability.</div>
+              </div>
+
+              <div class="slot-actions">
+                <button type="button" class="secondary-btn" id="loadSlotsBtn">
+                  Load Available Times
+                </button>
+              </div>
+            </div>
+
+            <div id="slotStatus" class="helper"></div>
+            <div id="slotsContainer" class="slots"></div>
+          </div>
+
+          <div id="formStatus" class="status"></div>
+
+          <div id="confirmationBox" class="confirm-box">
+            <div class="confirm-title" id="confirmTitle">Appointment Confirmed</div>
+            <div class="confirm-grid" id="confirmationGrid"></div>
+          </div>
+
+          <button type="submit" class="primary-btn" id="submitBtn">
+            Confirm Appointment
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      lang: "en",
+      timezone: "America/Toronto",
+      selectedSlotValue: "",
+      selectedSlotLabel: "",
+      loadedSlots: []
+    };
+
+    const i18n = {
+      en: {
+        pageTitle: "Book an Appointment",
+        pageSubtitle: "Choose a date, select an available time slot, and submit your appointment request.",
+        labelName: "Full Name",
+        labelPhone: "Phone",
+        labelEmail: "Email",
+        labelService: "Service",
+        labelDate: "Preferred Date",
+        labelTime: "Selected Time",
+        labelVehicle: "Vehicle",
+        labelNotes: "Notes",
+        dateHelper: "Select a date to load available times.",
+        servicePlaceholder: "Select a service",
+        notesPlaceholder: "Tell us anything important about your visit.",
+        vehiclePlaceholder: "Year / Make / Model / VIN (optional)",
+        selectedTimePlaceholder: "No time selected yet",
+        slotsTitle: "Available Time Slots",
+        slotsMetaDefault: "Choose a date to see availability.",
+        loadSlotsBtn: "Load Available Times",
+        loadingSlots: "Loading available time slots...",
+        noDateForSlots: "Please choose a date first.",
+        noSlotsAvailable: "No available time slots for this date.",
+        selectSlotPrompt: "Please select a time slot before submitting.",
+        submitBtn: "Confirm Appointment",
+        submitting: "Submitting appointment...",
+        slotLoadedCount: "{count} slot(s) available.",
+        slotLoadedForDate: "Availability for {date}",
+        successTitle: "Appointment Confirmed",
+        successSubtitle: "Your appointment request has been received.",
+        statusLoadError: "Unable to load available slots right now.",
+        statusCreateError: "Unable to create the appointment right now.",
+        statusRequiredFields: "Please complete all required fields.",
+        labels: {
+          reference: "Reference",
+          businessName: "Business",
+          name: "Name",
+          phone: "Phone",
+          email: "Email",
+          date: "Date",
+          time: "Time",
+          service: "Service",
+          notes: "Notes",
+          source: "Source",
+          timezone: "Timezone",
+          advisor: "Advisor",
+          vehicle: "Vehicle",
+          status: "Status"
+        }
+      },
+      fr: {
+        pageTitle: "Prendre un rendez-vous",
+        pageSubtitle: "Choisissez une date, sélectionnez une plage horaire disponible et soumettez votre demande de rendez-vous.",
+        labelName: "Nom complet",
+        labelPhone: "Téléphone",
+        labelEmail: "Courriel",
+        labelService: "Service",
+        labelDate: "Date souhaitée",
+        labelTime: "Heure sélectionnée",
+        labelVehicle: "Véhicule",
+        labelNotes: "Notes",
+        dateHelper: "Choisissez une date pour charger les heures disponibles.",
+        servicePlaceholder: "Sélectionnez un service",
+        notesPlaceholder: "Indiquez toute information utile pour votre visite.",
+        vehiclePlaceholder: "Année / Marque / Modèle / NIV (optionnel)",
+        selectedTimePlaceholder: "Aucune heure sélectionnée",
+        slotsTitle: "Plages horaires disponibles",
+        slotsMetaDefault: "Choisissez une date pour voir les disponibilités.",
+        loadSlotsBtn: "Charger les heures disponibles",
+        loadingSlots: "Chargement des plages horaires disponibles...",
+        noDateForSlots: "Veuillez d’abord choisir une date.",
+        noSlotsAvailable: "Aucune plage horaire disponible pour cette date.",
+        selectSlotPrompt: "Veuillez sélectionner une plage horaire avant d’envoyer.",
+        submitBtn: "Confirmer le rendez-vous",
+        submitting: "Envoi du rendez-vous...",
+        slotLoadedCount: "{count} plage(s) disponible(s).",
+        slotLoadedForDate: "Disponibilités pour le {date}",
+        successTitle: "Rendez-vous confirmé",
+        successSubtitle: "Votre demande de rendez-vous a bien été reçue.",
+        statusLoadError: "Impossible de charger les plages horaires pour le moment.",
+        statusCreateError: "Impossible de créer le rendez-vous pour le moment.",
+        statusRequiredFields: "Veuillez remplir tous les champs obligatoires.",
+        labels: {
+          reference: "Référence",
+          businessName: "Entreprise",
+          name: "Nom",
+          phone: "Téléphone",
+          email: "Courriel",
+          date: "Date",
+          time: "Heure",
+          service: "Service",
+          notes: "Notes",
+          source: "Source",
+          timezone: "Fuseau horaire",
+          advisor: "Conseiller",
+          vehicle: "Véhicule",
+          status: "Statut"
+        }
+      }
+    };
+
+    const el = {
+      form: document.getElementById("appointmentForm"),
+      langEnBtn: document.getElementById("langEnBtn"),
+      langFrBtn: document.getElementById("langFrBtn"),
+      pageTitle: document.getElementById("pageTitle"),
+      pageSubtitle: document.getElementById("pageSubtitle"),
+      labelName: document.getElementById("labelName"),
+      labelPhone: document.getElementById("labelPhone"),
+      labelEmail: document.getElementById("labelEmail"),
+      labelService: document.getElementById("labelService"),
+      labelDate: document.getElementById("labelDate"),
+      labelTime: document.getElementById("labelTime"),
+      labelVehicle: document.getElementById("labelVehicle"),
+      labelNotes: document.getElementById("labelNotes"),
+      dateHelper: document.getElementById("dateHelper"),
+      selectedTimeDisplay: document.getElementById("selectedTimeDisplay"),
+      servicePlaceholder: document.getElementById("servicePlaceholder"),
+      notes: document.getElementById("notes"),
+      vehicle: document.getElementById("vehicle"),
+      slotsTitle: document.getElementById("slotsTitle"),
+      slotsMeta: document.getElementById("slotsMeta"),
+      loadSlotsBtn: document.getElementById("loadSlotsBtn"),
+      slotsContainer: document.getElementById("slotsContainer"),
+      slotStatus: document.getElementById("slotStatus"),
+      formStatus: document.getElementById("formStatus"),
+      submitBtn: document.getElementById("submitBtn"),
+      confirmationBox: document.getElementById("confirmationBox"),
+      confirmTitle: document.getElementById("confirmTitle"),
+      confirmationGrid: document.getElementById("confirmationGrid"),
+      date: document.getElementById("date"),
+      time: document.getElementById("time"),
+      service: document.getElementById("service"),
+      name: document.getElementById("name"),
+      phone: document.getElementById("phone"),
+      email: document.getElementById("email")
+    };
+
+    function txt(key) {
+      return i18n[state.lang][key];
+    }
+
+    function replaceVars(str, vars = {}) {
+      return String(str).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+    }
+
+    function formatDateForDisplay(dateStr) {
+      if (!dateStr) return "";
+      const date = new Date(dateStr + "T12:00:00");
+      return new Intl.DateTimeFormat(state.lang === "fr" ? "fr-CA" : "en-CA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+      }).format(date);
+    }
+
+    function setLanguage(lang) {
+      state.lang = lang;
+
+      el.langEnBtn.classList.toggle("active", lang === "en");
+      el.langFrBtn.classList.toggle("active", lang === "fr");
+
+      el.pageTitle.textContent = txt("pageTitle");
+      el.pageSubtitle.textContent = txt("pageSubtitle");
+      el.labelName.textContent = txt("labelName");
+      el.labelPhone.textContent = txt("labelPhone");
+      el.labelEmail.textContent = txt("labelEmail");
+      el.labelService.textContent = txt("labelService");
+      el.labelDate.textContent = txt("labelDate");
+      el.labelTime.textContent = txt("labelTime");
+      el.labelVehicle.textContent = txt("labelVehicle");
+      el.labelNotes.textContent = txt("labelNotes");
+      el.dateHelper.textContent = txt("dateHelper");
+      el.servicePlaceholder.textContent = txt("servicePlaceholder");
+      el.notes.placeholder = txt("notesPlaceholder");
+      el.vehicle.placeholder = txt("vehiclePlaceholder");
+      el.selectedTimeDisplay.placeholder = txt("selectedTimePlaceholder");
+      el.slotsTitle.textContent = txt("slotsTitle");
+      el.loadSlotsBtn.textContent = txt("loadSlotsBtn");
+      el.submitBtn.textContent = txt("submitBtn");
+      el.confirmTitle.textContent = txt("successTitle");
+
+      if (!state.loadedSlots.length) {
+        el.slotsMeta.textContent = txt("slotsMetaDefault");
+      } else {
+        el.slotsMeta.textContent = replaceVars(txt("slotLoadedCount"), {
+          count: state.loadedSlots.length
+        });
+      }
+
+      [...el.service.options].forEach((opt) => {
+        if (opt.dataset.i18nEn && opt.dataset.i18nFr) {
+          opt.textContent = lang === "fr" ? opt.dataset.i18nFr : opt.dataset.i18nEn;
+        }
+      });
+
+      renderSlots(state.loadedSlots);
+    }
+
+    function showFormStatus(message, type) {
+      el.formStatus.className = `status show ${type}`;
+      el.formStatus.textContent = message;
+    }
+
+    function clearFormStatus() {
+      el.formStatus.className = "status";
+      el.formStatus.textContent = "";
+    }
+
+    function clearConfirmation() {
+      el.confirmationBox.classList.remove("show");
+      el.confirmationGrid.innerHTML = "";
+    }
+
+    function resetSelectedSlot() {
+      state.selectedSlotValue = "";
+      state.selectedSlotLabel = "";
+      el.time.value = "";
+      el.selectedTimeDisplay.value = "";
+      document.querySelectorAll(".slot-btn").forEach(btn => btn.classList.remove("selected"));
+    }
+
+    function selectSlot(slot) {
+      state.selectedSlotValue = slot.value;
+      state.selectedSlotLabel = slot.label;
+      el.time.value = slot.value;
+      el.selectedTimeDisplay.value = slot.label;
+
+      document.querySelectorAll(".slot-btn").forEach(btn => {
+        btn.classList.toggle("selected", btn.dataset.value === slot.value);
+      });
+    }
+
+    function renderSlots(slots) {
+      el.slotsContainer.innerHTML = "";
+
+      if (!Array.isArray(slots) || !slots.length) {
+        return;
+      }
+
+      slots.forEach(slot => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "slot-btn";
+        btn.textContent = slot.label;
+        btn.dataset.value = slot.value;
+
+        if (slot.value === state.selectedSlotValue) {
+          btn.classList.add("selected");
+        }
+
+        btn.addEventListener("click", () => selectSlot(slot));
+        el.slotsContainer.appendChild(btn);
+      });
+    }
+
+    async function loadAvailableSlots() {
+      clearFormStatus();
+      clearConfirmation();
+      resetSelectedSlot();
+      el.slotStatus.textContent = "";
+      el.slotsContainer.innerHTML = "";
+
+      const date = el.date.value;
+      if (!date) {
+        showFormStatus(txt("noDateForSlots"), "error");
+        return;
+      }
+
+      el.loadSlotsBtn.disabled = true;
+      el.loadSlotsBtn.textContent = txt("loadingSlots");
+      el.slotStatus.textContent = txt("loadingSlots");
+
+      try {
+        const res = await fetch("/.netlify/functions/get-available-slots", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            date,
+            lang: state.lang,
+            timezone: state.timezone
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.message || txt("statusLoadError"));
+        }
+
+        state.loadedSlots = Array.isArray(data.slots) ? data.slots : [];
+
+        if (!state.loadedSlots.length) {
+          el.slotsMeta.textContent = replaceVars(txt("slotLoadedForDate"), {
+            date: formatDateForDisplay(date)
+          });
+          el.slotStatus.textContent = data.message || txt("noSlotsAvailable");
+          renderSlots([]);
+          return;
+        }
+
+        el.slotsMeta.textContent = replaceVars(txt("slotLoadedForDate"), {
+          date: formatDateForDisplay(date)
+        });
+        el.slotStatus.textContent = data.message || replaceVars(txt("slotLoadedCount"), {
+          count: state.loadedSlots.length
+        });
+
+        renderSlots(state.loadedSlots);
+      } catch (error) {
+        state.loadedSlots = [];
+        renderSlots([]);
+        showFormStatus(error.message || txt("statusLoadError"), "error");
+      } finally {
+        el.loadSlotsBtn.disabled = false;
+        el.loadSlotsBtn.textContent = txt("loadSlotsBtn");
+      }
+    }
+
+    function buildConfirmationGrid(appointment) {
+      const labels = i18n[state.lang].labels;
+      const rows = [
+        [labels.reference, appointment.reference],
+        [labels.businessName, appointment.businessName],
+        [labels.name, appointment.name],
+        [labels.phone, appointment.phone],
+        [labels.email, appointment.email || "-"],
+        [labels.date, appointment.date],
+        [labels.time, appointment.time],
+        [labels.service, appointment.service],
+        [labels.vehicle, appointment.vehicle || "-"],
+        [labels.notes, appointment.notes || "-"],
+        [labels.source, appointment.source || "-"],
+        [labels.timezone, appointment.timezone || "-"],
+        [labels.status, appointment.status || "-"]
+      ];
+
+      el.confirmationGrid.innerHTML = rows
+        .map(([label, value]) => `<div>${escapeHtml(label)}</div><div>${escapeHtml(value || "-")}</div>`)
+        .join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    async function submitAppointment(event) {
+      event.preventDefault();
+      clearFormStatus();
+      clearConfirmation();
+
+      if (!el.form.reportValidity()) {
+        showFormStatus(txt("statusRequiredFields"), "error");
+        return;
+      }
+
+      if (!el.time.value) {
+        showFormStatus(txt("selectSlotPrompt"), "error");
+        return;
+      }
+
+      el.submitBtn.disabled = true;
+      el.submitBtn.textContent = txt("submitting");
+
+      try {
+        const payload = {
+          lang: state.lang,
+          timezone: state.timezone,
+          source: "web",
+          name: el.name.value.trim(),
+          phone: el.phone.value.trim(),
+          email: el.email.value.trim(),
+          service: el.service.value,
+          date: el.date.value,
+          time: el.time.value,
+          vehicle: el.vehicle.value.trim(),
+          notes: el.notes.value.trim()
+        };
+
+        const res = await fetch("/.netlify/functions/create-appointment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.message || txt("statusCreateError"));
+        }
+
+        showFormStatus(data.message || txt("successSubtitle"), "success");
+
+        el.confirmTitle.textContent =
+          data.confirmation?.title || txt("successTitle");
+
+        buildConfirmationGrid(data.appointment || {});
+        el.confirmationBox.classList.add("show");
+
+        el.form.reset();
+        state.loadedSlots = [];
+        resetSelectedSlot();
+        renderSlots([]);
+        el.slotsMeta.textContent = txt("slotsMetaDefault");
+        el.slotStatus.textContent = "";
+      } catch (error) {
+        showFormStatus(error.message || txt("statusCreateError"), "error");
+      } finally {
+        el.submitBtn.disabled = false;
+        el.submitBtn.textContent = txt("submitBtn");
+      }
+    }
+
+    function setMinDateToday() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      el.date.min = `${yyyy}-${mm}-${dd}`;
+    }
+
+    el.langEnBtn.addEventListener("click", () => setLanguage("en"));
+    el.langFrBtn.addEventListener("click", () => setLanguage("fr"));
+    el.loadSlotsBtn.addEventListener("click", loadAvailableSlots);
+    el.date.addEventListener("change", loadAvailableSlots);
+    el.form.addEventListener("submit", submitAppointment);
+
+    setMinDateToday();
+    setLanguage("en");
+  </script>
+</body>
+</html>
