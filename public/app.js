@@ -387,6 +387,39 @@ function inferVehicleMaintenanceState(appointments = [], tasks = []) {
   return "Stable";
 }
 
+function getTimelineEventIcon(type = "") {
+  const normalized = String(type).toLowerCase();
+  if (normalized.includes("call")) return "📞";
+  if (normalized.includes("sms") || normalized.includes("message")) return "💬";
+  if (normalized.includes("voicemail")) return "📍";
+  if (normalized.includes("transcript") || normalized.includes("summary")) return "✦";
+  if (normalized.includes("task")) return "🗂";
+  if (normalized.includes("appointment")) return "🗓";
+  if (normalized.includes("service")) return "🧰";
+  if (normalized.includes("payment")) return "💳";
+  return "●";
+}
+
+function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks, appointments) {
+  const latestSummaryEvent = timelineEvents.find((event) =>
+    /summary|transcript/i.test(String(event.eventType || event.title || ""))
+  );
+  if (latestSummaryEvent?.body) return latestSummaryEvent.body;
+
+  const latestCall = calls[0];
+  const nextTask = tasks[0];
+  const nextAppointment = appointments[0];
+  const customerName = customerDisplayName(customer);
+  const vehicleName = vehicleDisplayName(vehicle);
+  const callDetail = latestCall?.notes || latestCall?.transcript || "recent communication activity";
+  const followUp = nextAppointment
+    ? `${nextAppointment.service || "service"} appointment recommended`
+    : nextTask
+      ? `${nextTask.title || "follow-up task"} recommended`
+      : "follow-up recommended";
+  return `${customerName} contacted the dealership regarding ${vehicleName}. Latest context: ${callDetail}. ${followUp}.`;
+}
+
 function getCustomerPrimaryVehicle(customer) {
   if (!customer) return null;
   const vehicleIds = Array.isArray(customer.vehicleIds) ? customer.vehicleIds : [];
@@ -545,250 +578,154 @@ function renderCustomer360Detail() {
   const recallState = inferVehicleRecallState(vehicle, tasks);
   const maintenanceState = inferVehicleMaintenanceState(appointments, tasks);
   const archiveCount = currentCustomerNotes.length + currentCustomerTimeline.length + calls.length;
-  const customerStatus = openTasks.length
-    ? `${openTasks.length} active follow-up${openTasks.length === 1 ? "" : "s"}`
-    : appointments.length
-      ? "Next appointment ready"
-      : "No open escalations";
+  const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
-  const nameEl = document.getElementById("customer360Name");
-  const headlineEl = document.getElementById("customer360Headline");
-  const statusPillEl = document.getElementById("customer360StatusPill");
-  const profileEl = document.getElementById("customer360Profile");
-  const contactBarEl = document.getElementById("customer360ContactBar");
-  const vehicleSummaryEl = document.getElementById("customer360VehicleSummary");
-  const vehicleEl = document.getElementById("customer360VehicleCard");
-  const workflowEl = document.getElementById("customer360Workflow");
-  const workflowSummaryEl = document.getElementById("customer360WorkflowSummary");
-  const callsEl = document.getElementById("customer360Calls");
-  const callsSummaryEl = document.getElementById("customer360CallsSummary");
-  const notesEl = document.getElementById("customer360Notes");
-  const notesSummaryEl = document.getElementById("customer360NotesSummary");
+  const profileCardEl = document.getElementById("customer360ProfileCard");
+  const aiSummaryEl = document.getElementById("customer360AiSummary");
+  const vehicleTitleEl = document.getElementById("customer360VehicleTitle");
+  const vehicleRailEl = document.getElementById("customer360VehicleRail");
+  const archiveCountEl = document.getElementById("customer360ArchiveCount");
   const timelineEl = document.getElementById("customer360Timeline");
-  const timelineSummaryEl = document.getElementById("customer360TimelineSummary");
 
   if (!customer) {
-    if (nameEl) nameEl.textContent = "Select a customer";
-    if (headlineEl) headlineEl.textContent = "Profile, vehicle, communications, and workflow context will appear here.";
-    if (statusPillEl) statusPillEl.textContent = "Awaiting selection";
-    if (profileEl) profileEl.innerHTML = "";
-    if (contactBarEl) contactBarEl.innerHTML = "";
-    if (vehicleSummaryEl) vehicleSummaryEl.textContent = "";
-    if (vehicleEl) vehicleEl.innerHTML = `<div class="customer360-empty">Choose a customer to load vehicle health, mileage, recalls, maintenance, and VIN archive context.</div>`;
-    if (workflowEl) workflowEl.innerHTML = `<div class="customer360-empty">Choose a customer to load tasks and appointments.</div>`;
-    if (callsEl) callsEl.innerHTML = `<div class="customer360-empty">Choose a customer to load call activity.</div>`;
-    if (notesEl) notesEl.innerHTML = `<div class="customer360-empty">Choose a customer to load notes.</div>`;
+    if (profileCardEl) {
+      profileCardEl.innerHTML = `
+        <div class="customer360-profile-name">Select a customer</div>
+        <div class="customer360-vip">VIP Customer</div>
+      `;
+    }
+    if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
+    if (vehicleTitleEl) vehicleTitleEl.textContent = "No linked vehicle";
+    if (vehicleRailEl) vehicleRailEl.innerHTML = `<div class="customer360-empty">Choose a customer to load vehicle intelligence.</div>`;
+    if (archiveCountEl) archiveCountEl.textContent = "0 Items";
     if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
     return;
   }
 
-  if (nameEl) nameEl.textContent = customerDisplayName(customer);
-  if (headlineEl) {
-    headlineEl.textContent = `${customer.preferredLanguage || "Language n/a"} • ${(customer.phones || []).join(" • ") || customer.email || "No contact info"} • ${customerVehicles.length} linked vehicle${customerVehicles.length === 1 ? "" : "s"} • ${vehicleDisplayName(vehicle)}`;
-  }
-  if (statusPillEl) {
-    statusPillEl.textContent = customerStatus;
-  }
-  if (profileEl) {
-    profileEl.innerHTML = `
-      <div class="customer360-stat">
-        <div class="customer360-label">Open Tasks</div>
-        <div class="customer360-stat-value">${openTasks.length}</div>
-        <div class="customer360-stat-note">Action items waiting on team follow-up.</div>
-      </div>
-      <div class="customer360-stat">
-        <div class="customer360-label">Appointments</div>
-        <div class="customer360-stat-value">${appointments.length}</div>
-        <div class="customer360-stat-note">Service and delivery commitments on the record.</div>
-      </div>
-      <div class="customer360-stat">
-        <div class="customer360-label">Timeline Events</div>
-        <div class="customer360-stat-value">${currentCustomerTimeline.length}</div>
-        <div class="customer360-stat-note">Messages, calls, summaries, and workflow moments.</div>
-      </div>
-      <div class="customer360-stat">
-        <div class="customer360-label">Archive Assets</div>
-        <div class="customer360-stat-value">${archiveCount}</div>
-        <div class="customer360-stat-note">Notes, transcripts, and VIN-linked evidence ready to review.</div>
-      </div>
+  if (profileCardEl) {
+    const phones = (customer.phones || []).slice(0, 2);
+    profileCardEl.innerHTML = `
+      <div class="customer360-profile-name">${escapeHtml(customerDisplayName(customer))}</div>
+      <div class="customer360-vip">◉ VIP Customer</div>
+      ${phones.map((phone, index) => `
+        <div class="customer360-contact-row">
+          <span>${escapeHtml(phone)}</span>
+          <span class="customer360-contact-pill">${index === 0 ? "Mobile" : "Home"}</span>
+        </div>
+      `).join("")}
+      ${customer.email ? `
+        <div class="customer360-contact-row">
+          <span>${escapeHtml(customer.email)}</span>
+        </div>
+      ` : ""}
+      <div class="customer360-language">Preferred Language: ${escapeHtml(customer.preferredLanguage || "English")}</div>
     `;
   }
-  if (contactBarEl) {
-    const contactBits = [];
-    (customer.phones || []).forEach((phone) => {
-      contactBits.push(`<span class="customer360-contact-pill">Phone • ${escapeHtml(phone)}</span>`);
+
+  if (aiSummaryEl) {
+    aiSummaryEl.textContent = aiSummary;
+  }
+
+  if (vehicleTitleEl) {
+    vehicleTitleEl.textContent = vehicle ? vehicleDisplayName(vehicle) : "No linked vehicle";
+  }
+
+  if (vehicleRailEl) {
+    vehicleRailEl.innerHTML = vehicle ? `
+      <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
+      <div class="customer360-vehicle-line"><span>Mileage:</span><strong>${escapeHtml(vehicle.mileage ?? "-")} miles</strong></div>
+      <div class="customer360-vehicle-line"><span>Battery Health:</span><strong class="customer360-vehicle-good">${escapeHtml(batteryState)}</strong></div>
+      <div class="customer360-vehicle-line"><span>Recalls:</span><strong>${escapeHtml(recallState)}</strong></div>
+      <div class="customer360-vehicle-line"><span>Maintenance:</span><strong class="customer360-vehicle-warn">${escapeHtml(maintenanceState === "Scheduled" ? "Due Soon" : maintenanceState)}</strong></div>
+    ` : `<div class="customer360-empty">Vehicle status will appear here.</div>`;
+  }
+
+  if (archiveCountEl) {
+    archiveCountEl.textContent = `${archiveCount} Items`;
+  }
+
+  const timelineCards = [];
+
+  if (calls[0]) {
+    timelineCards.push({
+      type: "Phone Call",
+      time: formatDisplayDateTime(calls[0].startedAt || calls[0].updatedAt),
+      body: calls[0].notes || calls[0].transcript || "Spoke with the customer about a recent vehicle concern.",
+      subcopy: `${titleCase(calls[0].status || "completed")} • ${titleCase(calls[0].routedDepartment || "communications")}`
     });
-    if (customer.email) {
-      contactBits.push(`<span class="customer360-contact-pill">Email • ${escapeHtml(customer.email)}</span>`);
-    }
-    if (customer.preferredLanguage) {
-      contactBits.push(`<span class="customer360-contact-pill">Language • ${escapeHtml(customer.preferredLanguage)}</span>`);
-    }
-    contactBarEl.innerHTML = contactBits.join("");
-  }
-  if (vehicleSummaryEl) {
-    vehicleSummaryEl.textContent = vehicle ? `${vehicle.vin || "VIN n/a"} • ${vehicle.status || "active"}` : "No linked vehicle";
-  }
-  if (vehicleEl) {
-    vehicleEl.innerHTML = vehicle ? `
-      <div class="customer360-vehicle-grid">
-        <div class="customer360-vehicle-card">
-          <div>
-            <div class="customer360-eyebrow" style="color:rgba(255,255,255,.72);">Primary Vehicle</div>
-            <div class="customer360-vehicle-title">${escapeHtml(vehicleDisplayName(vehicle))}</div>
-            <div class="customer360-vin">VIN Archive • ${escapeHtml(vehicle.vin || "VIN unavailable")}</div>
-            <div class="customer360-vehicle-summary">
-              <div class="customer360-stat">
-                <div class="customer360-label" style="color:rgba(255,255,255,.65);">Mileage</div>
-                <div class="customer360-stat-value">${escapeHtml(vehicle.mileage ?? "-")}</div>
-              </div>
-              <div class="customer360-stat">
-                <div class="customer360-label" style="color:rgba(255,255,255,.65);">Status</div>
-                <div class="customer360-stat-value" style="font-size:22px;">${escapeHtml(titleCase(vehicle.status || "active"))}</div>
-              </div>
-            </div>
-          </div>
-          <div class="customer360-contact-bar" style="margin-top:14px;">
-            <span class="customer360-contact-pill">Vehicles linked • ${customerVehicles.length}</span>
-            <span class="customer360-contact-pill">Calls • ${calls.length}</span>
-            <span class="customer360-contact-pill">Notes • ${currentCustomerNotes.length}</span>
-          </div>
-        </div>
-        <div>
-          <div class="customer360-health-grid">
-            <div class="customer360-health-card">
-              <div class="customer360-label">Battery</div>
-              <div class="customer360-health-value">${escapeHtml(batteryState)}</div>
-              <div class="customer360-health-note">EV or battery-state placeholder until telemetry integration arrives.</div>
-            </div>
-            <div class="customer360-health-card">
-              <div class="customer360-label">Recalls</div>
-              <div class="customer360-health-value">${escapeHtml(recallState)}</div>
-              <div class="customer360-health-note">Open campaign view inferred from tasks until OEM recall feeds are wired.</div>
-            </div>
-            <div class="customer360-health-card">
-              <div class="customer360-label">Maintenance</div>
-              <div class="customer360-health-value">${escapeHtml(maintenanceState)}</div>
-              <div class="customer360-health-note">Appointment and workflow activity rolled into one readiness signal.</div>
-            </div>
-            <div class="customer360-health-card">
-              <div class="customer360-label">Archive</div>
-              <div class="customer360-health-value">${archiveCount}</div>
-              <div class="customer360-health-note">VIN-specific files, scans, call artifacts, and notes can land here next.</div>
-            </div>
-          </div>
-          <div class="customer360-vehicle-detail-grid">
-            <div class="customer360-detail-card">
-              <div class="customer360-label">Geo Location</div>
-              <div class="customer360-detail-value">${escapeHtml(vehicle.location || vehicle.geoLocation || "Service lane / last known bay not set")}</div>
-            </div>
-            <div class="customer360-detail-card">
-              <div class="customer360-label">Next Action</div>
-              <div class="customer360-detail-value">${appointments[0]?.service || openTasks[0]?.title || "Awaiting next dealership action"}</div>
-            </div>
-            <div class="customer360-detail-card">
-              <div class="customer360-label">Advisor / Owner</div>
-              <div class="customer360-detail-value">${appointments[0]?.advisor || openTasks[0]?.assignedTo || "Not assigned yet"}</div>
-            </div>
-            <div class="customer360-detail-card">
-              <div class="customer360-label">Service State</div>
-              <div class="customer360-detail-value">${appointments[0]?.status || openTasks[0]?.status || "Monitoring"}</div>
-            </div>
-          </div>
-          <div class="customer360-archive">
-            <div class="customer360-label">VIN Archive Surface</div>
-            <div class="customer360-detail-value">${escapeHtml(vehicle.vin || "VIN pending")}</div>
-            <div class="customer360-meta">Reserve this lane for scans, media, delivery photos, inspection reports, and future OEM/telematics payloads.</div>
-          </div>
-        </div>
-      </div>
-    ` : `<div class="customer360-empty">No linked vehicle record yet. The design is ready for mileage, battery, recall, maintenance, geo-location, and VIN archive data as soon as the backend exposes it.</div>`;
   }
 
-  if (workflowSummaryEl) {
-    workflowSummaryEl.textContent = `${formatCountLabel(tasks.length, "task")} • ${formatCountLabel(appointments.length, "appointment")}`;
-  }
-  if (workflowEl) {
-    workflowEl.innerHTML = `
-      ${tasks.length ? tasks.map((task) => `
-        <div class="customer360-mini-item">
-          <strong>${escapeHtml(task.title || "Task")}</strong>
-          <div class="customer360-meta">${escapeHtml(titleCase(task.status || "open"))} • ${escapeHtml(titleCase(task.priority || "normal"))}</div>
-          <div class="customer360-mini-item-body">${escapeHtml(task.description || "No task description yet.")}</div>
-          <div class="customer360-mini-item-toolbar">
-            <span class="customer360-tag">Task</span>
-            <span class="customer360-tag">${escapeHtml(titleCase(task.department || "operations"))}</span>
-          </div>
-        </div>
-      `).join("") : `<div class="customer360-empty">No tasks linked to this customer.</div>`}
-      ${appointments.length ? appointments.map((item) => `
-        <div class="customer360-mini-item">
-          <strong>${escapeHtml(item.service || "Appointment")}</strong>
-          <div class="customer360-meta">${escapeHtml(item.date || "")} ${escapeHtml(item.time || "")} • ${escapeHtml(item.advisor || "Advisor TBD")}</div>
-          <div class="customer360-mini-item-body">${escapeHtml(item.transport || "Transport not set")} • ${escapeHtml(titleCase(item.status || "scheduled"))}</div>
-          <div class="customer360-mini-item-toolbar">
-            <span class="customer360-tag">Appointment</span>
-            <span class="customer360-tag">${escapeHtml(titleCase(item.department || item.serviceDepartment || "service"))}</span>
-          </div>
-        </div>
-      `).join("") : `<div class="customer360-empty">No appointments linked to this customer.</div>`}
-    `;
+  const latestTimeline = currentCustomerTimeline.slice(0, 4).map((event) => ({
+    type: titleCase(event.title || event.eventType || "Timeline Event"),
+    time: formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc),
+    body: event.body || "Timeline detail captured.",
+    subcopy: `${titleCase(event.department || event.sourceSystem || "ingrid")}`
+  }));
+
+  latestTimeline.forEach((event) => timelineCards.push(event));
+
+  if (appointments[0]) {
+    timelineCards.push({
+      type: "Service Event",
+      time: `${appointments[0].date || ""} ${appointments[0].time || ""}`.trim() || "Upcoming",
+      body: `${appointments[0].service || "Service appointment"}${appointments[0].advisor ? ` with ${appointments[0].advisor}` : ""}`,
+      actions: [
+        { label: "Schedule Service", accent: true },
+        { label: appointments[0].date && appointments[0].time ? `${appointments[0].date} ${appointments[0].time}` : "Tomorrow at 10:00 AM", light: true }
+      ]
+    });
   }
 
-  if (callsSummaryEl) {
-    callsSummaryEl.textContent = `${formatCountLabel(calls.length, "call")} • ${formatCountLabel(currentCustomerNotes.length, "note")}`;
-  }
-  if (callsEl) {
-    callsEl.innerHTML = calls.length ? calls.map((call) => `
-      <div class="customer360-mini-item">
-        <strong>${escapeHtml(titleCase(call.routedDepartment || "communications"))} • ${escapeHtml(titleCase(call.status || "completed"))}</strong>
-        <div class="customer360-meta">${escapeHtml(formatDisplayDateTime(call.startedAt || call.updatedAt))}</div>
-        <div class="customer360-mini-item-body">${escapeHtml(call.transcript || call.notes || "No transcript captured.")}</div>
-        <div class="customer360-mini-item-toolbar">
-          <span class="customer360-tag">${escapeHtml(titleCase(call.direction || "call"))}</span>
-          <span class="customer360-tag">${escapeHtml(call.callSid ? "Persisted" : "Live")}</span>
-        </div>
-      </div>
-    `).join("") : `<div class="customer360-empty">No call history linked to this customer yet.</div>`;
+  if (openTasks[0]) {
+    timelineCards.push({
+      type: "Task",
+      time: formatDisplayDateTime(openTasks[0].updatedAtUtc || openTasks[0].createdAtUtc || new Date().toISOString()),
+      body: openTasks[0].description || openTasks[0].title || "Follow up with the customer.",
+      subcopy: `Follow Up: ${openTasks[0].title || "Customer confirmation"}`
+    });
   }
 
-  if (notesSummaryEl) {
-    notesSummaryEl.textContent = `${formatCountLabel(currentCustomerNotes.length, "note")}`;
-  }
-  if (notesEl) {
-    notesEl.innerHTML = currentCustomerNotes.length ? currentCustomerNotes.map((note) => `
-      <div class="customer360-mini-item">
-        <strong>${escapeHtml(titleCase(note.noteType || "internal"))}</strong>
-        <div class="customer360-meta">${escapeHtml(formatDisplayDateTime(note.updatedAtUtc || note.createdAtUtc))}</div>
-        <div class="customer360-mini-item-body">${escapeHtml(note.body || "")}</div>
-        <div class="customer360-mini-item-toolbar">
-          <span class="customer360-tag">Note</span>
-          <span class="customer360-tag">${escapeHtml(vehicle?.vin || "No VIN")}</span>
-        </div>
-      </div>
-    `).join("") : `<div class="customer360-empty">No notes linked to this customer yet.</div>`;
+  if (currentCustomerNotes[0]) {
+    timelineCards.push({
+      type: "AI Generated Transcript",
+      time: formatDisplayDateTime(currentCustomerNotes[0].updatedAtUtc || currentCustomerNotes[0].createdAtUtc),
+      body: currentCustomerNotes[0].body || "Recent note captured in the customer record.",
+      subcopy: titleCase(currentCustomerNotes[0].noteType || "internal")
+    });
   }
 
-  if (timelineSummaryEl) {
-    timelineSummaryEl.textContent = `${formatCountLabel(currentCustomerTimeline.length, "event")}`;
+  if (!timelineCards.length) {
+    timelineCards.push({
+      type: "Timeline Event",
+      time: "Now",
+      body: "Live calls, SMS, voicemails, AI summaries, tasks, notes, appointments, and service events will appear here as they are captured.",
+      subcopy: "INGRID timeline spine"
+    });
   }
+
   if (timelineEl) {
-    timelineEl.innerHTML = currentCustomerTimeline.length ? currentCustomerTimeline.map((event) => `
+    timelineEl.innerHTML = timelineCards.map((item) => `
       <div class="customer360-timeline-item">
-        <div class="customer360-timeline-item-head">
-          <div>
-            <strong>${escapeHtml(event.title || event.eventType || "Timeline event")}</strong>
-            <div class="customer360-meta">${escapeHtml(titleCase(event.eventType || ""))} • ${escapeHtml(titleCase(event.department || event.sourceSystem || "ingrid"))}</div>
+        <div class="customer360-timeline-inner">
+          <div class="customer360-timeline-item-head">
+            <div class="customer360-timeline-kind">
+              <span class="customer360-timeline-kind-icon">${getTimelineEventIcon(item.type)}</span>
+              <span>${escapeHtml(item.type)}</span>
+            </div>
+            <div class="customer360-timeline-time">${escapeHtml(item.time)}</div>
           </div>
-          <div class="customer360-meta">${escapeHtml(formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc))}</div>
-        </div>
-        <div class="customer360-timeline-copy">${escapeHtml(event.body || "")}</div>
-        <div class="customer360-mini-item-toolbar">
-          <span class="customer360-tag">Timeline</span>
-          ${vehicle?.vin ? `<span class="customer360-tag">${escapeHtml(vehicle.vin)}</span>` : ""}
+          <div class="customer360-timeline-copy">${escapeHtml(item.body)}</div>
+          ${item.subcopy ? `<div class="customer360-timeline-subcopy">${escapeHtml(item.subcopy)}</div>` : ""}
+          ${item.actions?.length ? `
+            <div class="customer360-timeline-actions">
+              ${item.actions.map((action) => `
+                <span class="customer360-chip-callout ${action.light ? "light" : ""}">${escapeHtml(action.label)}</span>
+              `).join("")}
+            </div>
+          ` : ""}
         </div>
       </div>
-    `).join("") : `<div class="customer360-empty">No timeline events linked to this customer yet.</div>`;
+    `).join("");
   }
 }
 
