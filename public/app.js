@@ -17,6 +17,19 @@ let schedulerConfigCache = null;
 let configCache = null;
 let isLoadingCalls = false;
 let isLoadingCustomer360 = false;
+let currentDepartmentLens = "home";
+
+const DEPARTMENT_LENSES = {
+  home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"] },
+  sales: { name: "Sales", copy: "Lead, quote, trade, and deal actions stay anchored to the same customer and vehicle timeline.", summaryTitle: "Sales Summary", timelineLabel: "Sales lens", actions: ["Start Deal", "Log Test Drive", "Send Quote"] },
+  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"] },
+  bdc: { name: "BDC", copy: "Inbound calls, SMS, queues, and campaign follow-ups work from the same contact record.", summaryTitle: "BDC Summary", timelineLabel: "BDC lens", actions: ["Open Call Queue", "Send Follow-up", "Start Campaign"] },
+  technicians: { name: "Technicians", copy: "Open jobs, inspection updates, and technician notes remain linked to the customer and VIN timeline.", summaryTitle: "Tech Summary", timelineLabel: "Technician lens", actions: ["Start Job", "Complete Job", "Add Internal Note"] },
+  fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"] },
+  parts: { name: "Parts", copy: "Parts demand, special orders, and vehicle-linked parts history remain connected to service work.", summaryTitle: "Parts Summary", timelineLabel: "Parts lens", actions: ["Order Part", "Assign to RO", "Check Availability"] },
+  accounting: { name: "Accounting", copy: "Invoices, payouts, and payment events will surface against the same customer and vehicle timeline.", summaryTitle: "Accounting Summary", timelineLabel: "Accounting lens", actions: ["Post Payment", "Review Invoice", "Export Statement"] },
+  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"] }
+};
 
 const COMM_SCRIPT_LIBRARY = [
   {
@@ -538,7 +551,7 @@ function renderCustomer360List() {
         <div class="customer360-item-row">
           <div>
             <strong>${escapeHtml(customerDisplayName(customer))}</strong>
-            <div class="customer360-meta">${escapeHtml((customer.phones || []).join(" • ") || customer.email || "No primary contact")}</div>
+            <div class="customer360-meta">${(customer.phones || []).length ? (customer.phones || []).map((phone) => formatPhoneActionLink(phone)).join(" ") : escapeHtml(customer.email || "No primary contact")}</div>
           </div>
           <span class="customer360-item-badge">${escapeHtml(customerInitials(customer))}</span>
         </div>
@@ -562,6 +575,91 @@ function renderCustomer360List() {
     });
   });
 }
+
+
+function getDepartmentLensConfig() {
+  return DEPARTMENT_LENSES[currentDepartmentLens] || DEPARTMENT_LENSES.home;
+}
+
+function formatPhoneActionLink(phone, label = "", mode = "call") {
+  const normalized = normalizePhoneNumber(phone);
+  if (!normalized) return escapeHtml(label || phone || "-");
+  const display = label || formatPhonePretty(normalized);
+  return `<a href="#" class="phone-link" data-phone="${escapeHtml(normalized)}" data-mode="${escapeHtml(mode)}">📞 ${escapeHtml(display)}</a>`;
+}
+
+function setDepartmentLens(department = "home") {
+  currentDepartmentLens = DEPARTMENT_LENSES[department] ? department : "home";
+  const config = getDepartmentLensConfig();
+
+  document.querySelectorAll(".department-menu-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.department === currentDepartmentLens);
+  });
+
+  const contextName = document.getElementById("customer360ContextName");
+  const contextCopy = document.getElementById("customer360ContextCopy");
+  const toolbarMeta = document.getElementById("customer360ToolbarMeta");
+  const summaryTitle = document.getElementById("customer360SummaryTitle");
+  const timelineLens = document.getElementById("customer360TimelineLens");
+  const actions = [
+    document.getElementById("customer360ActionOne"),
+    document.getElementById("customer360ActionTwo"),
+    document.getElementById("customer360ActionThree"),
+  ];
+
+  if (contextName) contextName.textContent = config.name;
+  if (contextCopy) contextCopy.textContent = config.copy;
+  if (toolbarMeta) toolbarMeta.textContent = `Pinnacle Auto Group • ${config.name}`;
+  if (summaryTitle) summaryTitle.textContent = config.summaryTitle;
+  if (timelineLens) timelineLens.textContent = config.timelineLabel;
+  actions.forEach((el, index) => {
+    if (!el) return;
+    const iconEl = el.querySelector('.customer360-action-icon');
+    const label = config.actions[index] || "Action";
+    el.innerHTML = `<span><span class="customer360-action-icon">${iconEl?.textContent || "◔"}</span> ${escapeHtml(label)}</span><span>›</span>`;
+  });
+}
+
+function initDepartmentMenu() {
+  document.querySelectorAll('.department-menu-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setDepartmentLens(btn.dataset.department || 'home'));
+  });
+}
+
+function initPhoneLinkRouting() {
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('.phone-link');
+    if (!link) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const phone = link.dataset.phone || '';
+    const mode = (link.dataset.mode || 'call').toLowerCase();
+    if (!phone) return;
+    if (mode === 'sms') return openSmsForPhone(phone);
+    return openDialerForPhone(phone);
+  });
+}
+
+function getSelectedCustomerPrimaryPhone() {
+  const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
+  return normalizePhoneNumber(customer?.phones?.[0] || currentConversationPhone || '');
+}
+
+function wireCustomer360Dock() {
+  const callPhone = () => {
+    const phone = getSelectedCustomerPrimaryPhone();
+    if (phone) openDialerForPhone(phone);
+  };
+  const smsPhone = () => {
+    const phone = getSelectedCustomerPrimaryPhone();
+    if (phone) openSmsForPhone(phone);
+  };
+  document.getElementById('customer360DockCallBtn')?.addEventListener('click', callPhone);
+  document.getElementById('customer360PrimaryCallBtn')?.addEventListener('click', callPhone);
+  document.getElementById('customer360DockSmsBtn')?.addEventListener('click', smsPhone);
+  document.getElementById('customer360PrimarySmsBtn')?.addEventListener('click', smsPhone);
+}
+
 
 function renderCustomer360Detail() {
   const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
@@ -609,7 +707,7 @@ function renderCustomer360Detail() {
       <div class="customer360-vip">◉ VIP Customer</div>
       ${phones.map((phone, index) => `
         <div class="customer360-contact-row">
-          <span>${escapeHtml(phone)}</span>
+          <span>${formatPhoneActionLink(phone, formatPhonePretty(phone))}</span>
           <span class="customer360-contact-pill">${index === 0 ? "Mobile" : "Home"}</span>
         </div>
       `).join("")}
@@ -623,7 +721,8 @@ function renderCustomer360Detail() {
   }
 
   if (aiSummaryEl) {
-    aiSummaryEl.textContent = aiSummary;
+    const lens = getDepartmentLensConfig();
+    aiSummaryEl.textContent = `${lens.name}: ${aiSummary}`;
   }
 
   if (vehicleTitleEl) {
@@ -1177,7 +1276,7 @@ function showCallDetails(call) {
   if (!panel) return;
 
   panel.innerHTML = `
-<h3>Call Details • ${escapeHtml(call.from || "-")}</h3>
+<h3>Call Details • ${escapeHtml(formatPhonePretty(call.from || "-"))}</h3>
 
 <p><strong>From:</strong> ${formatCallPhoneCell(call.from)}</p>
 <p><strong>To:</strong> ${formatCallPhoneCell(call.to)}</p>
@@ -1212,8 +1311,8 @@ ${
 <div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
   <h4 style="margin:0 0 8px 0;">Send SMS</h4>
 
-  <div style="font-size:13px; color:#6b7280; margin-bottom:8px;">
-    To: ${call.from || "-"}
+  <div style="font-size:13px; color:#8ea3bf; margin-bottom:8px;">
+    To: ${formatCallPhoneCell(call.from)}
   </div>
 
   <textarea
@@ -1305,10 +1404,10 @@ async function showCall(callSid) {
     if (!panel) return;
 
     panel.innerHTML = `
-      <h3>Call Details • ${escapeHtml(call.from || "-")}</h3>
+      <h3>Call Details • ${escapeHtml(formatPhonePretty(call.from || "-"))}</h3>
 
-      <p><strong>From:</strong> ${escapeHtml(call.from || "-")}</p>
-      <p><strong>To:</strong> ${escapeHtml(call.to || "-")}</p>
+      <p><strong>From:</strong> ${formatCallPhoneCell(call.from)}</p>
+      <p><strong>To:</strong> ${formatCallPhoneCell(call.to)}</p>
       <p><strong>Status:</strong> ${escapeHtml(call.status || "-")}</p>
       <p><strong>Department:</strong> ${escapeHtml(call.routedDepartment || "-")}</p>
       <p><strong>Language:</strong> ${escapeHtml(call.language || "-")}</p>
@@ -1340,8 +1439,8 @@ async function showCall(callSid) {
       <div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
         <h4 style="margin:0 0 8px 0;">Send SMS</h4>
 
-        <div style="font-size:13px; color:#6b7280; margin-bottom:8px;">
-          To: ${escapeHtml(call.from || "-")}
+        <div style="font-size:13px; color:#8ea3bf; margin-bottom:8px;">
+          To: ${formatCallPhoneCell(call.from)}
         </div>
 
         <textarea
@@ -3366,6 +3465,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initKpiFilters();
   wireTrainingButtons();
   initCommsDock();
+  initDepartmentMenu();
+  initPhoneLinkRouting();
+  wireCustomer360Dock();
+  setDepartmentLens("home");
 
   setInterval(() => {
     loadInbox();
