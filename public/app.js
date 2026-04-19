@@ -2009,6 +2009,61 @@ function preloadFocusedTaskFollowUp(item) {
   });
 }
 
+function preloadFocusedVehicleServiceFollowUp(item) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  setDepartmentLens("service");
+  presetCustomer360Composer("task", {
+    title: `[SERVICE] ${vehicleDisplayName(vehicle)} vehicle follow-up`,
+    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nCreated from vehicle health event:\n${item?.body || ""}\n\nNext service action:\n- Advisor review:\n- Lane / diagnostic step:\n- Customer communication:`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Service follow-up loaded from vehicle health event."
+  });
+}
+
+function preloadFocusedArchiveAction(item, mode = "task") {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (mode === "note") {
+    presetCustomer360Composer("note", {
+      body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nArchive follow-up:\n${item?.body || ""}\n\nNext documentation step:\n- Additional file or media needed:\n- Linked department:\n- Notes:`,
+      status: "Archive note loaded from VIN artifact."
+    });
+    return;
+  }
+
+  presetCustomer360Composer("task", {
+    title: `[ARCHIVE] ${vehicleDisplayName(vehicle)} follow-up`,
+    body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFollow-up task from VIN archive entry:\n${item?.body || ""}\n\nNext action:\n- Owner:\n- Department handoff:\n- File / evidence needed:`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Archive task loaded from VIN artifact."
+  });
+}
+
+function runFocusedVehicleArtifactAction(action = "followup", sourceId = "") {
+  const id = String(sourceId || "");
+  if (!id) return;
+  const item = currentCustomer360TimelineCards.find((entry) => String(entry.sourceId || "") === id);
+  if (!item) return;
+
+  if (action === "service-followup") {
+    preloadFocusedVehicleServiceFollowUp(item);
+    triggerJourneyFeedback("service", "Vehicle health event moved into service follow-up.");
+    return;
+  }
+
+  if (action === "archive-task") {
+    preloadFocusedArchiveAction(item, "task");
+    triggerJourneyFeedback(currentDepartmentLens, "Archive task loaded from VIN evidence.");
+    return;
+  }
+
+  if (action === "archive-note") {
+    preloadFocusedArchiveAction(item, "note");
+    triggerJourneyFeedback(currentDepartmentLens, "Archive note loaded from VIN evidence.");
+  }
+}
+
 async function advanceFocusedJourneyItem(kind = "tasks", sourceId = "") {
   const normalizedKind = normalizeCustomer360TimelineFilter(kind);
   const id = String(sourceId || "");
@@ -2061,6 +2116,23 @@ function buildFocusedTimelineAdvanceActions(item) {
   }
 
   if (kind === "notes") {
+    if (item.type === "Vehicle Health") {
+      return `
+        <div class="customer360-timeline-actions">
+          <button type="button" class="customer360-mini-btn" onclick="runFocusedVehicleArtifactAction('service-followup','${escapeHtml(String(item.sourceId || ""))}')">Create Service Follow-Up</button>
+        </div>
+      `;
+    }
+
+    if (item.type === "VIN Archive") {
+      return `
+        <div class="customer360-timeline-actions">
+          <button type="button" class="customer360-mini-btn" onclick="runFocusedVehicleArtifactAction('archive-task','${escapeHtml(String(item.sourceId || ""))}')">Create Linked Task</button>
+          <button type="button" class="customer360-mini-btn" onclick="runFocusedVehicleArtifactAction('archive-note','${escapeHtml(String(item.sourceId || ""))}')">Add Archive Note</button>
+        </div>
+      `;
+    }
+
     return `
       <div class="customer360-timeline-actions">
         <button type="button" class="customer360-mini-btn" onclick="advanceFocusedJourneyItem('notes','${escapeHtml(String(item.sourceId || ""))}')">Create Follow-Up Task</button>
