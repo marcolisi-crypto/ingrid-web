@@ -1031,6 +1031,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Transportation should be confirmed before diagnostics turn into all-day work." : "No transportation request has been captured yet."}</span>
           </div>
         </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="startServiceWriteUp()"><span>🛠</span>Schedule Service</button>
+          <button class="customer360-lens-quickbtn" onclick="${loanerTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')` : "startLoanerTask()"}"><span>🚗</span>${loanerTask ? "Open Loaner" : "Create Loaner"}</button>
+          <button class="customer360-lens-quickbtn" onclick="startVehicleGeoMovementNote()"><span>🧭</span>Log Movement</button>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
           <div class="customer360-lens-value">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : loanerTask ? "Transport review active" : "Awaiting booking"}</div>
@@ -1079,6 +1084,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${latestNote ? "Recent notes suggest campaign-style follow-up and appointment conversion." : "Use this area later for source attribution and campaign routing."}</span>
           </div>
         </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="startBdcCallbackTask()"><span>☎</span>Queue Callback</button>
+          <button class="customer360-lens-quickbtn" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())"><span>💬</span>Send Follow-Up</button>
+          <button class="customer360-lens-quickbtn" onclick="setCustomer360ComposerMode('appointment')"><span>📅</span>Schedule Visit</button>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Play</div>
           <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Send follow-up + confirm visit")}</div>
@@ -1126,6 +1136,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${notes.length ? "Recent notes imply the customer is already in pricing discussion." : "This area can evolve into live quote, payment, and F&I menu surfaces."}</span>
           </div>
         </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="startSalesDealTask()"><span>🏷</span>Open Deal</button>
+          <button class="customer360-lens-quickbtn" onclick="setCustomer360ComposerMode('appointment')"><span>🚘</span>Schedule Drive</button>
+          <button class="customer360-lens-quickbtn" onclick="startFiReviewNote()"><span>🧾</span>Hand Off F&amp;I</button>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Trade / Quote</div>
           <div class="customer360-lens-value">${notes.length ? "Quote package in progress" : "Trade + quote not started"}</div>
@@ -1148,6 +1163,58 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Test Drive</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "fi") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Funding Desk</div>
+          <div class="customer360-lens-value">${topTask ? "Package in motion" : "Waiting on handoff"}</div>
+          <div class="customer360-lens-copy">${vehicle ? `${escapeHtml(vehicleName)} stays attached through menu, warranty, and delivery readiness.` : "F&I actions will attach to the selected deal and vehicle context."}</div>
+        </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Menu / Warranty</small>
+            <strong>${notes.length ? "Discussion active" : "Not started"}</strong>
+            <span>${notes.length ? "Recent notes can seed warranty, protection, and funding context." : "Open a finance note to capture products, lender posture, and customer selections."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Delivery Readiness</small>
+            <strong>${nextAppointment ? "Timed handoff" : "Prep required"}</strong>
+            <span>${nextAppointment ? "There is already a visit anchor that can become the delivery checkpoint." : "Use this lane to prep signatures, funding, and final handoff control."}</span>
+          </div>
+        </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="startFiReviewNote()"><span>🧾</span>Open F&amp;I Note</button>
+          <button class="customer360-lens-quickbtn" onclick="startDeliveryHandoffAppointment()"><span>🎉</span>Prep Delivery</button>
+          <button class="customer360-lens-quickbtn" onclick="queueAccountingInvoiceReview()"><span>💳</span>Queue Review</button>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Funding / Delivery</div>
+          <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Build finance packet")}</div>
+          <div class="customer360-lens-copy">${escapeHtml(topTask?.description || "Use this area for lender touchpoints, menu products, statement prep, and delivery readiness.")}</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Open menu review</b><span>${notes.length ? "Recent activity already gives this lane customer context." : "No finance note has been captured yet for this deal."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Confirm funding path</b><span>${topTask ? "An active task is already pulling the deal toward close." : "Queue the next finance review or accounting checkpoint from here."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Stage delivery</b><span>${nextAppointment ? "A timed visit is available to evolve into delivery handoff." : "Create a delivery handoff once funding is steady."}</span></div>
+          </div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startFiReviewNote()">Open F&amp;I Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startDeliveryHandoffAppointment()">Prep Delivery</button>
         </div>
       </div>
     `;
