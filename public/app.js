@@ -21,6 +21,8 @@ let currentDepartmentLens = "home";
 let currentCustomer360TimelineCards = [];
 let currentCustomer360TimelineFilter = "all";
 let currentCustomer360ComposerMode = "note";
+let currentCustomer360Focus = null;
+let currentJourneyArtifacts = {};
 
 const DEPARTMENT_LENSES = {
   home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", lensPanelTitle: "Work Queue", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
@@ -1391,7 +1393,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
       return {
         label: "Latest booking",
         detail: `${appointment.service || "Service visit"} • ${appointment.date || "TBD"} ${appointment.time || ""}`.trim(),
-        interactive: true
+        interactive: true,
+        kind: "appointments",
+        sourceId: appointment.id || `${appointment.date || ""}-${appointment.time || ""}`
       };
     }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes("[service]"));
@@ -1399,7 +1403,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
       return {
         label: "Advisor note",
         detail: String(note.body || "").replace(/\[service\]\s*/i, "").slice(0, 72),
-        interactive: true
+        interactive: true,
+        kind: "notes",
+        sourceId: note.id || note.noteId || note.createdAtUtc || note.body
       };
     }
   }
@@ -1418,7 +1424,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
       return {
         label: "Latest task",
         detail: `${String(task.title || "").replace(new RegExp(tag, "i"), "").trim() || "Tagged task"}`,
-        interactive: true
+        interactive: true,
+        kind: "tasks",
+        sourceId: task.id || task.taskId || task.createdAtUtc || task.title
       };
     }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes(tag));
@@ -1426,7 +1434,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
       return {
         label: "Latest note",
         detail: `${String(note.body || "").replace(new RegExp(tag, "i"), "").trim().slice(0, 72)}`,
-        interactive: true
+        interactive: true,
+        kind: "notes",
+        sourceId: note.id || note.noteId || note.createdAtUtc || note.body
       };
     }
   }
@@ -1434,19 +1444,36 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
   return {
     label: "Latest artifact",
     detail: "No linked artifact yet",
-    interactive: false
+    interactive: false,
+    kind: "all",
+    sourceId: ""
   };
 }
 
 function openJourneyArtifact(stageKey = "service") {
   const validStage = ["service", "technicians", "parts", "accounting"].includes(stageKey) ? stageKey : "service";
+  const artifact = currentJourneyArtifacts[validStage] || null;
   setDepartmentLens(validStage);
-  const mode = validStage === "service"
+  const mode = artifact?.kind === "appointments"
     ? "appointment"
-    : validStage === "accounting"
+    : artifact?.kind === "notes"
       ? "note"
-      : "task";
+      : artifact?.kind === "tasks"
+        ? "task"
+        : validStage === "service"
+          ? "appointment"
+          : validStage === "accounting"
+            ? "note"
+            : "task";
+  currentCustomer360Focus = artifact?.sourceId ? { kind: artifact.kind, sourceId: artifact.sourceId } : null;
+  if (artifact?.kind) {
+    currentCustomer360TimelineFilter = normalizeCustomer360TimelineFilter(artifact.kind);
+    document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+      item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+    });
+  }
   setCustomer360ComposerMode(mode);
+  renderCustomer360Timeline();
   document.getElementById("customer360ComposerBody")?.focus();
 }
 
@@ -1504,6 +1531,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   if (!stagesEl || !actionsEl || !statusEl) return;
 
   const { stages, activeStage, overallStatus } = buildServiceJourneyState(tasks, notes, appointments);
+  currentJourneyArtifacts = {};
   statusEl.textContent = overallStatus;
   statusEl.className = `customer360-status-pill ${overallStatus === "Waiting" ? "info" : overallStatus.includes("technician") || overallStatus.includes("Lane") ? "warn" : "good"}`;
 
@@ -1517,6 +1545,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
       <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyStageOwner(stage.key, stage.status))}</div>
       ${(() => {
         const artifact = getLatestJourneyArtifact(stage.key, tasks, notes, appointments);
+        currentJourneyArtifacts[stage.key] = artifact;
         return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span></div>`;
       })()}
     </div>
@@ -1954,7 +1983,7 @@ function renderCustomer360Timeline() {
   }
 
   timelineEl.innerHTML = items.map((item) => `
-    <div class="customer360-timeline-item">
+    <div class="customer360-timeline-item ${currentCustomer360Focus && currentCustomer360Focus.kind === categorizeCustomer360TimelineItem(item) && String(currentCustomer360Focus.sourceId) === String(item.sourceId || "") ? "focused" : ""}">
       <div class="customer360-timeline-inner">
         <div class="customer360-timeline-item-head">
           <div class="customer360-timeline-kind">
@@ -2333,6 +2362,7 @@ function renderCustomer360Detail() {
     timelineCards.push({
       type: "Phone Call",
       eventType: "calls",
+      sourceId: calls[0].id || calls[0].sid || calls[0].callSid || calls[0].startedAt || "call",
       time: formatDisplayDateTime(calls[0].startedAt || calls[0].updatedAt),
       body: calls[0].notes || calls[0].transcript || "Spoke with the customer about a recent vehicle concern.",
       subcopy: `${titleCase(calls[0].status || "completed")} • ${titleCase(calls[0].routedDepartment || "communications")}`
@@ -2342,6 +2372,7 @@ function renderCustomer360Detail() {
   const latestTimeline = currentCustomerTimeline.slice(0, 4).map((event) => ({
     type: titleCase(event.title || event.eventType || "Timeline Event"),
     eventType: event.eventType || "activity",
+    sourceId: event.id || event.timelineEventId || event.createdAtUtc || event.title || "timeline",
     time: formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc),
     body: event.body || "Timeline detail captured.",
     subcopy: `${titleCase(event.department || event.sourceSystem || "ingrid")}`
@@ -2353,6 +2384,7 @@ function renderCustomer360Detail() {
     timelineCards.push({
       type: "Service Event",
       eventType: "appointments",
+      sourceId: appointments[0].id || appointments[0].appointmentId || `${appointments[0].date || ""}-${appointments[0].time || ""}`,
       time: `${appointments[0].date || ""} ${appointments[0].time || ""}`.trim() || "Upcoming",
       body: `${appointments[0].service || "Service appointment"}${appointments[0].advisor ? ` with ${appointments[0].advisor}` : ""}`,
       actions: [
@@ -2366,6 +2398,7 @@ function renderCustomer360Detail() {
     timelineCards.push({
       type: "Task",
       eventType: "tasks",
+      sourceId: openTasks[0].id || openTasks[0].taskId || openTasks[0].createdAtUtc || openTasks[0].title || "task",
       time: formatDisplayDateTime(openTasks[0].updatedAtUtc || openTasks[0].createdAtUtc || new Date().toISOString()),
       body: openTasks[0].description || openTasks[0].title || "Follow up with the customer.",
       subcopy: `Follow Up: ${openTasks[0].title || "Customer confirmation"}`
@@ -2376,6 +2409,7 @@ function renderCustomer360Detail() {
     timelineCards.push({
       type: "Note",
       eventType: "notes",
+      sourceId: currentCustomerNotes[0].id || currentCustomerNotes[0].noteId || currentCustomerNotes[0].createdAtUtc || currentCustomerNotes[0].body || "note",
       time: formatDisplayDateTime(currentCustomerNotes[0].updatedAtUtc || currentCustomerNotes[0].createdAtUtc),
       body: currentCustomerNotes[0].body || "Recent note captured in the customer record.",
       subcopy: titleCase(currentCustomerNotes[0].noteType || "internal")
