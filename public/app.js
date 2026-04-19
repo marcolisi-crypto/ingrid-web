@@ -1748,8 +1748,13 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
     const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
     return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
   });
+  const findNote = (...keywords) => (notes || []).find((note) => {
+    const haystack = `${note.body || ""} ${note.title || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
   const nextAppointment = appointments[0];
   const latestCall = calls[0];
+  const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss"));
   const latestNote = notes[0];
   const serviceTask = findTask("[service]", "advisor", "loaner", "transport");
   const bdcTask = findTask("[bdc]", "callback", "follow-up", "reconnect");
@@ -1758,6 +1763,10 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
   const fiTask = findTask("[fi]", "finance", "funding", "delivery");
   const technicianTask = findTask("[technician]", "inspection", "diagnostic", "repair");
   const partsTask = findTask("[parts]", "parts request", "stock pull", "eta", "sourcing");
+  const advisorNote = findNote("[service]", "advisor", "loaner", "transport");
+  const accountingNote = findNote("[accounting]", "ledger", "statement", "payment");
+  const partsNote = findNote("[parts]", "eta", "vendor", "runner");
+  const technicianNote = findNote("[technician]", "inspection", "finding", "diagnostic");
 
   if (currentDepartmentLens === "service") {
     return [
@@ -1766,8 +1775,12 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
         action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "startServiceWriteUp()"
       },
       {
-        label: serviceTask ? "Open Advisor Task" : "Add Advisor Note",
-        action: serviceTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(serviceTask.id || serviceTask.taskId || serviceTask.createdAtUtc || serviceTask.title || ""))}','service')` : "startAdvisorJourneyNote()",
+        label: serviceTask ? "Open Advisor Task" : advisorNote ? "Open Advisor Note" : "Add Advisor Note",
+        action: serviceTask
+          ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(serviceTask.id || serviceTask.taskId || serviceTask.createdAtUtc || serviceTask.title || ""))}','service')`
+          : advisorNote
+            ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(advisorNote.id || advisorNote.noteId || advisorNote.createdAtUtc || advisorNote.body || ""))}','service')`
+            : "startAdvisorJourneyNote()",
         secondary: true
       }
     ];
@@ -1776,12 +1789,18 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
   if (currentDepartmentLens === "bdc") {
     return [
       {
-        label: bdcTask ? "Open Callback" : "Queue Callback",
-        action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTask.id || bdcTask.taskId || bdcTask.createdAtUtc || bdcTask.title || ""))}','bdc')` : "startBdcCallbackTask()"
+        label: bdcTask ? "Open Callback" : missedCall ? "Open Missed Call" : "Queue Callback",
+        action: bdcTask
+          ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTask.id || bdcTask.taskId || bdcTask.createdAtUtc || bdcTask.title || ""))}','bdc')`
+          : missedCall
+            ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCall.id || missedCall.callId || missedCall.createdAtUtc || missedCall.from || ""))}','bdc')`
+            : "startBdcCallbackTask()"
       },
       {
         label: latestCall ? "Open Last Call" : "Send Follow-Up",
-        action: latestCall ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(latestCall.id || latestCall.callId || latestCall.createdAtUtc || latestCall.from || ""))}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())",
+        action: latestCall
+          ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(latestCall.id || latestCall.callId || latestCall.createdAtUtc || latestCall.from || ""))}','bdc')`
+          : "openSmsForPhone(getSelectedCustomerPrimaryPhone())",
         secondary: true
       }
     ];
@@ -1808,8 +1827,10 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
         action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTask.id || accountingTask.taskId || accountingTask.createdAtUtc || accountingTask.title || ""))}','accounting')` : "queueAccountingInvoiceReview()"
       },
       {
-        label: latestNote ? "Open Ledger Note" : "Add Ledger Note",
-        action: latestNote ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(latestNote.id || latestNote.noteId || latestNote.createdAtUtc || latestNote.body || ""))}','accounting')` : "startLedgerNote()",
+        label: accountingNote ? "Open Ledger Note" : "Add Ledger Note",
+        action: accountingNote
+          ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(accountingNote.id || accountingNote.noteId || accountingNote.createdAtUtc || accountingNote.body || ""))}','accounting')`
+          : "startLedgerNote()",
         secondary: true
       }
     ];
@@ -1822,8 +1843,12 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
         action: technicianTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(technicianTask.id || technicianTask.taskId || technicianTask.createdAtUtc || technicianTask.title || ""))}','technicians')` : "startTechnicianInspectionNote()"
       },
       {
-        label: partsTask ? "Open Parts" : "Request Parts",
-        action: partsTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')` : "createTechnicianPartsRequest()",
+        label: technicianNote ? "Open Finding" : partsTask ? "Open Parts" : "Request Parts",
+        action: technicianNote
+          ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(technicianNote.id || technicianNote.noteId || technicianNote.createdAtUtc || technicianNote.body || ""))}','technicians')`
+          : partsTask
+            ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')`
+            : "createTechnicianPartsRequest()",
         secondary: true
       }
     ];
@@ -1836,8 +1861,10 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
         action: partsTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')` : "createPartsPickTask()"
       },
       {
-        label: latestNote ? "Open ETA Note" : "Add ETA Note",
-        action: latestNote ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(latestNote.id || latestNote.noteId || latestNote.createdAtUtc || latestNote.body || ""))}','parts')` : "startPartsEtaNote()",
+        label: partsNote ? "Open ETA Note" : "Add ETA Note",
+        action: partsNote
+          ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(partsNote.id || partsNote.noteId || partsNote.createdAtUtc || partsNote.body || ""))}','parts')`
+          : "startPartsEtaNote()",
         secondary: true
       }
     ];
