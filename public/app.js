@@ -999,10 +999,30 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const latestNote = notes[0];
   const contactPhone = customer?.phones?.[0] || "Not set";
   const vehicleName = vehicleDisplayName(vehicle);
+  const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const pickOpenTask = (...keywords) => openTasks.find((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(
+    item.id ||
+    item.taskId ||
+    item.appointmentId ||
+    item.noteId ||
+    item.timelineEventId ||
+    item.createdAtUtc ||
+    item.title ||
+    item.body ||
+    ""
+  ));
   const loanerTask = tasks.find((item) => {
     const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
     return haystack.includes("loaner") || haystack.includes("transport");
   });
+  const bdcTask = pickOpenTask("[bdc]", "callback", "follow-up", "reconnect");
+  const salesTask = pickOpenTask("[sales]", "opportunity", "quote", "deal", "test-drive", "test drive");
+  const fiTask = pickOpenTask("[fi]", "finance", "funding", "delivery", "menu", "warranty");
+  const accountingTask = pickOpenTask("[accounting]", "invoice", "ledger", "statement", "reconciliation", "payment");
   const latestMovementNote = getLatestTaggedArtifact("[vehicle]", notes, currentCustomerTimeline || []);
   const movementPresentation = latestMovementNote
     ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence")
@@ -1032,9 +1052,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="startServiceWriteUp()"><span>🛠</span>Schedule Service</button>
-          <button class="customer360-lens-quickbtn" onclick="${loanerTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')` : "startLoanerTask()"}"><span>🚗</span>${loanerTask ? "Open Loaner" : "Create Loaner"}</button>
-          <button class="customer360-lens-quickbtn" onclick="startVehicleGeoMovementNote()"><span>🧭</span>Log Movement</button>
+          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"}"><span>🛠</span>${nextAppointment ? "Open Visit" : "Schedule Service"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"}"><span>🚗</span>${loanerTask ? "Open Loaner" : "Create Loaner"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${latestMovementNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestMovementNote)}','service')` : "startVehicleGeoMovementNote()"}"><span>🧭</span>${latestMovementNote ? "Open Movement" : "Log Movement"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
@@ -1085,9 +1105,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="startBdcCallbackTask()"><span>☎</span>Queue Callback</button>
+          <button class="customer360-lens-quickbtn" onclick="${bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"}"><span>☎</span>${bdcTask ? "Open Callback" : "Queue Callback"}</button>
           <button class="customer360-lens-quickbtn" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())"><span>💬</span>Send Follow-Up</button>
-          <button class="customer360-lens-quickbtn" onclick="setCustomer360ComposerMode('appointment')"><span>📅</span>Schedule Visit</button>
+          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','bdc')` : "setCustomer360ComposerMode('appointment')"}"><span>📅</span>${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Play</div>
@@ -1137,9 +1157,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="startSalesDealTask()"><span>🏷</span>Open Deal</button>
-          <button class="customer360-lens-quickbtn" onclick="setCustomer360ComposerMode('appointment')"><span>🚘</span>Schedule Drive</button>
-          <button class="customer360-lens-quickbtn" onclick="startFiReviewNote()"><span>🧾</span>Hand Off F&amp;I</button>
+          <button class="customer360-lens-quickbtn" onclick="${salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"}"><span>🏷</span>${salesTask ? "Open Deal" : "Create Deal"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"}"><span>🚘</span>${nextAppointment ? "Open Visit" : "Schedule Drive"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${fiTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(fiTask)}','fi')` : "startFiReviewNote()"}"><span>🧾</span>${fiTask ? "Open F&amp;I" : "Hand Off F&amp;I"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Trade / Quote</div>
@@ -1189,9 +1209,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="startFiReviewNote()"><span>🧾</span>Open F&amp;I Note</button>
-          <button class="customer360-lens-quickbtn" onclick="startDeliveryHandoffAppointment()"><span>🎉</span>Prep Delivery</button>
-          <button class="customer360-lens-quickbtn" onclick="queueAccountingInvoiceReview()"><span>💳</span>Queue Review</button>
+          <button class="customer360-lens-quickbtn" onclick="${fiTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(fiTask)}','fi')` : "startFiReviewNote()"}"><span>🧾</span>${fiTask ? "Open F&amp;I" : "Open F&I Note"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','fi')` : "startDeliveryHandoffAppointment()"}"><span>🎉</span>${nextAppointment ? "Open Delivery" : "Prep Delivery"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"}"><span>💳</span>${accountingTask ? "Open Review" : "Queue Review"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Funding / Delivery</div>
