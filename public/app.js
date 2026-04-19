@@ -3176,7 +3176,21 @@ function initCustomer360Composer() {
 
 function renderCustomer360Timeline() {
   const timelineEl = document.getElementById("customer360Timeline");
+  const vinSummaryEl = document.getElementById("customer360VinSummary");
   if (!timelineEl) return;
+
+  const vinItems = currentCustomer360TimelineCards.filter((item) => categorizeCustomer360TimelineItem(item) === "vin");
+  const vinHealthCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vehicle health")).length;
+  const vinMovementCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vehicle movement")).length;
+  const vinArchiveCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vin archive")).length;
+
+  if (vinSummaryEl) {
+    vinSummaryEl.innerHTML = `
+      <span class="customer360-vin-summary-chip health"><strong>${vinHealthCount}</strong> Health</span>
+      <span class="customer360-vin-summary-chip movement"><strong>${vinMovementCount}</strong> Movement</span>
+      <span class="customer360-vin-summary-chip archive"><strong>${vinArchiveCount}</strong> Archive</span>
+    `;
+  }
 
   const filter = normalizeCustomer360TimelineFilter(currentCustomer360TimelineFilter);
   const items = currentCustomer360TimelineCards.filter((item) => {
