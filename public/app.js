@@ -1090,6 +1090,74 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const activeMovementCopy = movementPresentation?.type === "Vehicle Movement"
     ? movementPresentation.body.split("\n")[0]
     : "";
+  const serviceSignals = [
+    {
+      label: "Promised",
+      value: nextAppointment ? "Locked" : activeMovementCopy ? "Moving" : "Open",
+      tone: nextAppointment ? "good" : activeMovementCopy ? "warn" : "info"
+    },
+    {
+      label: "Transport",
+      value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby",
+      tone: loanerTask ? "warn" : appointments.length ? "info" : "good"
+    },
+    {
+      label: "Overdue",
+      value: overdueTasks.length ? `${overdueTasks.length}` : urgentTasks.length ? `${urgentTasks.length}` : "0",
+      tone: overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good"
+    }
+  ];
+  const bdcSignals = [
+    {
+      label: "Missed",
+      value: `${missedCalls}`,
+      tone: missedCalls ? "danger" : "good"
+    },
+    {
+      label: "Callbacks",
+      value: `${bdcTasks.length}`,
+      tone: bdcTasks.length ? "info" : "good"
+    },
+    {
+      label: "SLA",
+      value: missedCalls ? "Rescue" : urgentTasks.length ? "Watch" : "On Track",
+      tone: missedCalls ? "danger" : urgentTasks.length ? "warn" : "good"
+    }
+  ];
+  const salesSignals = [
+    {
+      label: "Deals",
+      value: `${salesTasks.length || (notes.length ? 1 : 0)}`,
+      tone: salesTasks.length ? "info" : notes.length ? "warn" : "good"
+    },
+    {
+      label: "Visit",
+      value: nextAppointment ? "Set" : "Open",
+      tone: nextAppointment ? "good" : "warn"
+    },
+    {
+      label: "Desk Risk",
+      value: overdueTasks.length ? "High" : urgentTasks.length ? "Watch" : "Low",
+      tone: overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good"
+    }
+  ];
+  const accountingSignals = [
+    {
+      label: "Reviews",
+      value: `${accountingTasks.length || (topTask ? 1 : 0)}`,
+      tone: accountingTasks.length ? "info" : topTask ? "warn" : "good"
+    },
+    {
+      label: "Aging",
+      value: overdueTasks.length ? `${overdueTasks.length}` : "0",
+      tone: overdueTasks.length ? "danger" : "good"
+    },
+    {
+      label: "Collections",
+      value: ledgerNote || accountingTask ? "Live" : "Clear",
+      tone: overdueTasks.length ? "danger" : ledgerNote || accountingTask ? "warn" : "good"
+    }
+  ];
 
   if (currentDepartmentLens === "service") {
     return `
@@ -1111,6 +1179,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Transportation should be confirmed before diagnostics turn into all-day work." : "No transportation request has been captured yet."}</span>
           </div>
         </div>
+        ${buildLaneSignalMarkup(serviceSignals)}
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"}"><span>🛠</span>${nextAppointment ? "Open Visit" : "Schedule Service"}</button>
           <button class="customer360-lens-quickbtn" onclick="${loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"}"><span>🚗</span>${loanerTask ? "Open Loaner" : "Create Loaner"}</button>
@@ -1164,6 +1233,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${latestNote ? "Recent notes suggest campaign-style follow-up and appointment conversion." : "Use this area later for source attribution and campaign routing."}</span>
           </div>
         </div>
+        ${buildLaneSignalMarkup(bdcSignals)}
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"}"><span>☎</span>${bdcTask ? "Open Callback" : "Queue Callback"}</button>
           <button class="customer360-lens-quickbtn" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())"><span>💬</span>Send Follow-Up</button>
@@ -1216,6 +1286,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${salesTasks.length ? `${overdueTasks.length ? `${overdueTasks.length} sales item${overdueTasks.length === 1 ? "" : "s"} overdue.` : nextAppointment ? "Showroom commitment exists and can move into quote review." : "Sales queue is active and ready for the next desk action."}` : notes.length ? "Recent notes imply the customer is already in pricing discussion." : "This area can evolve into live quote, payment, and F&I menu surfaces."}</span>
           </div>
         </div>
+        ${buildLaneSignalMarkup(salesSignals)}
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"}"><span>🏷</span>${salesTask ? "Open Deal" : "Create Deal"}</button>
           <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"}"><span>🚘</span>${nextAppointment ? "Open Visit" : "Schedule Drive"}</button>
@@ -1424,6 +1495,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>Card, refund, and statement workflows can eventually settle here with QuickBooks-style bookkeeping posture.</span>
           </div>
         </div>
+        ${buildLaneSignalMarkup(accountingSignals)}
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"}"><span>💳</span>${accountingTask ? "Open Invoice" : "Queue Invoice"}</button>
           <button class="customer360-lens-quickbtn" onclick="${ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"}"><span>📘</span>${ledgerNote ? "Open Ledger" : "Add Ledger"}</button>
@@ -2098,6 +2170,21 @@ async function persistJourneyAssignee(stageKey = "", owner = "") {
   if (!response.ok) {
     throw new Error(data.error || "Unable to persist journey assignment.");
   }
+}
+
+function buildLaneSignalMarkup(signals = []) {
+  const activeSignals = signals.filter(Boolean);
+  if (!activeSignals.length) return "";
+  return `
+    <div class="customer360-lane-signals">
+      ${activeSignals.map((signal) => `
+        <div class="customer360-lane-signal ${escapeHtml(signal.tone || "info")}">
+          <small>${escapeHtml(signal.label || "Signal")}</small>
+          <strong>${escapeHtml(signal.value || "0")}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 async function setJourneyAssignee(stageKey = "", owner = "") {
