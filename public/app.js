@@ -1528,6 +1528,10 @@ function getRecentJourneyAssignments(limit = 3) {
 function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appointments = []) {
   const taskMatchesStage = (task, key) => {
     const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    if (key === "bdc") return haystack.includes("[bdc]") || haystack.includes("lead") || haystack.includes("callback");
+    if (key === "sales") return haystack.includes("[sales]") || haystack.includes("deal") || haystack.includes("quote") || haystack.includes("trade");
+    if (key === "fi") return haystack.includes("[fi]") || haystack.includes("finance") || haystack.includes("funding") || haystack.includes("warranty");
+    if (key === "delivery") return haystack.includes("[delivery]") || haystack.includes("delivery") || haystack.includes("pickup");
     if (key === "technicians") return haystack.includes("[technician]");
     if (key === "parts") return haystack.includes("[parts]");
     if (key === "accounting") return haystack.includes("[accounting]");
@@ -1571,7 +1575,7 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
     const isAutoCreated = String(latestStageTask.description || "").toLowerCase().includes("auto-created");
     return {
       label: isAutoCreated ? "Auto handoff task" : "Latest task",
-      detail: `${String(latestStageTask.title || "").replace(/\[(technician|parts|accounting)\]/ig, "").trim() || "Tagged task"}`,
+      detail: `${String(latestStageTask.title || "").replace(/\[(bdc|sales|fi|delivery|technician|parts|accounting)\]/ig, "").trim() || "Tagged task"}`,
       interactive: true,
       kind: "tasks",
       sourceId: latestStageTask.id || latestStageTask.taskId || latestStageTask.createdAtUtc || latestStageTask.title,
@@ -1583,6 +1587,14 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
 
   const tag = stageKey === "technicians"
     ? "[technician]"
+    : stageKey === "bdc"
+      ? "[bdc]"
+      : stageKey === "sales"
+        ? "[sales]"
+        : stageKey === "fi"
+          ? "[fi]"
+          : stageKey === "delivery"
+            ? "[delivery]"
     : stageKey === "parts"
       ? "[parts]"
       : stageKey === "accounting"
