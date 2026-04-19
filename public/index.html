@@ -253,6 +253,15 @@
     .customer360-title-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
     .customer360-title-tools{display:flex;gap:8px}
     .customer360-mini-btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#18243b;color:#dfe7f7;font-weight:700;font-size:12px}
+    .customer360-ops-strip{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 4px}
+    .customer360-ops-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#18243b 0%,#142036 100%);color:#dce6f7;font-size:12px;font-weight:800;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+    .customer360-ops-chip:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.4);box-shadow:0 10px 18px rgba(0,0,0,.16)}
+    .customer360-ops-chip strong{color:#f5f8ff;font-size:12px}
+    .customer360-ops-chip small{color:#8fb0dc;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+    .customer360-ops-chip.info{border-color:rgba(117,164,255,.26);background:linear-gradient(180deg,rgba(29,52,92,.92) 0%,rgba(20,37,68,.94) 100%)}
+    .customer360-ops-chip.warn{border-color:rgba(241,187,81,.24);background:linear-gradient(180deg,rgba(77,55,21,.9) 0%,rgba(48,35,18,.92) 100%)}
+    .customer360-ops-chip.danger{border-color:rgba(228,99,120,.24);background:linear-gradient(180deg,rgba(72,27,39,.9) 0%,rgba(47,20,28,.92) 100%)}
+    .customer360-ops-chip.good{border-color:rgba(92,198,138,.22);background:linear-gradient(180deg,rgba(25,62,45,.88) 0%,rgba(17,42,32,.92) 100%)}
     .customer360-main-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px}
     .customer360-customer-card{padding:16px;background:linear-gradient(180deg,#172234 0%,#141d2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#fff}
     .customer360-customer-top{display:flex;gap:14px;align-items:flex-start}
@@ -326,9 +335,11 @@
     .customer360-stack{display:flex;flex-direction:column;gap:12px}
     .customer360-panel{padding:14px}
     .customer360-panel h3{margin:0 0 12px;color:#f2f5fa;font-size:18px}
-    .customer360-panel-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);color:#d8e2f0}
+    .customer360-panel-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);color:#d8e2f0;transition:background .12s ease,border-color .12s ease,box-shadow .12s ease,transform .12s ease}
     .customer360-panel-item:first-child{border-top:none;padding-top:0}
-    .customer360-panel-action{background:#22304b;border:none;color:#dfe8f7;border-radius:999px;padding:5px 8px}
+    .customer360-panel-item:hover{background:rgba(24,36,59,.48);box-shadow:inset 0 0 0 1px rgba(117,164,255,.12)}
+    .customer360-panel-action{background:#22304b;border:none;color:#dfe8f7;border-radius:999px;padding:5px 8px;cursor:pointer;transition:background .12s ease,transform .12s ease}
+    .customer360-panel-action:hover{background:#2b4670;transform:translateY(-1px)}
     .customer360-lens-card{display:grid;gap:12px}
     .customer360-lens-row{padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06)}
     .customer360-lens-label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;font-weight:700;margin-bottom:6px}
@@ -442,7 +453,8 @@
     .customer360-dock-btn.call{background:linear-gradient(180deg,#295dcb 0%,#214ca8 100%);color:#fff}
     .customer360-dock-btn.sms{background:linear-gradient(180deg,#af7d34 0%,#8f6427 100%);color:#fff}
     .customer360-empty{padding:22px;border:1px dashed rgba(255,255,255,.18);border-radius:10px;color:#d5d9de;background:#323844}
-    .customer360-service-card{display:grid;gap:12px}
+    .customer360-service-card{display:grid;gap:12px;transition:border-color .12s ease,box-shadow .12s ease}
+    .customer360-rail-card:hover .customer360-service-card{box-shadow:inset 0 0 0 1px rgba(117,164,255,.12)}
     .customer360-service-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06)}
     .customer360-service-row:first-child{border-top:none;padding-top:0}
     .customer360-service-owner{padding:10px 12px;border-radius:12px;background:linear-gradient(180deg,#152238 0%,#101b2e 100%);border:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -453,7 +465,8 @@
     .customer360-service-copy{color:#9eb2d2;font-size:12px;line-height:1.45}
     .customer360-service-actions{display:grid;grid-template-columns:1fr;gap:8px}
     .customer360-archive-list{display:grid;gap:10px}
-    .customer360-archive-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-archive-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06);transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+    .customer360-archive-item:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.35);box-shadow:0 12px 22px rgba(0,0,0,.18)}
     .customer360-archive-item strong{display:block;color:#f3f7ff;font-size:13px}
     .customer360-archive-item span{display:block;color:#9eb2d2;font-size:12px;margin-top:4px}
     .customer360-archive-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#22304b;color:#b7d1ff;font-size:16px;flex:0 0 auto}
@@ -875,7 +888,10 @@
 
           <section class="customer360-main">
             <div class="customer360-title-row">
-              <h2 id="customer360MainTitle" class="customer360-main-title">Customer 360° Dashboard</h2>
+              <div>
+                <h2 id="customer360MainTitle" class="customer360-main-title">Customer 360° Dashboard</h2>
+                <div id="customer360OpsStrip" class="customer360-ops-strip"></div>
+              </div>
               <div class="customer360-title-tools">
                 <button class="customer360-mini-btn">Hire</button>
                 <button class="customer360-mini-btn">Ridges</button>

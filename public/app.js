@@ -3868,6 +3868,7 @@ function renderCustomer360Detail() {
   const serviceLaneEl = document.getElementById("customer360ServiceLane");
   const filesPanelEl = document.getElementById("customer360FilesPanel");
   const timelineEl = document.getElementById("customer360Timeline");
+  const opsStripEl = document.getElementById("customer360OpsStrip");
 
   if (!customer) {
     currentCustomer360TimelineCards = [];
@@ -3889,7 +3890,36 @@ function renderCustomer360Detail() {
     if (serviceLaneEl) serviceLaneEl.innerHTML = `<div class="customer360-empty">Service lane, appointment, and loaner signals will appear here.</div>`;
     if (filesPanelEl) filesPanelEl.innerHTML = `<div class="customer360-empty">VIN files will appear here.</div>`;
     if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
+    if (opsStripEl) opsStripEl.innerHTML = "";
     return;
+  }
+
+  if (opsStripEl) {
+    const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+    const urgentTasks = openTasks.filter((task) => {
+      const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
+      return tone === "warn" || tone === "danger";
+    });
+    const activeAppointment = appointments[0] || null;
+    const pressureTone = overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good";
+    const pressureLabel = overdueTasks.length ? "Overdue risk" : urgentTasks.length ? "Attention" : "On track";
+    const firstOpenTask = openTasks[0] || null;
+    const firstTaskId = firstOpenTask ? escapeHtml(String(firstOpenTask.id || firstOpenTask.taskId || firstOpenTask.createdAtUtc || firstOpenTask.title || "")) : "";
+    const firstAppointmentId = activeAppointment ? escapeHtml(String(activeAppointment.id || activeAppointment.appointmentId || activeAppointment.createdAtUtc || activeAppointment.date || "")) : "";
+    opsStripEl.innerHTML = `
+      <button class="customer360-ops-chip ${openTasks.length ? "warn" : "good"}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('task')"`}>
+        <small>Open Work</small>
+        <strong>${escapeHtml(String(openTasks.length))} tasks</strong>
+      </button>
+      <button class="customer360-ops-chip ${activeAppointment ? "info" : "good"}" ${firstAppointmentId ? `onclick="openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('appointment')"`}>
+        <small>Visits</small>
+        <strong>${activeAppointment ? "Active booking" : "No active visit"}</strong>
+      </button>
+      <button class="customer360-ops-chip ${pressureTone}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('${escapeHtml(String(getDepartmentLensConfig().composerMode || "task"))}')"`}>
+        <small>Pressure</small>
+        <strong>${escapeHtml(pressureLabel)}</strong>
+      </button>
+    `;
   }
 
   if (summaryTitleEl) {
