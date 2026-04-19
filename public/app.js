@@ -1500,6 +1500,20 @@ function triggerJourneyFeedback(stageKey = "", message = "") {
   }, 2200);
 }
 
+function getJourneyStageLabel(stage, isFeedback = false) {
+  if (isFeedback) return "Updated";
+  if (stage.status === "complete") return "Done";
+  if (stage.status === "active") return "Live";
+  return "Queued";
+}
+
+function getJourneyStageSubcopy(stage, isFeedback = false) {
+  if (isFeedback) return "Updated just now";
+  if (stage.status === "complete") return "Ready for handoff";
+  if (stage.status === "active") return "Current owner";
+  return "Waiting on prior step";
+}
+
 function preloadFocusedTaskFollowUp(item) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -1632,21 +1646,27 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   statusEl.textContent = overallStatus;
   statusEl.className = `customer360-status-pill ${overallStatus === "Waiting" ? "info" : overallStatus.includes("technician") || overallStatus.includes("Lane") ? "warn" : "good"}`;
 
-  stagesEl.innerHTML = stages.map((stage) => `
-    <div class="customer360-journey-stage ${currentJourneyFeedbackStage === stage.key ? "feedback" : ""}">
+  stagesEl.innerHTML = stages.map((stage) => {
+    const isFeedback = currentJourneyFeedbackStage === stage.key;
+    return `
+    <div class="customer360-journey-stage ${stage.status} ${isFeedback ? "feedback" : ""}">
       <div class="customer360-journey-stage-top">
         <b>${escapeHtml(stage.label)}</b>
-        <span class="customer360-status-pill ${stage.status === "complete" ? "good" : stage.status === "active" ? "warn" : "info"}">${stage.status === "complete" ? "Done" : stage.status === "active" ? "Now" : "Next"}</span>
+        <span class="customer360-status-pill customer360-journey-stage-status ${isFeedback ? "feedback" : stage.status === "complete" ? "good" : stage.status === "active" ? "warn" : "info"}">${getJourneyStageLabel(stage, isFeedback)}</span>
       </div>
       <span>${escapeHtml(stage.detail)}</span>
-      <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyStageOwner(stage.key, stage.status))}</div>
+      <div class="customer360-journey-stage-meta">
+        <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyStageOwner(stage.key, stage.status))}</div>
+        <small>${escapeHtml(getJourneyStageSubcopy(stage, isFeedback))}</small>
+      </div>
       ${(() => {
         const artifact = getLatestJourneyArtifact(stage.key, tasks, notes, appointments);
         currentJourneyArtifacts[stage.key] = artifact;
         return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span></div>`;
       })()}
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   actionsEl.innerHTML = stages.map((stage) => `
     <button type="button" class="customer360-journey-btn ${currentDepartmentLens === stage.key ? "active" : ""}" onclick="setDepartmentLens('${escapeHtml(stage.key)}')">${escapeHtml(stage.label)}</button>
