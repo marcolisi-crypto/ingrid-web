@@ -769,6 +769,30 @@ function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appoin
 function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [], calls = []) {
   const nextAppointment = appointments[0];
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+  const laneTasks = (currentTasks || []).filter((item) => item.customerId === customer?.id && String(item.status || "").toLowerCase() !== "completed");
+  const laneNotes = (currentCustomerNotes || []).filter((item) => item.customerId === customer?.id);
+  const pickLaneTask = (...keywords) => laneTasks.find((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(
+    item.id ||
+    item.taskId ||
+    item.appointmentId ||
+    item.noteId ||
+    item.timelineEventId ||
+    item.createdAtUtc ||
+    item.title ||
+    item.body ||
+    ""
+  ));
+  const bdcTask = pickLaneTask("[bdc]", "callback", "follow-up", "reconnect");
+  const salesTask = pickLaneTask("[sales]", "opportunity", "quote", "deal", "test-drive", "test drive");
+  const fiTask = pickLaneTask("[fi]", "finance", "funding", "delivery", "menu", "warranty");
+  const technicianTask = pickLaneTask("[technician]", "inspection", "diagnostic", "diagnosis", "repair", "tech");
+  const partsTask = pickLaneTask("[parts]", "parts request", "stock pull", "sourcing", "eta", "runner", "special order", "pick task");
+  const accountingTask = pickLaneTask("[accounting]", "invoice", "ledger", "statement", "reconciliation", "payment");
+  const ledgerNote = laneNotes.find((item) => `${item.body || ""}`.toLowerCase().includes("[accounting]") || `${item.body || ""}`.toLowerCase().includes("ledger"));
   const loanerTask = (currentTasks || []).find((item) => {
     if (item.customerId !== customer?.id) return false;
     const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
@@ -800,7 +824,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">BDC</span>
         </div>
         <div class="customer360-service-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Follow-Up</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"}">${bdcTask ? "Open Follow-Up" : "Queue Follow-Up"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())">Open SMS Dock</button>
         </div>
       </div>
@@ -828,8 +852,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">Sales</span>
         </div>
         <div class="customer360-service-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Visit</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"}">${salesTask ? "Open Deal Task" : "Create Deal Task"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"}">${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
         </div>
       </div>
     `;
@@ -856,8 +880,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">F&I</span>
         </div>
         <div class="customer360-service-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startFiReviewNote()">Open F&I Note</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startDeliveryHandoffAppointment()">Prep Delivery</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${fiTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(fiTask)}','fi')` : "startFiReviewNote()"}">${fiTask ? "Open F&I Work" : "Open F&I Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','fi')` : "startDeliveryHandoffAppointment()"}">${nextAppointment ? "Open Delivery" : "Prep Delivery"}</button>
         </div>
       </div>
     `;
@@ -884,8 +908,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">Tech</span>
         </div>
         <div class="customer360-service-actions">
-          ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Close Work Step</button>` : ""}
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Inspection Note</button>
+          ${technicianTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')">Open Work Step</button>` : topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Close Work Step</button>` : ""}
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${laneNotes[0] ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(laneNotes[0])}','technicians')` : "startTechnicianInspectionNote()"}">${laneNotes[0] ? "Open Inspection Note" : "Add Inspection Note"}</button>
         </div>
       </div>
     `;
@@ -912,8 +936,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">Parts</span>
         </div>
         <div class="customer360-service-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Create Pick Task</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Log Parts Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"}">${partsTask ? "Open Pick Task" : "Create Pick Task"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${laneNotes[0] ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(laneNotes[0])}','parts')` : "startPartsEtaNote()"}">${laneNotes[0] ? "Open Parts Note" : "Log Parts Note"}</button>
         </div>
       </div>
     `;
@@ -940,8 +964,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">Accounting</span>
         </div>
         <div class="customer360-service-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startLedgerNote()">Add Ledger Note</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="queueAccountingInvoiceReview()">Queue Invoice Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"}">${ledgerNote ? "Open Ledger Note" : "Add Ledger Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"}">${accountingTask ? "Open Invoice Task" : "Queue Invoice Task"}</button>
         </div>
       </div>
     `;
@@ -986,7 +1010,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
       <div class="customer360-service-actions">
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
         ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Task</button>` : ""}
-        <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Open Service Composer</button>
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')"}">${nextAppointment ? "Open Service Visit" : "Open Service Composer"}</button>
       </div>
     </div>
   `;
