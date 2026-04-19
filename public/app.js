@@ -443,6 +443,7 @@ function categorizeCustomer360TimelineItem(item) {
 
   if (type.includes("phone") || type.includes("call") || eventType.includes("call")) return "calls";
   if (type.includes("sms") || eventType.includes("sms") || eventType.includes("message")) return "sms";
+  if (eventType.includes("journey_assignment")) return "activity";
   if (type.includes("note") || type.includes("transcript") || eventType.includes("note")) return "notes";
   if (type.includes("task") || eventType.includes("task")) return "tasks";
   if (type.includes("appointment") || type.includes("service event") || eventType.includes("appointment")) return "appointments";
@@ -2844,14 +2845,23 @@ function renderCustomer360Detail() {
     });
   }
 
-  const latestTimeline = currentCustomerTimeline.slice(0, 4).map((event) => ({
-    type: titleCase(event.title || event.eventType || "Timeline Event"),
-    eventType: event.eventType || "activity",
-    sourceId: event.id || event.timelineEventId || event.createdAtUtc || event.title || "timeline",
-    time: formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc),
-    body: event.body || "Timeline detail captured.",
-    subcopy: `${titleCase(event.department || event.sourceSystem || "ingrid")}`
-  }));
+  const latestTimeline = currentCustomerTimeline.slice(0, 6).map((event) => {
+    const eventType = String(event.eventType || "activity").toLowerCase();
+    const isJourneyAssignment = eventType === "journey_assignment";
+    const department = titleCase(event.department || event.sourceSystem || "ingrid");
+    return {
+      type: isJourneyAssignment ? "Ownership Change" : titleCase(event.title || event.eventType || "Timeline Event"),
+      eventType: event.eventType || "activity",
+      sourceId: event.id || event.timelineEventId || event.createdAtUtc || event.title || "timeline",
+      time: formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc),
+      body: isJourneyAssignment
+        ? `${department} reassigned to ${event.body || "new owner"}.`
+        : event.body || "Timeline detail captured.",
+      subcopy: isJourneyAssignment
+        ? `${department} • Journey assignment`
+        : `${department}`
+    };
+  });
 
   latestTimeline.forEach((event) => timelineCards.push(event));
 
