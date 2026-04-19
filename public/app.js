@@ -1344,6 +1344,9 @@ function buildAccountingNotesMarkup(notes = []) {
 }
 
 function getJourneyArtifactTag() {
+  if (currentDepartmentLens === "bdc") return "[BDC]";
+  if (currentDepartmentLens === "sales") return "[SALES]";
+  if (currentDepartmentLens === "fi") return "[FI]";
   if (currentDepartmentLens === "service") return "[SERVICE]";
   if (currentDepartmentLens === "technicians") return "[TECHNICIAN]";
   if (currentDepartmentLens === "parts") return "[PARTS]";
@@ -1352,6 +1355,9 @@ function getJourneyArtifactTag() {
 }
 
 function getJourneyArtifactLabel() {
+  if (currentDepartmentLens === "bdc") return "bdc";
+  if (currentDepartmentLens === "sales") return "sales";
+  if (currentDepartmentLens === "fi") return "f&i";
   if (currentDepartmentLens === "service") return "service advisor";
   if (currentDepartmentLens === "technicians") return "technician";
   if (currentDepartmentLens === "parts") return "parts";
@@ -1388,6 +1394,46 @@ function startAdvisorJourneyNote() {
   presetCustomer360Composer("note", {
     body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nAdvisor follow-up:\n- Concern verified:\n- Next action for technician:\n- Customer expectation:`,
     status: "Advisor note template loaded."
+  });
+}
+
+function startBdcCallbackTask() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: `[BDC] ${vehicleDisplayName(vehicle)} callback`,
+    body: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLead / callback summary:\n- Last contact result:\n- Next outreach step:\n- Appointment goal:\n- Handoff notes for sales:`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "BDC callback template loaded."
+  });
+}
+
+function startSalesDealTask() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review`,
+    body: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nDeal / quote workflow:\n- Quote status:\n- Trade / appraisal notes:\n- Test-drive or showroom plan:\n- Handoff notes for F&I:`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Sales deal task template loaded."
+  });
+}
+
+function startFiReviewNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `[FI] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFinance / funding review:\n- Menu products discussed:\n- Funding status:\n- Warranty notes:\n- Delivery readiness:`,
+    status: "F&I review template loaded."
+  });
+}
+
+function startDeliveryHandoffAppointment() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("appointment", {
+    body: `[DELIVERY] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nDelivery handoff:\n- Pickup readiness:\n- Final documents confirmed:\n- Delivery specialist notes:\n- Customer celebration details:`,
+    status: "Delivery handoff template loaded."
   });
 }
 
@@ -1520,8 +1566,9 @@ function getJourneyArtifactSla(value) {
 }
 
 function getRecentJourneyAssignments(limit = 3) {
+  const stageKeys = getActiveJourneyStageKeys();
   return (currentCustomerTimeline || [])
-    .filter((event) => String(event.eventType || "").toLowerCase() === "journey_assignment")
+    .filter((event) => String(event.eventType || "").toLowerCase() === "journey_assignment" && stageKeys.includes(String(event.department || "").toLowerCase()))
     .slice(0, limit);
 }
 
@@ -1690,6 +1737,13 @@ function getJourneyStageSubcopy(stage, isFeedback = false) {
   return "Waiting on prior step";
 }
 
+function getActiveJourneyStageKeys() {
+  if (["sales", "bdc", "fi"].includes(currentDepartmentLens)) {
+    return ["bdc", "sales", "fi", "delivery"];
+  }
+  return ["service", "technicians", "parts", "accounting"];
+}
+
 function getJourneyNextAction(stageKey = "") {
   if (stageKey === "bdc") {
     return {
@@ -1699,7 +1753,7 @@ function getJourneyNextAction(stageKey = "") {
       label: "Queue Callback",
       run: () => {
         setDepartmentLens("bdc");
-        setCustomer360ComposerMode("task");
+        startBdcCallbackTask();
       }
     };
   }
@@ -1712,7 +1766,7 @@ function getJourneyNextAction(stageKey = "") {
       label: "Open Deal Task",
       run: () => {
         setDepartmentLens("sales");
-        setCustomer360ComposerMode("task");
+        startSalesDealTask();
       }
     };
   }
@@ -1725,7 +1779,7 @@ function getJourneyNextAction(stageKey = "") {
       label: "Open F&I Note",
       run: () => {
         setDepartmentLens("fi");
-        setCustomer360ComposerMode("note");
+        startFiReviewNote();
       }
     };
   }
@@ -1738,7 +1792,7 @@ function getJourneyNextAction(stageKey = "") {
       label: "Schedule Delivery",
       run: () => {
         setDepartmentLens("sales");
-        setCustomer360ComposerMode("appointment");
+        startDeliveryHandoffAppointment();
       }
     };
   }
