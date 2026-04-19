@@ -828,24 +828,24 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
     ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").body.split("\n")[0]
     : "";
   const serviceSignals = [
-    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')" },
-    { label: "Loaner", value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby", tone: loanerTask ? "warn" : appointments.length ? "info" : "good", action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()" },
-    { label: "Risk", value: overdueLaneTasks.length ? "High" : urgentLaneTasks.length ? "Watch" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: topTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(topTask)}','service')` : "setCustomer360ComposerMode('task')" }
+    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')", detail: nextAppointment ? `Open ${nextAppointment.service || "service visit"} at ${nextAppointment.date || "TBD"} ${nextAppointment.time || ""}`.trim() : "Open service booking workflow" },
+    { label: "Loaner", value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby", tone: loanerTask ? "warn" : appointments.length ? "info" : "good", action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()", detail: loanerTask ? `Open ${loanerTask.title || "loaner coordination task"}` : "Start loaner or transport workflow" },
+    { label: "Risk", value: overdueLaneTasks.length ? "High" : urgentLaneTasks.length ? "Watch" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: topTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(topTask)}','service')` : "setCustomer360ComposerMode('task')", detail: topTask ? `Open ${topTask.title || "active service task"}` : "Open service follow-up queue" }
   ];
   const bdcSignals = [
-    { label: "Missed", value: `${missedCalls}`, tone: missedCalls ? "danger" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())" },
-    { label: "Queue", value: `${bdcTask ? 1 : 0}`, tone: bdcTask ? "info" : "good", action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()" },
-    { label: "SLA", value: missedCalls ? "Rescue" : urgentLaneTasks.length ? "Watch" : "On", tone: missedCalls ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()" }
+    { label: "Missed", value: `${missedCalls}`, tone: missedCalls ? "danger" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())", detail: missedCall ? `Open missed call from ${missedCall.from || "customer"}` : "Open SMS follow-up dock" },
+    { label: "Queue", value: `${bdcTask ? 1 : 0}`, tone: bdcTask ? "info" : "good", action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()", detail: bdcTask ? `Open ${bdcTask.title || "BDC follow-up task"}` : "Create callback queue task" },
+    { label: "SLA", value: missedCalls ? "Rescue" : urgentLaneTasks.length ? "Watch" : "On", tone: missedCalls ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()", detail: missedCalls ? "Open rescue contact queue" : bdcTask ? `Open ${bdcTask.title || "callback SLA task"}` : "Open BDC callback workflow" }
   ];
   const salesSignals = [
-    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')" },
-    { label: "Deal", value: salesTask ? "Live" : "New", tone: salesTask ? "info" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()" },
-    { label: "Risk", value: overdueLaneTasks.length ? "High" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()" }
+    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')", detail: nextAppointment ? `Open ${nextAppointment.service || "showroom visit"} at ${nextAppointment.date || "TBD"} ${nextAppointment.time || ""}`.trim() : "Schedule showroom or test-drive visit" },
+    { label: "Deal", value: salesTask ? "Live" : "New", tone: salesTask ? "info" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()", detail: salesTask ? `Open ${salesTask.title || "sales deal task"}` : "Create next deal task" },
+    { label: "Risk", value: overdueLaneTasks.length ? "High" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()", detail: overdueLaneTasks.length ? "Open overdue sales queue" : salesTask ? `Open ${salesTask.title || "desk task"}` : "Open sales workflow" }
   ];
   const accountingSignals = [
-    { label: "Review", value: accountingTask ? "Live" : "Clear", tone: accountingTask ? "warn" : "good", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()" },
-    { label: "Aging", value: overdueLaneTasks.length ? `${overdueLaneTasks.length}` : "0", tone: overdueLaneTasks.length ? "danger" : "good", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()" },
-    { label: "Ledger", value: ledgerNote ? "Open" : "Clear", tone: ledgerNote ? "info" : "good", action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()" }
+    { label: "Review", value: accountingTask ? "Live" : "Clear", tone: accountingTask ? "warn" : "good", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()", detail: accountingTask ? `Open ${accountingTask.title || "invoice review task"}` : "Queue invoice review" },
+    { label: "Aging", value: overdueLaneTasks.length ? `${overdueLaneTasks.length}` : "0", tone: overdueLaneTasks.length ? "danger" : "good", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()", detail: overdueLaneTasks.length ? "Open overdue accounting queue" : "No aged accounting work open" },
+    { label: "Ledger", value: ledgerNote ? "Open" : "Clear", tone: ledgerNote ? "info" : "good", action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()", detail: ledgerNote ? "Open latest ledger note" : "Add ledger note" }
   ];
 
   if (currentDepartmentLens === "bdc") {
@@ -2216,7 +2216,7 @@ function buildLaneSignalMarkup(signals = []) {
   return `
     <div class="customer360-lane-signals">
       ${activeSignals.map((signal) => `
-        <button type="button" class="customer360-lane-signal ${escapeHtml(signal.tone || "info")}" ${signal.action ? `onclick="${signal.action}"` : ""}>
+        <button type="button" class="customer360-lane-signal ${escapeHtml(signal.tone || "info")}" ${signal.action ? `onclick="${signal.action}"` : ""} title="${escapeHtml(signal.detail || signal.label || "Open signal")}">
           <small>${escapeHtml(signal.label || "Signal")}</small>
           <strong>${escapeHtml(signal.value || "0")}</strong>
         </button>
@@ -2231,7 +2231,7 @@ function buildServiceSignalMarkup(signals = []) {
   return `
     <div class="customer360-service-signals">
       ${activeSignals.map((signal) => `
-        <button type="button" class="customer360-service-signal ${escapeHtml(signal.tone || "info")}" ${signal.action ? `onclick="${signal.action}"` : ""}>
+        <button type="button" class="customer360-service-signal ${escapeHtml(signal.tone || "info")}" ${signal.action ? `onclick="${signal.action}"` : ""} title="${escapeHtml(signal.detail || signal.label || "Open signal")}">
           <span>${escapeHtml(signal.label || "Signal")}</span>
           <strong>${escapeHtml(signal.value || "0")}</strong>
         </button>
