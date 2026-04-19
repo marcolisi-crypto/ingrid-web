@@ -1971,6 +1971,34 @@ function getJourneyNextAction(stageKey = "") {
   }
 
   if (stageKey === "service") {
+    const serviceArtifact = currentJourneyArtifacts.service || null;
+    if (serviceArtifact?.label === "Vehicle health signal") {
+      return {
+        eyebrow: "Next Best Action",
+        title: "Review the vehicle health signal",
+        detail: "Turn the battery, mileage, recall, or maintenance signal into an advisor-owned service follow-up.",
+        label: "Create Service Follow-Up",
+        run: () => {
+          setDepartmentLens("service");
+          runFocusedVehicleArtifactAction("service-followup", serviceArtifact.sourceId || "");
+        }
+      };
+    }
+
+    if (serviceArtifact?.label === "VIN evidence") {
+      return {
+        eyebrow: "Next Best Action",
+        title: "Work the VIN evidence",
+        detail: "Convert the newest archive evidence into a linked task or advisor note before lane write-up.",
+        label: "Open Archive Follow-Up",
+        run: () => {
+          setDepartmentLens("service");
+          openCustomer360FocusedArtifact("notes", serviceArtifact.sourceId || "", "home");
+          runFocusedVehicleArtifactAction("archive-task", serviceArtifact.sourceId || "");
+        }
+      };
+    }
+
     return {
       eyebrow: "Next Best Action",
       title: "Finish the advisor write-up",
