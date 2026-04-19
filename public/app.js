@@ -1093,7 +1093,7 @@ function startTechnicianInspectionNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("note", {
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInspection finding:\n- \nRecommended action:\n- \nMedia captured:\n- `,
+    body: `[TECHNICIAN] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInspection finding:\n- \nRecommended action:\n- \nMedia captured:\n- `,
     status: "Inspection note template loaded."
   });
 }
@@ -1113,8 +1113,8 @@ function createPartsPickTask() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("task", {
-    title: vehicle ? `${vehicleDisplayName(vehicle)} stock pull` : `${customerDisplayName(customer)} stock pull`,
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nRequested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner`,
+    title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} stock pull` : `[PARTS] ${customerDisplayName(customer)} stock pull`,
+    body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nRequested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner`,
     dueAt: toLocalDateInputValue(new Date()),
     status: "Parts pick task template loaded."
   });
@@ -1124,7 +1124,7 @@ function startPartsEtaNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("note", {
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nParts ETA update:\n- Source:\n- ETA:\n- Runner / delivery notes:\n- `,
+    body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nParts ETA update:\n- Source:\n- ETA:\n- Runner / delivery notes:\n- `,
     status: "Parts ETA note template loaded."
   });
 }
@@ -1133,8 +1133,8 @@ function queueAccountingInvoiceReview() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("task", {
-    title: vehicle ? `${vehicleDisplayName(vehicle)} invoice review` : `${customerDisplayName(customer)} invoice review`,
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInvoice review:\n- Charges validated:\n- Payment request:\n- Statement status:\n- Reconciliation notes:`,
+    title: vehicle ? `[ACCOUNTING] ${vehicleDisplayName(vehicle)} invoice review` : `[ACCOUNTING] ${customerDisplayName(customer)} invoice review`,
+    body: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInvoice review:\n- Charges validated:\n- Payment request:\n- Statement status:\n- Reconciliation notes:`,
     dueAt: toLocalDateInputValue(new Date()),
     status: "Invoice review task template loaded."
   });
@@ -1144,7 +1144,7 @@ function startLedgerNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("note", {
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLedger note:\n- Payment status:\n- Statement update:\n- Refund / credit notes:\n- Reconciliation comment:`,
+    body: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLedger note:\n- Payment status:\n- Statement update:\n- Refund / credit notes:\n- Reconciliation comment:`,
     status: "Ledger note template loaded."
   });
 }
@@ -1354,7 +1354,7 @@ function startServiceWriteUp() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("appointment", {
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nWrite-up summary:\n- Concern:\n- Promised time:\n- Transportation:\n- Advisor notes:`,
+    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nWrite-up summary:\n- Concern:\n- Promised time:\n- Transportation:\n- Advisor notes:`,
     status: "Service write-up template loaded."
   });
 }
@@ -1363,7 +1363,7 @@ function startAdvisorJourneyNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("note", {
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nAdvisor follow-up:\n- Concern verified:\n- Next action for technician:\n- Customer expectation:`,
+    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nAdvisor follow-up:\n- Concern verified:\n- Next action for technician:\n- Customer expectation:`,
     status: "Advisor note template loaded."
   });
 }
@@ -2024,7 +2024,7 @@ async function submitCustomer360Composer() {
     renderCustomer360();
     seedCustomer360ComposerDefaults();
 
-    if (handoffTarget && currentDepartmentLens === "technicians") {
+    if (handoffTarget && (currentDepartmentLens === "technicians" || currentDepartmentLens === "parts")) {
       setDepartmentLens(handoffTarget);
       setCustomer360ComposerStatus(`${titleCase(handoffTarget)} handoff created and ready.`, "success");
     }
