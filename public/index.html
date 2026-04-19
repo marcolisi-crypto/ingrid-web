@@ -296,6 +296,9 @@
     .customer360-summary-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:#eaf1fb;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.08)}
     .customer360-summary-icon{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#2b5ecb;color:#fff;font-size:14px}
     .customer360-summary-body{font-size:20px;line-height:1.5;color:#f2f5fa}
+    .customer360-summary-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+    .customer360-summary-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#214ca8 0%,#1a3f90 100%);color:#fff;font-size:12px;font-weight:800;cursor:pointer}
+    .customer360-summary-action.secondary{background:#1b2943;color:#e4ecfa}
     .customer360-journey-card{padding:16px 18px;border-radius:14px;background:radial-gradient(circle at top right, rgba(40,96,215,.18), transparent 40%),linear-gradient(180deg,#162133 0%,#121a2a 100%);border:1px solid rgba(255,255,255,.06);box-shadow:0 12px 24px rgba(0,0,0,.16)}
     .customer360-journey-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
     .customer360-journey-head h3{margin:0;color:#f3f7ff;font-size:18px}
@@ -949,6 +952,7 @@
                   <span id="customer360SummaryTitle">AI Summary</span>
                 </div>
                 <div id="customer360AiSummary" class="customer360-summary-body">Select a customer to generate a timeline-aware summary.</div>
+                <div id="customer360SummaryActions" class="customer360-summary-actions"></div>
               </section>
             </div>
 

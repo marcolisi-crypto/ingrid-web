@@ -1742,6 +1742,134 @@ function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks,
   return `${customerName} contacted the dealership regarding ${vehicleName}. Latest context: ${callDetail}. ${followUp}.`;
 }
 
+function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = [], notes = [] } = {}) {
+  const openTasks = (tasks || []).filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const findTask = (...keywords) => openTasks.find((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
+  const nextAppointment = appointments[0];
+  const latestCall = calls[0];
+  const latestNote = notes[0];
+  const serviceTask = findTask("[service]", "advisor", "loaner", "transport");
+  const bdcTask = findTask("[bdc]", "callback", "follow-up", "reconnect");
+  const salesTask = findTask("[sales]", "deal", "quote", "trade");
+  const accountingTask = findTask("[accounting]", "invoice", "statement", "ledger");
+  const fiTask = findTask("[fi]", "finance", "funding", "delivery");
+  const technicianTask = findTask("[technician]", "inspection", "diagnostic", "repair");
+  const partsTask = findTask("[parts]", "parts request", "stock pull", "eta", "sourcing");
+
+  if (currentDepartmentLens === "service") {
+    return [
+      {
+        label: nextAppointment ? "Open Visit" : "Schedule Service",
+        action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "startServiceWriteUp()"
+      },
+      {
+        label: serviceTask ? "Open Advisor Task" : "Add Advisor Note",
+        action: serviceTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(serviceTask.id || serviceTask.taskId || serviceTask.createdAtUtc || serviceTask.title || ""))}','service')` : "startAdvisorJourneyNote()",
+        secondary: true
+      }
+    ];
+  }
+
+  if (currentDepartmentLens === "bdc") {
+    return [
+      {
+        label: bdcTask ? "Open Callback" : "Queue Callback",
+        action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTask.id || bdcTask.taskId || bdcTask.createdAtUtc || bdcTask.title || ""))}','bdc')` : "startBdcCallbackTask()"
+      },
+      {
+        label: latestCall ? "Open Last Call" : "Send Follow-Up",
+        action: latestCall ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(latestCall.id || latestCall.callId || latestCall.createdAtUtc || latestCall.from || ""))}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())",
+        secondary: true
+      }
+    ];
+  }
+
+  if (currentDepartmentLens === "sales") {
+    return [
+      {
+        label: salesTask ? "Open Deal" : "Start Deal",
+        action: salesTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTask.id || salesTask.taskId || salesTask.createdAtUtc || salesTask.title || ""))}','sales')` : "startSalesDealTask()"
+      },
+      {
+        label: nextAppointment ? "Open Visit" : "Schedule Drive",
+        action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','sales')` : "setCustomer360ComposerMode('appointment')",
+        secondary: true
+      }
+    ];
+  }
+
+  if (currentDepartmentLens === "accounting") {
+    return [
+      {
+        label: accountingTask ? "Open Review" : "Queue Review",
+        action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTask.id || accountingTask.taskId || accountingTask.createdAtUtc || accountingTask.title || ""))}','accounting')` : "queueAccountingInvoiceReview()"
+      },
+      {
+        label: latestNote ? "Open Ledger Note" : "Add Ledger Note",
+        action: latestNote ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(latestNote.id || latestNote.noteId || latestNote.createdAtUtc || latestNote.body || ""))}','accounting')` : "startLedgerNote()",
+        secondary: true
+      }
+    ];
+  }
+
+  if (currentDepartmentLens === "technicians") {
+    return [
+      {
+        label: technicianTask ? "Open Job" : "Log Finding",
+        action: technicianTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(technicianTask.id || technicianTask.taskId || technicianTask.createdAtUtc || technicianTask.title || ""))}','technicians')` : "startTechnicianInspectionNote()"
+      },
+      {
+        label: partsTask ? "Open Parts" : "Request Parts",
+        action: partsTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')` : "createTechnicianPartsRequest()",
+        secondary: true
+      }
+    ];
+  }
+
+  if (currentDepartmentLens === "parts") {
+    return [
+      {
+        label: partsTask ? "Open Pick" : "Create Pick",
+        action: partsTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')` : "createPartsPickTask()"
+      },
+      {
+        label: latestNote ? "Open ETA Note" : "Add ETA Note",
+        action: latestNote ? `openCustomer360FocusedArtifact('notes','${escapeHtml(String(latestNote.id || latestNote.noteId || latestNote.createdAtUtc || latestNote.body || ""))}','parts')` : "startPartsEtaNote()",
+        secondary: true
+      }
+    ];
+  }
+
+  if (currentDepartmentLens === "fi") {
+    return [
+      {
+        label: fiTask ? "Open F&I Work" : "Open F&I Note",
+        action: fiTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(fiTask.id || fiTask.taskId || fiTask.createdAtUtc || fiTask.title || ""))}','fi')` : "startFiReviewNote()"
+      },
+      {
+        label: nextAppointment ? "Open Delivery" : "Prep Delivery",
+        action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','fi')` : "startDeliveryHandoffAppointment()",
+        secondary: true
+      }
+    ];
+  }
+
+  return [
+    {
+      label: nextAppointment ? "Open Appointment" : "Create Appointment",
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','home')` : "setCustomer360ComposerMode('appointment')"
+    },
+    {
+      label: openTasks[0] ? "Open Next Task" : "Add Note",
+      action: openTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(openTasks[0].id || openTasks[0].taskId || openTasks[0].createdAtUtc || openTasks[0].title || ""))}','home')` : "setCustomer360ComposerMode('note')",
+      secondary: true
+    }
+  ];
+}
+
 function presetCustomer360Composer(mode = "note", options = {}) {
   setCustomer360ComposerMode(mode);
 
@@ -4074,6 +4202,7 @@ function renderCustomer360Detail() {
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
   const customerCardEl = document.getElementById("customer360CustomerCard");
   const aiSummaryEl = document.getElementById("customer360AiSummary");
+  const summaryActionsEl = document.getElementById("customer360SummaryActions");
   const journeyStagesEl = document.getElementById("customer360JourneyStages");
   const journeyActionsEl = document.getElementById("customer360JourneyActions");
   const journeyStatusEl = document.getElementById("customer360JourneyStatus");
@@ -4099,6 +4228,7 @@ function renderCustomer360Detail() {
     if (summaryTitleEl) summaryTitleEl.textContent = getDepartmentLensConfig().summaryTitle || "AI Summary";
     if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
+    if (summaryActionsEl) summaryActionsEl.innerHTML = "";
     if (journeyStagesEl) journeyStagesEl.innerHTML = `<div class="customer360-empty">Choose a customer to activate the cross-department service journey.</div>`;
     if (journeyActionsEl) journeyActionsEl.innerHTML = "";
     if (journeyStatusEl) {
@@ -4368,6 +4498,19 @@ function renderCustomer360Detail() {
   if (aiSummaryEl) {
     const lens = getDepartmentLensConfig();
     aiSummaryEl.textContent = `${lens.name}: ${aiSummary}`;
+  }
+  if (summaryActionsEl) {
+    const summaryActions = buildCustomerSummaryActions({
+      tasks: openTasks,
+      appointments,
+      calls,
+      notes: currentCustomerNotes
+    });
+    summaryActionsEl.innerHTML = summaryActions.map((item) => `
+      <button type="button" class="customer360-summary-action ${item.secondary ? "secondary" : ""}" onclick="${item.action}">
+        ${escapeHtml(item.label)}
+      </button>
+    `).join("");
   }
 
   renderCustomer360Journey(openTasks, currentCustomerNotes, appointments);
