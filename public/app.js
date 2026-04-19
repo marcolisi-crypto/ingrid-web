@@ -3224,6 +3224,7 @@ function initCustomer360Composer() {
 function renderCustomer360Timeline() {
   const timelineEl = document.getElementById("customer360Timeline");
   const vinSummaryEl = document.getElementById("customer360VinSummary");
+  const vinActionsEl = document.getElementById("customer360VinActions");
   if (!timelineEl) return;
 
   const vinItems = currentCustomer360TimelineCards.filter((item) => categorizeCustomer360TimelineItem(item) === "vin");
@@ -3240,6 +3241,25 @@ function renderCustomer360Timeline() {
       <button type="button" class="customer360-vin-summary-chip movement ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "movement" ? "active" : ""}" onclick="openVinTimelineSubtype('movement')"><span class="customer360-vin-summary-chip-content"><strong>${vinMovementCount} Movement</strong><small>${escapeHtml(latestVinMovement ? latestVinMovement.time : "No updates")}</small></span></button>
       <button type="button" class="customer360-vin-summary-chip archive ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "archive" ? "active" : ""}" onclick="openVinTimelineSubtype('archive')"><span class="customer360-vin-summary-chip-content"><strong>${vinArchiveCount} Archive</strong><small>${escapeHtml(latestVinArchive ? latestVinArchive.time : "No updates")}</small></span></button>
     `;
+  }
+
+  if (vinActionsEl) {
+    const activeVinMode = normalizeCustomer360TimelineFilter(currentCustomer360TimelineFilter) === "vin";
+    vinActionsEl.style.display = activeVinMode ? "flex" : "none";
+    if (activeVinMode) {
+      const subtype = currentCustomer360VinFilter;
+      const primaryAction = subtype === "movement"
+        ? { label: "Log Movement", action: "startVehicleGeoMovementNote()" }
+        : subtype === "archive"
+          ? { label: "Add VIN Archive Entry", action: "startVinArchiveEntryNote()" }
+          : { label: "Log Health Event", action: "startVehicleHealthEventNote()" };
+      vinActionsEl.innerHTML = `
+        <button type="button" class="customer360-mini-btn" onclick="${primaryAction.action}">${primaryAction.label}</button>
+        <button type="button" class="customer360-mini-btn" onclick="openVehicleJourneyStage('service')">Open Service</button>
+      `;
+    } else {
+      vinActionsEl.innerHTML = "";
+    }
   }
 
   const filter = normalizeCustomer360TimelineFilter(currentCustomer360TimelineFilter);

@@ -381,6 +381,8 @@
     .customer360-vin-summary-chip.movement{border-color:rgba(109,182,255,.24);background:rgba(109,182,255,.10);color:#cde4ff}
     .customer360-vin-summary-chip.archive{border-color:rgba(245,190,110,.24);background:rgba(245,190,110,.10);color:#ffe0a1}
     .customer360-vin-summary-chip.active{box-shadow:0 0 0 1px rgba(255,255,255,.18),0 8px 18px rgba(0,0,0,.16);transform:translateY(-1px)}
+    .customer360-vin-actions{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+    .customer360-vin-actions .customer360-mini-btn{background:#162238;border:1px solid rgba(255,255,255,.08)}
     .customer360-filter-chip{padding:6px 10px;border-radius:999px;background:#1d2940;color:#dce6f7;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.06);cursor:pointer}
     .customer360-filter-chip.active{background:#2f59c7;color:#fff}
     .customer360-timeline-item{position:relative;margin-left:14px;padding:0;background:linear-gradient(180deg,#171f30 0%,#121a29 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#f6f6f4;overflow:hidden}
@@ -936,6 +938,7 @@
                   <span class="customer360-filter-chip" data-filter="activity">More ▾</span>
                 </div>
                 <div id="customer360VinSummary" class="customer360-vin-summary"></div>
+                <div id="customer360VinActions" class="customer360-vin-actions" style="display:none;"></div>
                 <div id="customer360Timeline" class="customer360-timeline"></div>
                 <div class="customer360-composer">
                   <div class="customer360-composer-avatar"></div>
