@@ -1390,14 +1390,16 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
     if (appointment) {
       return {
         label: "Latest booking",
-        detail: `${appointment.service || "Service visit"} • ${appointment.date || "TBD"} ${appointment.time || ""}`.trim()
+        detail: `${appointment.service || "Service visit"} • ${appointment.date || "TBD"} ${appointment.time || ""}`.trim(),
+        interactive: true
       };
     }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes("[service]"));
     if (note) {
       return {
         label: "Advisor note",
-        detail: String(note.body || "").replace(/\[service\]\s*/i, "").slice(0, 72)
+        detail: String(note.body || "").replace(/\[service\]\s*/i, "").slice(0, 72),
+        interactive: true
       };
     }
   }
@@ -1415,22 +1417,37 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
     if (task) {
       return {
         label: "Latest task",
-        detail: `${String(task.title || "").replace(new RegExp(tag, "i"), "").trim() || "Tagged task"}`
+        detail: `${String(task.title || "").replace(new RegExp(tag, "i"), "").trim() || "Tagged task"}`,
+        interactive: true
       };
     }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes(tag));
     if (note) {
       return {
         label: "Latest note",
-        detail: `${String(note.body || "").replace(new RegExp(tag, "i"), "").trim().slice(0, 72)}`
+        detail: `${String(note.body || "").replace(new RegExp(tag, "i"), "").trim().slice(0, 72)}`,
+        interactive: true
       };
     }
   }
 
   return {
     label: "Latest artifact",
-    detail: "No linked artifact yet"
+    detail: "No linked artifact yet",
+    interactive: false
   };
+}
+
+function openJourneyArtifact(stageKey = "service") {
+  const validStage = ["service", "technicians", "parts", "accounting"].includes(stageKey) ? stageKey : "service";
+  setDepartmentLens(validStage);
+  const mode = validStage === "service"
+    ? "appointment"
+    : validStage === "accounting"
+      ? "note"
+      : "task";
+  setCustomer360ComposerMode(mode);
+  document.getElementById("customer360ComposerBody")?.focus();
 }
 
 function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
@@ -1500,7 +1517,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
       <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyStageOwner(stage.key, stage.status))}</div>
       ${(() => {
         const artifact = getLatestJourneyArtifact(stage.key, tasks, notes, appointments);
-        return `<div class="customer360-journey-artifact"><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span></div>`;
+        return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span></div>`;
       })()}
     </div>
   `).join("");
