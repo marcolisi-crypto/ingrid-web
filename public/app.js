@@ -598,6 +598,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const topTask = tasks[0];
   const nextAppointment = appointments[0];
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+  const latestNote = notes[0];
+  const contactPhone = customer?.phones?.[0] || "Not set";
+  const vehicleName = vehicleDisplayName(vehicle);
 
   if (currentDepartmentLens === "service") {
     return `
@@ -607,10 +610,36 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           <div class="customer360-lens-value">${vehicle?.vin ? `RO-lite • ${escapeHtml(vehicle.vin.slice(-6))}` : "RO-lite pending"}</div>
           <div class="customer360-lens-copy">Primary concern: ${escapeHtml(topTask?.description || nextAppointment?.service || "Customer concern not written yet.")}</div>
         </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Lane Check-In</small>
+            <strong>${nextAppointment ? "Customer expected" : "Needs arrival slot"}</strong>
+            <span>${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} queued for advisor write-up.` : "Use Schedule Service to set the arrival window and advisor ownership."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Loaner Board</small>
+            <strong>${appointments.length ? "Review eligibility" : "Standby"}</strong>
+            <span>${appointments.length ? "Transportation should be confirmed before diagnostics turn into all-day work." : "No transportation request has been captured yet."}</span>
+          </div>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
           <div class="customer360-lens-value">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Awaiting booking"}</div>
           <div class="customer360-lens-copy">Use this area to evolve into lane check-in, write-up, and promised-time control.</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Verify concern</b><span>${escapeHtml(topTask?.title || "Capture warning light / complaint in advisor notes.")}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Confirm transportation</b><span>${appointments.length ? "Offer shuttle or loaner before write-up closes." : "Transportation need has not been answered yet."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Set promised time</b><span>${nextAppointment ? "Promised-time placeholder is present and ready for advisor control." : "No promised time until service visit is booked."}</span></div>
+          </div>
         </div>
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Write Service Visit</button>
@@ -628,10 +657,36 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           <div class="customer360-lens-value">${missedCalls ? `${missedCalls} missed contact${missedCalls === 1 ? "" : "s"}` : "Hot lead / active thread"}</div>
           <div class="customer360-lens-copy">Missed calls, SMS threads, and callbacks stay attached to this same customer record.</div>
         </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Callback SLA</small>
+            <strong>${missedCalls ? "Due in 15 min" : "Within target"}</strong>
+            <span>${missedCalls ? "Missed contacts should move to the top of the callback queue." : "Current thread is warm and does not need rescue cadence yet."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Campaign Source</small>
+            <strong>${latestNote ? "Warranty inquiry" : "Inbound lead"}</strong>
+            <span>${latestNote ? "Recent notes suggest campaign-style follow-up and appointment conversion." : "Use this area later for source attribution and campaign routing."}</span>
+          </div>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Play</div>
           <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Send follow-up + confirm visit")}</div>
           <div class="customer360-lens-copy">${escapeHtml(topTask?.description || "BDC should drive toward appointment confirmation or handoff.")}</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Reconnect fast</b><span>${missedCalls ? "Use the SMS dock or outbound call to recover the missed touchpoint." : "Conversation is active; keep the thread warm with a clear next step."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Confirm appointment intent</b><span>${nextAppointment ? "Customer already has a visit on the books." : "Push toward a service or showroom appointment from this thread."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Handoff cleanly</b><span>${nextAppointment ? "Advisor handoff packet is ready once arrival is confirmed." : "Route to Service or Sales only after the next commitment is captured."}</span></div>
+          </div>
         </div>
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())">Open SMS Follow-Up</button>
@@ -647,12 +702,38 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Opportunity Stage</div>
           <div class="customer360-lens-value">${nextAppointment ? "Showroom visit booked" : "Working lead"}</div>
-          <div class="customer360-lens-copy">${vehicle ? `${escapeHtml(vehicleDisplayName(vehicle))} remains the active opportunity anchor.` : "Opportunity will attach to the selected vehicle or deal record."}</div>
+          <div class="customer360-lens-copy">${vehicle ? `${escapeHtml(vehicleName)} remains the active opportunity anchor.` : "Opportunity will attach to the selected vehicle or deal record."}</div>
+        </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Trade Appraisal</small>
+            <strong>${vehicle ? "Open for review" : "Pending vehicle selection"}</strong>
+            <span>${vehicle ? "Use the same 360 record to capture trade walkaround, appraisal notes, and quote deltas." : "Once a vehicle is attached, trade posture can live here."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Quote Status</small>
+            <strong>${notes.length ? "Worksheet in progress" : "Not issued"}</strong>
+            <span>${notes.length ? "Recent notes imply the customer is already in pricing discussion." : "This area can evolve into live quote, payment, and F&I menu surfaces."}</span>
+          </div>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Trade / Quote</div>
           <div class="customer360-lens-value">${notes.length ? "Quote package in progress" : "Trade + quote not started"}</div>
           <div class="customer360-lens-copy">This area can grow into quote, trade, menu pricing, and delivery checklist views.</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Set visit</b><span>${nextAppointment ? "Showroom or test-drive visit already has a time anchor." : "Book a test drive or desk appointment from the 360 composer."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Advance the deal</b><span>${escapeHtml(topTask?.title || "Create a quote or desk task for next contact.")}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Delivery readiness</b><span>${latestNote ? "Notes already exist to seed delivery checklist and F&I handoff." : "No delivery packet has been started yet."}</span></div>
+          </div>
         </div>
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
@@ -671,8 +752,20 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
       </div>
       <div class="customer360-lens-row">
         <div class="customer360-lens-label">Vehicle Context</div>
-        <div class="customer360-lens-value">${escapeHtml(vehicleDisplayName(vehicle))}</div>
+        <div class="customer360-lens-value">${escapeHtml(vehicleName)}</div>
         <div class="customer360-lens-copy">${tasks.length} tasks, ${appointments.length} appointments, ${notes.length} notes, ${calls.length} communications.</div>
+      </div>
+      <div class="customer360-lens-grid">
+        <div class="customer360-lens-stat">
+          <small>Primary Phone</small>
+          <strong>${escapeHtml(formatPhonePretty(contactPhone))}</strong>
+          <span>Calls and SMS should always resolve back to this operating record.</span>
+        </div>
+        <div class="customer360-lens-stat">
+          <small>Timeline Load</small>
+          <strong>${calls.length + notes.length + appointments.length + tasks.length}</strong>
+          <span>Signals across departments continue to converge into one visible timeline.</span>
+        </div>
       </div>
     </div>
   `;

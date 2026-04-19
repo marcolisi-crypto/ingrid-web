@@ -280,6 +280,16 @@
     .customer360-lens-label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;font-weight:700;margin-bottom:6px}
     .customer360-lens-value{color:#f4f8ff;font-size:16px;font-weight:800}
     .customer360-lens-copy{margin-top:6px;color:#9eb2d2;font-size:12px;line-height:1.45}
+    .customer360-lens-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .customer360-lens-stat{padding:12px;border-radius:12px;background:linear-gradient(180deg,#152238 0%,#111c30 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-lens-stat small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;margin-bottom:6px;font-weight:700}
+    .customer360-lens-stat strong{display:block;color:#f4f8ff;font-size:17px}
+    .customer360-lens-stat span{display:block;margin-top:6px;color:#9eb2d2;font-size:12px;line-height:1.4}
+    .customer360-lens-checklist{display:grid;gap:8px}
+    .customer360-lens-check{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:12px;background:linear-gradient(180deg,#152238 0%,#111c30 100%);border:1px solid rgba(255,255,255,.06);color:#dfe8f7}
+    .customer360-lens-check b{display:block;color:#f4f8ff;font-size:13px}
+    .customer360-lens-check span{display:block;margin-top:3px;color:#9eb2d2;font-size:12px;line-height:1.4}
+    .customer360-lens-check-mark{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#22304b;color:#9fc6ff;font-size:12px;flex:0 0 auto;margin-top:1px}
     .customer360-lens-actions{display:grid;grid-template-columns:1fr;gap:8px}
     .customer360-quick-actions{display:grid;grid-template-columns:1fr;gap:8px}
     .customer360-quick-action{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#1b2740 0%,#152238 100%);color:#f1f6ff;font-weight:700;cursor:pointer}
@@ -382,6 +392,7 @@
       .customer360-timeline-item{margin-left:0}
       .customer360-action-dock{grid-template-columns:1fr}
       .customer360-composer-grid,.customer360-composer-grid.two{grid-template-columns:1fr}
+      .customer360-lens-grid{grid-template-columns:1fr}
       body.customer360-landing .tabs{padding:10px 12px;border-radius:0}
       body.customer360-landing #customer360Tab{padding:0 12px}
     }
