@@ -788,6 +788,7 @@ function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appoin
 function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [], calls = []) {
   const nextAppointment = appointments[0];
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+  const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss"));
   const laneTasks = (currentTasks || []).filter((item) => item.customerId === customer?.id && String(item.status || "").toLowerCase() !== "completed");
   const laneNotes = (currentCustomerNotes || []).filter((item) => item.customerId === customer?.id);
   const overdueLaneTasks = laneTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
@@ -827,24 +828,24 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
     ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").body.split("\n")[0]
     : "";
   const serviceSignals = [
-    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info" },
-    { label: "Loaner", value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby", tone: loanerTask ? "warn" : appointments.length ? "info" : "good" },
-    { label: "Risk", value: overdueLaneTasks.length ? "High" : urgentLaneTasks.length ? "Watch" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good" }
+    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')" },
+    { label: "Loaner", value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby", tone: loanerTask ? "warn" : appointments.length ? "info" : "good", action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()" },
+    { label: "Risk", value: overdueLaneTasks.length ? "High" : urgentLaneTasks.length ? "Watch" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: topTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(topTask)}','service')` : "setCustomer360ComposerMode('task')" }
   ];
   const bdcSignals = [
-    { label: "Missed", value: `${missedCalls}`, tone: missedCalls ? "danger" : "good" },
-    { label: "Queue", value: `${bdcTask ? 1 : 0}`, tone: bdcTask ? "info" : "good" },
-    { label: "SLA", value: missedCalls ? "Rescue" : urgentLaneTasks.length ? "Watch" : "On", tone: missedCalls ? "danger" : urgentLaneTasks.length ? "warn" : "good" }
+    { label: "Missed", value: `${missedCalls}`, tone: missedCalls ? "danger" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())" },
+    { label: "Queue", value: `${bdcTask ? 1 : 0}`, tone: bdcTask ? "info" : "good", action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()" },
+    { label: "SLA", value: missedCalls ? "Rescue" : urgentLaneTasks.length ? "Watch" : "On", tone: missedCalls ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()" }
   ];
   const salesSignals = [
-    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn" },
-    { label: "Deal", value: salesTask ? "Live" : "New", tone: salesTask ? "info" : "good" },
-    { label: "Risk", value: overdueLaneTasks.length ? "High" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good" }
+    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')" },
+    { label: "Deal", value: salesTask ? "Live" : "New", tone: salesTask ? "info" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()" },
+    { label: "Risk", value: overdueLaneTasks.length ? "High" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()" }
   ];
   const accountingSignals = [
-    { label: "Review", value: accountingTask ? "Live" : "Clear", tone: accountingTask ? "warn" : "good" },
-    { label: "Aging", value: overdueLaneTasks.length ? `${overdueLaneTasks.length}` : "0", tone: overdueLaneTasks.length ? "danger" : "good" },
-    { label: "Ledger", value: ledgerNote ? "Open" : "Clear", tone: ledgerNote ? "info" : "good" }
+    { label: "Review", value: accountingTask ? "Live" : "Clear", tone: accountingTask ? "warn" : "good", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()" },
+    { label: "Aging", value: overdueLaneTasks.length ? `${overdueLaneTasks.length}` : "0", tone: overdueLaneTasks.length ? "danger" : "good", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()" },
+    { label: "Ledger", value: ledgerNote ? "Open" : "Clear", tone: ledgerNote ? "info" : "good", action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()" }
   ];
 
   if (currentDepartmentLens === "bdc") {
@@ -1068,6 +1069,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const topTask = tasks[0];
   const nextAppointment = appointments[0];
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+  const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss"));
   const latestNote = notes[0];
   const contactPhone = customer?.phones?.[0] || "Not set";
   const vehicleName = vehicleDisplayName(vehicle);
@@ -1118,68 +1120,80 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
     {
       label: "Promised",
       value: nextAppointment ? "Locked" : activeMovementCopy ? "Moving" : "Open",
-      tone: nextAppointment ? "good" : activeMovementCopy ? "warn" : "info"
+      tone: nextAppointment ? "good" : activeMovementCopy ? "warn" : "info",
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"
     },
     {
       label: "Transport",
       value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby",
-      tone: loanerTask ? "warn" : appointments.length ? "info" : "good"
+      tone: loanerTask ? "warn" : appointments.length ? "info" : "good",
+      action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"
     },
     {
       label: "Overdue",
       value: overdueTasks.length ? `${overdueTasks.length}` : urgentTasks.length ? `${urgentTasks.length}` : "0",
-      tone: overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good"
+      tone: overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good",
+      action: topTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(topTask)}','service')` : "setCustomer360ComposerMode('task')"
     }
   ];
   const bdcSignals = [
     {
       label: "Missed",
       value: `${missedCalls}`,
-      tone: missedCalls ? "danger" : "good"
+      tone: missedCalls ? "danger" : "good",
+      action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())"
     },
     {
       label: "Callbacks",
       value: `${bdcTasks.length}`,
-      tone: bdcTasks.length ? "info" : "good"
+      tone: bdcTasks.length ? "info" : "good",
+      action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"
     },
     {
       label: "SLA",
       value: missedCalls ? "Rescue" : urgentTasks.length ? "Watch" : "On Track",
-      tone: missedCalls ? "danger" : urgentTasks.length ? "warn" : "good"
+      tone: missedCalls ? "danger" : urgentTasks.length ? "warn" : "good",
+      action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"
     }
   ];
   const salesSignals = [
     {
       label: "Deals",
       value: `${salesTasks.length || (notes.length ? 1 : 0)}`,
-      tone: salesTasks.length ? "info" : notes.length ? "warn" : "good"
+      tone: salesTasks.length ? "info" : notes.length ? "warn" : "good",
+      action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"
     },
     {
       label: "Visit",
       value: nextAppointment ? "Set" : "Open",
-      tone: nextAppointment ? "good" : "warn"
+      tone: nextAppointment ? "good" : "warn",
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"
     },
     {
       label: "Desk Risk",
       value: overdueTasks.length ? "High" : urgentTasks.length ? "Watch" : "Low",
-      tone: overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good"
+      tone: overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good",
+      action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"
     }
   ];
   const accountingSignals = [
     {
       label: "Reviews",
       value: `${accountingTasks.length || (topTask ? 1 : 0)}`,
-      tone: accountingTasks.length ? "info" : topTask ? "warn" : "good"
+      tone: accountingTasks.length ? "info" : topTask ? "warn" : "good",
+      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     },
     {
       label: "Aging",
       value: overdueTasks.length ? `${overdueTasks.length}` : "0",
-      tone: overdueTasks.length ? "danger" : "good"
+      tone: overdueTasks.length ? "danger" : "good",
+      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     },
     {
       label: "Collections",
       value: ledgerNote || accountingTask ? "Live" : "Clear",
-      tone: overdueTasks.length ? "danger" : ledgerNote || accountingTask ? "warn" : "good"
+      tone: overdueTasks.length ? "danger" : ledgerNote || accountingTask ? "warn" : "good",
+      action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "startLedgerNote()"
     }
   ];
 
@@ -2202,10 +2216,10 @@ function buildLaneSignalMarkup(signals = []) {
   return `
     <div class="customer360-lane-signals">
       ${activeSignals.map((signal) => `
-        <div class="customer360-lane-signal ${escapeHtml(signal.tone || "info")}">
+        <button type="button" class="customer360-lane-signal ${escapeHtml(signal.tone || "info")}" ${signal.action ? `onclick="${signal.action}"` : ""}>
           <small>${escapeHtml(signal.label || "Signal")}</small>
           <strong>${escapeHtml(signal.value || "0")}</strong>
-        </div>
+        </button>
       `).join("")}
     </div>
   `;
@@ -2217,10 +2231,10 @@ function buildServiceSignalMarkup(signals = []) {
   return `
     <div class="customer360-service-signals">
       ${activeSignals.map((signal) => `
-        <div class="customer360-service-signal ${escapeHtml(signal.tone || "info")}">
+        <button type="button" class="customer360-service-signal ${escapeHtml(signal.tone || "info")}" ${signal.action ? `onclick="${signal.action}"` : ""}>
           <span>${escapeHtml(signal.label || "Signal")}</span>
           <strong>${escapeHtml(signal.value || "0")}</strong>
-        </div>
+        </button>
       `).join("")}
     </div>
   `;
