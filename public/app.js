@@ -938,8 +938,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Create Parts Task</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add ETA Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="createPartsPickTask()">Create Parts Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startPartsEtaNote()">Add ETA Note</button>
         </div>
       </div>
     `;
@@ -1109,6 +1109,26 @@ function createTechnicianPartsRequest() {
   });
 }
 
+function createPartsPickTask() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: vehicle ? `${vehicleDisplayName(vehicle)} stock pull` : `${customerDisplayName(customer)} stock pull`,
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nRequested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Parts pick task template loaded."
+  });
+}
+
+function startPartsEtaNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nParts ETA update:\n- Source:\n- ETA:\n- Runner / delivery notes:\n- `,
+    status: "Parts ETA note template loaded."
+  });
+}
+
 function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
   const inspectionStages = [
     {
@@ -1156,6 +1176,63 @@ function buildTechnicianNotesMarkup(notes = [], calls = []) {
   ];
 
   return mediaRows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.label)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <button class="customer360-panel-action">•</button>
+    </div>
+  `).join("");
+}
+
+function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
+  const sourcingRows = [
+    {
+      title: "Stock pull",
+      detail: openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`,
+      tone: openTasks.length ? "warn" : "info"
+    },
+    {
+      title: "Source decision",
+      detail: openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet",
+      tone: openTasks.length ? "info" : "good"
+    },
+    {
+      title: "Dispatch",
+      detail: appointments.length ? "Runner can route to active bay" : "Stage at counter until bay is ready",
+      tone: appointments.length ? "warn" : "info"
+    }
+  ];
+
+  return sourcingRows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.title)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <span class="customer360-status-pill ${row.tone}">${row.tone === "warn" ? "Watch" : row.tone === "good" ? "Ready" : "Live"}</span>
+    </div>
+  `).join("");
+}
+
+function buildPartsNotesMarkup(notes = [], appointments = []) {
+  const dispatchRows = [
+    {
+      label: "ETA updates",
+      detail: notes.length ? `${notes.length} parts-side notes captured for customer follow-up` : "No ETA note has been recorded yet"
+    },
+    {
+      label: "Runner dispatch",
+      detail: appointments.length ? "Bay delivery can be queued against the active visit" : "No active lane visit, so keep dispatch staged"
+    },
+    {
+      label: "Vendor status",
+      detail: "Track transfer, special order, and backorder posture here"
+    }
+  ];
+
+  return dispatchRows.map((row) => `
     <div class="customer360-panel-item">
       <div>
         <strong>${escapeHtml(row.label)}</strong>
@@ -1840,6 +1917,8 @@ function renderCustomer360Detail() {
   if (tasksBoardEl) {
     if (currentDepartmentLens === "technicians") {
       tasksBoardEl.innerHTML = buildTechnicianTasksMarkup(openTasks, vehicle);
+    } else if (currentDepartmentLens === "parts") {
+      tasksBoardEl.innerHTML = buildPartsTasksMarkup(openTasks, appointments, vehicle);
     } else {
     const lensTasks = currentDepartmentLens === "sales"
       ? [...openTasks, ...tasks.filter((task) => String(task.status || "").toLowerCase() === "completed")].slice(0, 3)
@@ -1861,6 +1940,8 @@ function renderCustomer360Detail() {
   if (notesBoardEl) {
     if (currentDepartmentLens === "technicians") {
       notesBoardEl.innerHTML = buildTechnicianNotesMarkup(currentCustomerNotes, calls);
+    } else if (currentDepartmentLens === "parts") {
+      notesBoardEl.innerHTML = buildPartsNotesMarkup(currentCustomerNotes, appointments);
     } else {
     const noteEmptyCopy = currentDepartmentLens === "sales"
       ? "No deal notes captured yet."
