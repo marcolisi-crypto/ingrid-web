@@ -1375,6 +1375,64 @@ function hasKeywordMatch(items = [], keywords = []) {
   });
 }
 
+function getJourneyStageOwner(stageKey = "", status = "") {
+  if (status === "complete") return "Completed";
+  if (stageKey === "service") return status === "active" ? "Advisor" : "Front Desk";
+  if (stageKey === "technicians") return status === "active" ? "Technician" : "Shop";
+  if (stageKey === "parts") return status === "active" ? "Parts Counter" : "Inventory";
+  if (stageKey === "accounting") return status === "active" ? "Accounting" : "Back Office";
+  return "INGRID";
+}
+
+function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appointments = []) {
+  if (stageKey === "service") {
+    const appointment = appointments[0];
+    if (appointment) {
+      return {
+        label: "Latest booking",
+        detail: `${appointment.service || "Service visit"} • ${appointment.date || "TBD"} ${appointment.time || ""}`.trim()
+      };
+    }
+    const note = notes.find((item) => String(item.body || "").toLowerCase().includes("[service]"));
+    if (note) {
+      return {
+        label: "Advisor note",
+        detail: String(note.body || "").replace(/\[service\]\s*/i, "").slice(0, 72)
+      };
+    }
+  }
+
+  const tag = stageKey === "technicians"
+    ? "[technician]"
+    : stageKey === "parts"
+      ? "[parts]"
+      : stageKey === "accounting"
+        ? "[accounting]"
+        : "";
+
+  if (tag) {
+    const task = tasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes(tag));
+    if (task) {
+      return {
+        label: "Latest task",
+        detail: `${String(task.title || "").replace(new RegExp(tag, "i"), "").trim() || "Tagged task"}`
+      };
+    }
+    const note = notes.find((item) => String(item.body || "").toLowerCase().includes(tag));
+    if (note) {
+      return {
+        label: "Latest note",
+        detail: `${String(note.body || "").replace(new RegExp(tag, "i"), "").trim().slice(0, 72)}`
+      };
+    }
+  }
+
+  return {
+    label: "Latest artifact",
+    detail: "No linked artifact yet"
+  };
+}
+
 function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
   const serviceReady = appointments.length > 0;
   const techReady = hasKeywordMatch(tasks, ["[technician]", "diagn", "inspect", "tech", "repair"]) || hasKeywordMatch(notes, ["[technician]", "inspection", "finding", "diagn"]);
@@ -1439,6 +1497,11 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
         <span class="customer360-status-pill ${stage.status === "complete" ? "good" : stage.status === "active" ? "warn" : "info"}">${stage.status === "complete" ? "Done" : stage.status === "active" ? "Now" : "Next"}</span>
       </div>
       <span>${escapeHtml(stage.detail)}</span>
+      <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyStageOwner(stage.key, stage.status))}</div>
+      ${(() => {
+        const artifact = getLatestJourneyArtifact(stage.key, tasks, notes, appointments);
+        return `<div class="customer360-journey-artifact"><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span></div>`;
+      })()}
     </div>
   `).join("");
 
