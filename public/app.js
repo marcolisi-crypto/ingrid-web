@@ -3230,12 +3230,15 @@ function renderCustomer360Timeline() {
   const vinHealthCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vehicle health")).length;
   const vinMovementCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vehicle movement")).length;
   const vinArchiveCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vin archive")).length;
+  const latestVinHealth = vinItems.find((item) => String(item.type || "").toLowerCase().includes("vehicle health"));
+  const latestVinMovement = vinItems.find((item) => String(item.type || "").toLowerCase().includes("vehicle movement"));
+  const latestVinArchive = vinItems.find((item) => String(item.type || "").toLowerCase().includes("vin archive"));
 
   if (vinSummaryEl) {
     vinSummaryEl.innerHTML = `
-      <button type="button" class="customer360-vin-summary-chip health ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "health" ? "active" : ""}" onclick="openVinTimelineSubtype('health')"><strong>${vinHealthCount}</strong> Health</button>
-      <button type="button" class="customer360-vin-summary-chip movement ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "movement" ? "active" : ""}" onclick="openVinTimelineSubtype('movement')"><strong>${vinMovementCount}</strong> Movement</button>
-      <button type="button" class="customer360-vin-summary-chip archive ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "archive" ? "active" : ""}" onclick="openVinTimelineSubtype('archive')"><strong>${vinArchiveCount}</strong> Archive</button>
+      <button type="button" class="customer360-vin-summary-chip health ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "health" ? "active" : ""}" onclick="openVinTimelineSubtype('health')"><span class="customer360-vin-summary-chip-content"><strong>${vinHealthCount} Health</strong><small>${escapeHtml(latestVinHealth ? latestVinHealth.time : "No updates")}</small></span></button>
+      <button type="button" class="customer360-vin-summary-chip movement ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "movement" ? "active" : ""}" onclick="openVinTimelineSubtype('movement')"><span class="customer360-vin-summary-chip-content"><strong>${vinMovementCount} Movement</strong><small>${escapeHtml(latestVinMovement ? latestVinMovement.time : "No updates")}</small></span></button>
+      <button type="button" class="customer360-vin-summary-chip archive ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "archive" ? "active" : ""}" onclick="openVinTimelineSubtype('archive')"><span class="customer360-vin-summary-chip-content"><strong>${vinArchiveCount} Archive</strong><small>${escapeHtml(latestVinArchive ? latestVinArchive.time : "No updates")}</small></span></button>
     `;
   }
 
