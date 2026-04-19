@@ -29,8 +29,12 @@ let currentJourneyFeedbackTimer = null;
 let customer360AssigneeMap = JSON.parse(localStorage.getItem("customer360Assignees") || "{}");
 
 const JOURNEY_ASSIGNEE_DIRECTORY = {
+  bdc: ["Rachel Smith", "Nicole Adams", "BDC Queue"],
+  sales: ["Jordan Blake", "Sales Desk", "Floor Manager"],
   service: ["Rachel Smith", "Nicole Adams", "Front Desk"],
   technicians: ["Miguel Santos", "Avery Chen", "Shop Foreman"],
+  fi: ["Priya Shah", "Finance Desk", "Funding Manager"],
+  delivery: ["Guest Experience", "Delivery Desk", "Sales Desk"],
   parts: ["Marcus Reed", "Inventory Desk", "Runner Dispatch"],
   accounting: ["Priya Shah", "Back Office", "Finance Desk"]
 };
@@ -1396,8 +1400,12 @@ function hasKeywordMatch(items = [], keywords = []) {
 
 function getJourneyStageOwner(stageKey = "", status = "") {
   if (status === "complete") return "Completed";
+  if (stageKey === "bdc") return status === "active" ? "BDC" : "Communications";
+  if (stageKey === "sales") return status === "active" ? "Sales" : "Sales Desk";
   if (stageKey === "service") return status === "active" ? "Advisor" : "Front Desk";
   if (stageKey === "technicians") return status === "active" ? "Technician" : "Shop";
+  if (stageKey === "fi") return status === "active" ? "F&I" : "Finance";
+  if (stageKey === "delivery") return status === "active" ? "Delivery" : "Sales";
   if (stageKey === "parts") return status === "active" ? "Parts Counter" : "Inventory";
   if (stageKey === "accounting") return status === "active" ? "Accounting" : "Back Office";
   return "INGRID";
@@ -1405,6 +1413,11 @@ function getJourneyStageOwner(stageKey = "", status = "") {
 
 function getJourneyAssigneeKey(stageKey = "") {
   return `${selectedCustomerId || "global"}:${stageKey}`;
+}
+
+function getJourneyStageLens(stageKey = "") {
+  if (stageKey === "delivery") return "sales";
+  return stageKey;
 }
 
 function getTimelineJourneyAssignment(stageKey = "") {
@@ -1605,9 +1618,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
 }
 
 function openJourneyArtifact(stageKey = "service") {
-  const validStage = ["service", "technicians", "parts", "accounting"].includes(stageKey) ? stageKey : "service";
+  const validStage = ["service", "technicians", "parts", "accounting", "bdc", "sales", "fi", "delivery"].includes(stageKey) ? stageKey : "service";
   const artifact = currentJourneyArtifacts[validStage] || null;
-  setDepartmentLens(validStage);
+  setDepartmentLens(getJourneyStageLens(validStage));
   const mode = artifact?.kind === "appointments"
     ? "appointment"
     : artifact?.kind === "notes"
@@ -1616,7 +1629,7 @@ function openJourneyArtifact(stageKey = "service") {
         ? "task"
         : validStage === "service"
           ? "appointment"
-          : validStage === "accounting"
+          : validStage === "accounting" || validStage === "fi"
             ? "note"
             : "task";
   currentCustomer360Focus = artifact?.sourceId ? { kind: artifact.kind, sourceId: artifact.sourceId } : null;
@@ -1666,6 +1679,58 @@ function getJourneyStageSubcopy(stage, isFeedback = false) {
 }
 
 function getJourneyNextAction(stageKey = "") {
+  if (stageKey === "bdc") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Queue the callback task",
+      detail: "Reconnect the lead and lock the next appointment or handoff.",
+      label: "Queue Callback",
+      run: () => {
+        setDepartmentLens("bdc");
+        setCustomer360ComposerMode("task");
+      }
+    };
+  }
+
+  if (stageKey === "sales") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Open the deal task",
+      detail: "Advance quote, trade, or test-drive work from the same customer record.",
+      label: "Open Deal Task",
+      run: () => {
+        setDepartmentLens("sales");
+        setCustomer360ComposerMode("task");
+      }
+    };
+  }
+
+  if (stageKey === "fi") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Prepare the finance package",
+      detail: "Capture warranty, funding, and delivery-readiness notes before handoff.",
+      label: "Open F&I Note",
+      run: () => {
+        setDepartmentLens("fi");
+        setCustomer360ComposerMode("note");
+      }
+    };
+  }
+
+  if (stageKey === "delivery") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Finalize delivery checklist",
+      detail: "Turn the closed deal into a delivery-ready customer handoff.",
+      label: "Schedule Delivery",
+      run: () => {
+        setDepartmentLens("sales");
+        setCustomer360ComposerMode("appointment");
+      }
+    };
+  }
+
   if (stageKey === "service") {
     return {
       eyebrow: "Next Best Action",
@@ -1795,13 +1860,63 @@ function buildFocusedTimelineAdvanceActions(item) {
   return "";
 }
 
-function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
+function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls = []) {
+  const hasBdc = calls.length > 0 || hasKeywordMatch(tasks, ["lead", "callback", "bdc", "quote"]) || hasKeywordMatch(notes, ["lead", "callback", "bdc"]);
+  const hasSales = hasKeywordMatch(tasks, ["deal", "quote", "test drive", "trade"]) || hasKeywordMatch(notes, ["quote", "trade", "sales"]);
+  const hasFi = hasKeywordMatch(tasks, ["[fi]", "funding", "warranty", "finance"]) || hasKeywordMatch(notes, ["[fi]", "funding", "menu", "finance"]);
+  const hasDelivery = hasKeywordMatch(tasks, ["delivery", "handoff", "vehicle pickup"]) || hasKeywordMatch(notes, ["delivery", "picked up"]);
+
   const serviceReady = appointments.length > 0;
   const techReady = hasKeywordMatch(tasks, ["[technician]", "diagn", "inspect", "tech", "repair"]) || hasKeywordMatch(notes, ["[technician]", "inspection", "finding", "diagn"]);
   const partsReady = hasKeywordMatch(tasks, ["[parts]", "part", "stock", "sku", "runner"]) || hasKeywordMatch(notes, ["[parts]", "eta", "part", "stock", "runner"]);
   const accountingReady = hasKeywordMatch(tasks, ["[accounting]", "invoice", "payment", "statement", "ledger"]) || hasKeywordMatch(notes, ["[accounting]", "statement", "ledger", "payment", "refund"]);
 
-  const stages = [
+  if (["sales", "bdc", "fi"].includes(currentDepartmentLens)) {
+    return {
+      title: "Revenue Journey",
+      copy: "Track one live revenue path across BDC, sales, F&I, and delivery from the same customer and vehicle spine.",
+      stages: [
+        {
+          key: "bdc",
+          label: "BDC",
+          detail: hasBdc ? "Lead engagement and callback workflow are active." : "Open the lead, reconnect, and book the next touchpoint.",
+          status: hasBdc ? (hasSales ? "complete" : "active") : "active"
+        },
+        {
+          key: "sales",
+          label: "Sales",
+          detail: hasSales ? "Quote, trade, or test-drive work is underway." : "Advance the opportunity, quote, or trade review.",
+          status: hasSales ? (hasFi || hasDelivery ? "complete" : "active") : (hasBdc ? "active" : "upcoming")
+        },
+        {
+          key: "fi",
+          label: "F&I",
+          detail: hasFi ? "Funding, warranty, or menu work is moving." : "Prepare the finance menu and funding checklist.",
+          status: hasFi ? (hasDelivery ? "complete" : "active") : (hasSales ? "active" : "upcoming")
+        },
+        {
+          key: "delivery",
+          label: "Delivery",
+          detail: hasDelivery ? "Delivery readiness and pickup are in motion." : "Prepare the final handoff and delivery checklist.",
+          status: hasDelivery ? "active" : ((hasFi || hasSales) ? "active" : "upcoming")
+        }
+      ],
+      overallStatus: hasDelivery
+        ? "Delivery in motion"
+        : hasFi
+          ? "Finance engaged"
+          : hasSales
+            ? "Opportunity active"
+            : hasBdc
+              ? "BDC engaged"
+              : "Waiting"
+    };
+  }
+
+  return {
+    title: "Service Journey",
+    copy: "Track one live service path across advisor, technician, parts, and accounting.",
+    stages: [
     {
       key: "service",
       label: "Service Advisor",
@@ -1826,24 +1941,37 @@ function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
       detail: accountingReady ? "Invoice / payment workflow has started." : "Prepare statement, payment, and reconciliation.",
       status: accountingReady ? "active" : ((partsReady || techReady) ? "active" : "upcoming")
     }
-  ];
+  ],
+    overallStatus: accountingReady
+      ? "Back office in motion"
+      : partsReady
+        ? "Parts engaged"
+        : techReady
+          ? "In technician flow"
+          : serviceReady
+            ? "Lane ready"
+            : "Waiting"
+  };
+}
 
+function buildServiceJourneyState(tasks = [], notes = [], appointments = [], calls = []) {
+  const definition = getJourneyDefinition(tasks, notes, appointments, calls);
+  const stages = definition.stages;
   const activeStage = stages.find((stage) => stage.status === "active") || stages[0];
   const completedCount = stages.filter((stage) => stage.status === "complete").length;
   const liveCount = stages.filter((stage) => stage.status === "active").length;
   const queuedCount = stages.filter((stage) => stage.status === "upcoming").length;
   const progressPercent = Math.round(((completedCount + (liveCount * 0.5)) / stages.length) * 100);
-  const overallStatus = accountingReady
-    ? "Back office in motion"
-    : partsReady
-      ? "Parts engaged"
-      : techReady
-        ? "In technician flow"
-        : serviceReady
-          ? "Lane ready"
-          : "Waiting";
 
-  return { stages, activeStage, overallStatus, completedCount, liveCount, queuedCount, progressPercent };
+  return {
+    ...definition,
+    stages,
+    activeStage,
+    completedCount,
+    liveCount,
+    queuedCount,
+    progressPercent
+  };
 }
 
 function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
@@ -1854,10 +1982,19 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   const historyEl = document.getElementById("customer360JourneyHistory");
   const statusEl = document.getElementById("customer360JourneyStatus");
   const feedbackEl = document.getElementById("customer360JourneyFeedback");
+  const titleEl = document.getElementById("customer360JourneyTitle");
+  const copyEl = document.getElementById("customer360JourneyCopy");
   if (!stagesEl || !actionsEl || !nextEl || !progressEl || !historyEl || !statusEl || !feedbackEl) return;
 
-  const { stages, activeStage, overallStatus, completedCount, liveCount, queuedCount, progressPercent } = buildServiceJourneyState(tasks, notes, appointments);
+  const calls = (currentCalls || []).filter((call) => {
+    const customer = getSelectedCustomerRecord();
+    const phones = customer?.phones || [];
+    return phones.includes(normalizePhoneNumber(call.from || "")) || phones.includes(normalizePhoneNumber(call.to || ""));
+  });
+  const { title, copy, stages, activeStage, overallStatus, completedCount, liveCount, queuedCount, progressPercent } = buildServiceJourneyState(tasks, notes, appointments, calls);
   currentJourneyArtifacts = {};
+  if (titleEl) titleEl.textContent = title;
+  if (copyEl) copyEl.textContent = copy;
   statusEl.textContent = overallStatus;
   statusEl.className = `customer360-status-pill ${overallStatus === "Waiting" ? "info" : overallStatus.includes("technician") || overallStatus.includes("Lane") ? "warn" : "good"}`;
   progressEl.innerHTML = `
@@ -1914,7 +2051,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   }).join("");
 
   actionsEl.innerHTML = stages.map((stage) => `
-    <button type="button" class="customer360-journey-btn ${currentDepartmentLens === stage.key ? "active" : ""}" onclick="setDepartmentLens('${escapeHtml(stage.key)}')">${escapeHtml(stage.label)}</button>
+    <button type="button" class="customer360-journey-btn ${currentDepartmentLens === getJourneyStageLens(stage.key) ? "active" : ""}" onclick="setDepartmentLens('${escapeHtml(getJourneyStageLens(stage.key))}')">${escapeHtml(stage.label)}</button>
   `).join("");
 
   if (activeStage) {
