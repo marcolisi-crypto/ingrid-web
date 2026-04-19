@@ -718,47 +718,66 @@ function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appoint
 }
 
 function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
+  const openTasks = (currentTasks || []).filter((item) => item.customerId === customer?.id && String(item.status || "").toLowerCase() !== "completed");
+  const pickTask = (...keywords) => openTasks.find((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
+  const pickNote = (...keywords) => notes.find((item) => {
+    const haystack = `${item.body || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
+  const getArtifactSourceId = (item = {}) => String(item.id || item.taskId || item.noteId || item.callId || item.appointmentId || item.createdAtUtc || item.title || item.body || "");
   if (currentDepartmentLens === "sales") {
+    const salesTask = pickTask("[sales]", "quote", "deal", "opportunity");
+    const fiTask = pickTask("[fi]", "finance", "delivery", "warranty");
     return [
-      { icon: "💰", title: "Quote Pack", meta: `${vehicleDisplayName(vehicle)} pricing worksheet` },
-      { icon: "🚗", title: "Trade Walkaround", meta: `${calls.length || 1} sales touchpoints logged` },
-      { icon: "🧾", title: "Credit + F&I Prep", meta: `${customerDisplayName(customer)} delivery checklist` },
+      { icon: "💰", title: "Quote Pack", meta: `${vehicleDisplayName(vehicle)} pricing worksheet`, sourceId: getArtifactSourceId(salesTask), kind: "tasks", lens: "sales" },
+      { icon: "🚗", title: "Trade Walkaround", meta: `${calls.length || 1} sales touchpoints logged`, sourceId: getArtifactSourceId(appointments[0]), kind: "appointments", lens: "sales" },
+      { icon: "🧾", title: "Credit + F&I Prep", meta: `${customerDisplayName(customer)} delivery checklist`, sourceId: getArtifactSourceId(fiTask), kind: "tasks", lens: "fi" },
       { icon: "📸", title: "Merchandising Media", meta: `Vehicle media set ready for handoff` }
     ];
   }
 
   if (currentDepartmentLens === "bdc") {
+    const bdcTask = pickTask("[bdc]", "callback", "follow-up");
     return [
-      { icon: "💬", title: "Conversation History", meta: `${calls.length} calls/SMS linked to this customer` },
-      { icon: "📋", title: "Lead Notes", meta: `${notes.length || 1} notes available for the next agent` },
-      { icon: "📞", title: "Callback Packet", meta: `Preferred number ${customer?.phones?.[0] || "not set"}` },
+      { icon: "💬", title: "Conversation History", meta: `${calls.length} calls/SMS linked to this customer`, sourceId: getArtifactSourceId(calls[0]), kind: "calls", lens: "bdc" },
+      { icon: "📋", title: "Lead Notes", meta: `${notes.length || 1} notes available for the next agent`, sourceId: getArtifactSourceId(notes[0]), kind: "notes", lens: "bdc" },
+      { icon: "📞", title: "Callback Packet", meta: `Preferred number ${customer?.phones?.[0] || "not set"}`, sourceId: getArtifactSourceId(bdcTask), kind: "tasks", lens: "bdc" },
       { icon: "🗂", title: "Customer Profile", meta: `${customerDisplayName(customer)} communication archive` }
     ];
   }
 
   if (currentDepartmentLens === "technicians") {
+    const technicianTask = pickTask("[technician]", "inspection", "diagnostic", "repair");
+    const partsTask = pickTask("[parts]", "parts request", "stock pull", "sourcing");
     return [
-      { icon: "🧰", title: "Inspection Packet", meta: `${vehicleDisplayName(vehicle)} MPI + repair notes` },
-      { icon: "📸", title: "Technician Media", meta: `${notes.length || 1} annotated photos or findings queued` },
-      { icon: "📦", title: "Parts Pick Ticket", meta: `${appointments.length ? "Linked to active lane visit" : "Ready once RO is written"}` },
+      { icon: "🧰", title: "Inspection Packet", meta: `${vehicleDisplayName(vehicle)} MPI + repair notes`, sourceId: getArtifactSourceId(technicianTask), kind: "tasks", lens: "technicians" },
+      { icon: "📸", title: "Technician Media", meta: `${notes.length || 1} annotated photos or findings queued`, sourceId: getArtifactSourceId(notes[0]), kind: "notes", lens: "technicians" },
+      { icon: "📦", title: "Parts Pick Ticket", meta: `${appointments.length ? "Linked to active lane visit" : "Ready once RO is written"}`, sourceId: getArtifactSourceId(partsTask), kind: "tasks", lens: "parts" },
       { icon: "🗂", title: "VIN History", meta: `${customerDisplayName(customer)} prior service evidence` }
     ];
   }
 
   if (currentDepartmentLens === "parts") {
+    const partsTask = pickTask("[parts]", "stock pull", "parts request", "sourcing", "eta");
+    const partsNote = pickNote("[parts]", "eta");
     return [
-      { icon: "📦", title: "Stock Pull Sheet", meta: `${vehicleDisplayName(vehicle)} pick list and shelf route` },
-      { icon: "🤖", title: "Runner Dispatch", meta: `${calls.length || 1} handoff signals for technician delivery` },
-      { icon: "🧾", title: "Special Order Packet", meta: `${notes.length || 1} notes tied to ETA and vendor status` },
+      { icon: "📦", title: "Stock Pull Sheet", meta: `${vehicleDisplayName(vehicle)} pick list and shelf route`, sourceId: getArtifactSourceId(partsTask), kind: "tasks", lens: "parts" },
+      { icon: "🤖", title: "Runner Dispatch", meta: `${calls.length || 1} handoff signals for technician delivery`, sourceId: getArtifactSourceId(appointments[0] || partsTask), kind: appointments[0] ? "appointments" : "tasks", lens: "parts" },
+      { icon: "🧾", title: "Special Order Packet", meta: `${notes.length || 1} notes tied to ETA and vendor status`, sourceId: getArtifactSourceId(partsNote), kind: "notes", lens: "parts" },
       { icon: "🗂", title: "Core Return File", meta: `${customerDisplayName(customer)} parts-side archive` }
     ];
   }
 
   if (currentDepartmentLens === "accounting") {
+    const accountingTask = pickTask("[accounting]", "invoice", "ledger", "statement", "payment");
+    const accountingNote = pickNote("[accounting]", "ledger", "statement");
     return [
-      { icon: "💳", title: "Payment Record", meta: `${customerDisplayName(customer)} payment and refund evidence` },
-      { icon: "🧾", title: "Invoice Packet", meta: `${vehicleDisplayName(vehicle)} statement and line items` },
-      { icon: "📚", title: "Ledger Trail", meta: `${notes.length || 1} internal accounting notes` },
+      { icon: "💳", title: "Payment Record", meta: `${customerDisplayName(customer)} payment and refund evidence`, sourceId: getArtifactSourceId(accountingNote || accountingTask), kind: accountingNote ? "notes" : "tasks", lens: "accounting" },
+      { icon: "🧾", title: "Invoice Packet", meta: `${vehicleDisplayName(vehicle)} statement and line items`, sourceId: getArtifactSourceId(accountingTask), kind: "tasks", lens: "accounting" },
+      { icon: "📚", title: "Ledger Trail", meta: `${notes.length || 1} internal accounting notes`, sourceId: getArtifactSourceId(accountingNote), kind: "notes", lens: "accounting" },
       { icon: "🏦", title: "Settlement File", meta: `Stripe / QuickBooks-style reconciliation packet` }
     ];
   }
@@ -1630,21 +1649,30 @@ function startLedgerNote() {
 }
 
 function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
+  const technicianTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[technician]")) || openTasks[0] || null;
+  const partsTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]"));
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.createdAtUtc || item.title || ""));
   const inspectionStages = [
     {
       title: "Digital inspection",
       detail: openTasks[0]?.title || `Open findings for ${vehicleDisplayName(vehicle)}`,
-      tone: openTasks.length ? "info" : "warn"
+      tone: openTasks.length ? "info" : "warn",
+      actionLabel: technicianTask ? "Open" : "Start",
+      action: technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "startTechnicianInspectionNote()"
     },
     {
       title: "Parts handoff",
       detail: openTasks.length ? "Queue robot runner or parts counter request" : "No active parts request yet",
-      tone: openTasks.length ? "warn" : "good"
+      tone: openTasks.length ? "warn" : "good",
+      actionLabel: partsTask ? "Open" : "Send",
+      action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createTechnicianPartsRequest()"
     },
     {
       title: "Advisor approval",
       detail: "Return recommendation and media to the advisor timeline",
-      tone: "info"
+      tone: "info",
+      actionLabel: "Notify",
+      action: "startAdvisorJourneyNote()"
     }
   ];
 
@@ -1654,24 +1682,33 @@ function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
         <strong>${escapeHtml(stage.title)}</strong>
         <div class="customer360-meta">${escapeHtml(stage.detail)}</div>
       </div>
-      <span class="customer360-status-pill ${stage.tone}">${stage.tone === "warn" ? "Watch" : stage.tone === "good" ? "Ready" : "Live"}</span>
+      <button class="customer360-panel-action" onclick="${stage.action}">${escapeHtml(stage.actionLabel)}</button>
     </div>
   `).join("");
 }
 
 function buildTechnicianNotesMarkup(notes = [], calls = []) {
+  const latestNote = notes[0];
+  const latestCall = calls[0];
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.noteId || item.callId || item.createdAtUtc || item.body || item.title || ""));
   const mediaRows = [
     {
       label: "Photo set",
-      detail: notes.length ? `${notes.length} findings ready for advisor review` : "Start with under-vehicle or concern-area photos"
+      detail: notes.length ? `${notes.length} findings ready for advisor review` : "Start with under-vehicle or concern-area photos",
+      actionLabel: latestNote ? "Open" : "Add",
+      action: latestNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestNote)}','technicians')` : "startTechnicianInspectionNote()"
     },
     {
       label: "Video walkthrough",
-      detail: calls.length ? "Customer communication exists for context handoff" : "No customer-facing walkthrough recorded yet"
+      detail: calls.length ? "Customer communication exists for context handoff" : "No customer-facing walkthrough recorded yet",
+      actionLabel: latestCall ? "Open" : "Queue",
+      action: latestCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(latestCall)}','bdc')` : "startBdcCallbackTask()"
     },
     {
       label: "Approval return",
-      detail: "Push technician findings back into the advisor/customer timeline"
+      detail: "Push technician findings back into the advisor/customer timeline",
+      actionLabel: "Send",
+      action: "startAdvisorJourneyNote()"
     }
   ];
 
@@ -1681,27 +1718,37 @@ function buildTechnicianNotesMarkup(notes = [], calls = []) {
         <strong>${escapeHtml(row.label)}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail)}</div>
       </div>
-      <button class="customer360-panel-action">•</button>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
     </div>
   `).join("");
 }
 
 function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
+  const partsTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]")) || openTasks[0] || null;
+  const technicianTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[technician]"));
+  const nextAppointment = appointments[0];
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.appointmentId || item.createdAtUtc || item.title || ""));
   const sourcingRows = [
     {
       title: "Stock pull",
       detail: openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`,
-      tone: openTasks.length ? "warn" : "info"
+      tone: openTasks.length ? "warn" : "info",
+      actionLabel: partsTask ? "Open" : "Create",
+      action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
     },
     {
       title: "Source decision",
       detail: openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet",
-      tone: openTasks.length ? "info" : "good"
+      tone: openTasks.length ? "info" : "good",
+      actionLabel: partsTask ? "Review" : "Start",
+      action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
     },
     {
       title: "Dispatch",
       detail: appointments.length ? "Runner can route to active bay" : "Stage at counter until bay is ready",
-      tone: appointments.length ? "warn" : "info"
+      tone: appointments.length ? "warn" : "info",
+      actionLabel: nextAppointment ? "Open" : technicianTask ? "Return" : "Prep",
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()"
     }
   ];
 
@@ -1711,24 +1758,34 @@ function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
         <strong>${escapeHtml(row.title)}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail)}</div>
       </div>
-      <span class="customer360-status-pill ${row.tone}">${row.tone === "warn" ? "Watch" : row.tone === "good" ? "Ready" : "Live"}</span>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
     </div>
   `).join("");
 }
 
 function buildPartsNotesMarkup(notes = [], appointments = []) {
+  const partsNote = notes.find((item) => `${item.body || ""}`.toLowerCase().includes("[parts]")) || notes[0] || null;
+  const partsTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]"));
+  const nextAppointment = appointments[0];
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.noteId || item.taskId || item.appointmentId || item.createdAtUtc || item.body || item.title || ""));
   const dispatchRows = [
     {
       label: "ETA updates",
-      detail: notes.length ? `${notes.length} parts-side notes captured for customer follow-up` : "No ETA note has been recorded yet"
+      detail: notes.length ? `${notes.length} parts-side notes captured for customer follow-up` : "No ETA note has been recorded yet",
+      actionLabel: partsNote ? "Open" : "Add",
+      action: partsNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsNote)}','parts')` : "startPartsEtaNote()"
     },
     {
       label: "Runner dispatch",
-      detail: appointments.length ? "Bay delivery can be queued against the active visit" : "No active lane visit, so keep dispatch staged"
+      detail: appointments.length ? "Bay delivery can be queued against the active visit" : "No active lane visit, so keep dispatch staged",
+      actionLabel: nextAppointment ? "Open" : partsTask ? "Open" : "Prep",
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
     },
     {
       label: "Vendor status",
-      detail: "Track transfer, special order, and backorder posture here"
+      detail: "Track transfer, special order, and backorder posture here",
+      actionLabel: partsNote ? "Review" : "Log",
+      action: partsNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsNote)}','parts')` : "startPartsEtaNote()"
     }
   ];
 
@@ -1738,27 +1795,36 @@ function buildPartsNotesMarkup(notes = [], appointments = []) {
         <strong>${escapeHtml(row.label)}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail)}</div>
       </div>
-      <button class="customer360-panel-action">•</button>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
     </div>
   `).join("");
 }
 
 function buildAccountingTasksMarkup(openTasks = [], vehicle) {
+  const accountingTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[accounting]")) || openTasks[0] || null;
+  const ledgerNote = (currentCustomerNotes || []).find((item) => item.customerId === selectedCustomerId && (`${item.body || ""}`.toLowerCase().includes("[accounting]") || `${item.body || ""}`.toLowerCase().includes("ledger")));
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.noteId || item.createdAtUtc || item.title || item.body || ""));
   const ledgerRows = [
     {
       title: "Invoice review",
       detail: openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`,
-      tone: openTasks.length ? "warn" : "info"
+      tone: openTasks.length ? "warn" : "info",
+      actionLabel: accountingTask ? "Open" : "Queue",
+      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     },
     {
       title: "Payment request",
       detail: openTasks.length ? "Stripe collection or statement follow-up is active" : "No active collection workflow yet",
-      tone: openTasks.length ? "info" : "good"
+      tone: openTasks.length ? "info" : "good",
+      actionLabel: ledgerNote ? "Open" : "Add",
+      action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
     },
     {
       title: "Reconciliation",
       detail: "Close ledger loop against service, parts, and delivery activity",
-      tone: "info"
+      tone: "info",
+      actionLabel: accountingTask ? "Review" : "Prep",
+      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     }
   ];
 
@@ -1768,24 +1834,33 @@ function buildAccountingTasksMarkup(openTasks = [], vehicle) {
         <strong>${escapeHtml(row.title)}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail)}</div>
       </div>
-      <span class="customer360-status-pill ${row.tone}">${row.tone === "warn" ? "Watch" : row.tone === "good" ? "Ready" : "Live"}</span>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
     </div>
   `).join("");
 }
 
 function buildAccountingNotesMarkup(notes = []) {
+  const ledgerNote = notes.find((item) => `${item.body || ""}`.toLowerCase().includes("[accounting]") || `${item.body || ""}`.toLowerCase().includes("ledger")) || notes[0] || null;
+  const accountingTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[accounting]"));
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.noteId || item.taskId || item.createdAtUtc || item.body || item.title || ""));
   const statementRows = [
     {
       label: "Statement status",
-      detail: notes.length ? `${notes.length} accounting notes available for customer statement context` : "No statement notes captured yet"
+      detail: notes.length ? `${notes.length} accounting notes available for customer statement context` : "No statement notes captured yet",
+      actionLabel: ledgerNote ? "Open" : "Add",
+      action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
     },
     {
       label: "Payment rail",
-      detail: "Stripe-backed payment, refund, and collection posture should sit here"
+      detail: "Stripe-backed payment, refund, and collection posture should sit here",
+      actionLabel: accountingTask ? "Review" : "Queue",
+      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     },
     {
       label: "Reconciliation trail",
-      detail: "Keep QuickBooks-style ledger comments tied to the same customer + VIN record"
+      detail: "Keep QuickBooks-style ledger comments tied to the same customer + VIN record",
+      actionLabel: ledgerNote ? "Open" : "Log",
+      action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
     }
   ];
 
@@ -1795,7 +1870,7 @@ function buildAccountingNotesMarkup(notes = []) {
         <strong>${escapeHtml(row.label)}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail)}</div>
       </div>
-      <button class="customer360-panel-action">•</button>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
     </div>
   `).join("");
 }
@@ -3981,7 +4056,7 @@ function renderCustomer360Detail() {
     tasksBoardEl.innerHTML = lensTasks.length ? lensTasks.map((task) => `
       <div class="customer360-panel-item">
         <span>${escapeHtml(task.title || "Task")}</span>
-        <button class="customer360-panel-action">•</button>
+        <button class="customer360-panel-action" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(task.id || task.taskId || task.createdAtUtc || task.title || ""))}','${escapeHtml(String(currentDepartmentLens || "home"))}')">Open</button>
       </div>
     `).join("") : `<div class="customer360-empty">${emptyTaskCopy}</div>`;
     }
@@ -4003,7 +4078,7 @@ function renderCustomer360Detail() {
     notesBoardEl.innerHTML = currentCustomerNotes.length ? currentCustomerNotes.slice(0, 2).map((note) => `
       <div class="customer360-panel-item">
         <span>${escapeHtml((note.body || "").slice(0, 60) || "Internal note")}</span>
-        <button class="customer360-panel-action">•</button>
+        <button class="customer360-panel-action" onclick="openCustomer360FocusedArtifact('notes','${escapeHtml(String(note.id || note.noteId || note.createdAtUtc || note.body || ""))}','${escapeHtml(String(currentDepartmentLens || "home"))}')">Open</button>
       </div>
     `).join("") : `<div class="customer360-empty">${noteEmptyCopy}</div>`;
     }
