@@ -706,20 +706,6 @@ function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appoint
   ];
 }
 
-function inferExplicitVehicleTimelineEvent(body = "") {
-  const normalized = String(body || "").trim().toLowerCase();
-  if (normalized.startsWith("[vehicle]")) {
-    if (normalized.includes("geo / movement update") || normalized.includes("current zone")) {
-      return { eventType: "vehicle_movement", title: "Vehicle movement" };
-    }
-    return { eventType: "vehicle_health", title: "Vehicle health" };
-  }
-  if (normalized.startsWith("[archive]")) {
-    return { eventType: "vin_archive", title: "VIN archive" };
-  }
-  return null;
-}
-
 function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
   if (currentDepartmentLens === "sales") {
     return [
@@ -3247,27 +3233,6 @@ async function createCustomer360Note() {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to create note");
-
-  const explicitTimeline = inferExplicitVehicleTimelineEvent(body);
-  if (explicitTimeline) {
-    await fetch("/.netlify/functions/timeline-create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId: customer.id,
-        vehicleId: vehicle?.id || null,
-        eventType: explicitTimeline.eventType,
-        title: explicitTimeline.title,
-        body: explicitTimeline.eventType === "vin_archive"
-          ? body.replace(/\[archive\]\s*/i, "").trim()
-          : body.replace(/\[vehicle\]\s*/i, "").trim(),
-        department: currentDepartmentLens || "service",
-        sourceSystem: "ingrid.web",
-        sourceId: data?.note?.id || data?.id || ""
-      })
-    }).catch(() => null);
-  }
-
   return data;
 }
 
