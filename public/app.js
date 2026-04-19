@@ -496,6 +496,28 @@ function getTaggedTimelinePresentation(body = "", fallbackType = "Note", fallbac
   };
 }
 
+function getLatestTaggedArtifact(prefix = "", notes = [], timeline = []) {
+  const normalizedPrefix = String(prefix || "").toLowerCase();
+  const combined = [
+    ...timeline.map((item) => ({
+      id: item.id || item.timelineEventId || item.createdAtUtc || item.title || "timeline",
+      body: item.body || "",
+      occurredAtUtc: item.occurredAtUtc || item.createdAtUtc || "",
+      source: "timeline"
+    })),
+    ...notes.map((item) => ({
+      id: item.id || item.noteId || item.createdAtUtc || item.body || "note",
+      body: item.body || "",
+      occurredAtUtc: item.updatedAtUtc || item.createdAtUtc || "",
+      source: "note"
+    }))
+  ];
+
+  return combined
+    .filter((item) => String(item.body || "").trim().toLowerCase().startsWith(normalizedPrefix))
+    .sort((a, b) => new Date(b.occurredAtUtc || 0).getTime() - new Date(a.occurredAtUtc || 0).getTime())[0] || null;
+}
+
 function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
   const vinLabel = vehicle?.vin || "VIN pending";
   const serviceDate = appointments[0]?.date || "Next available";
@@ -2992,6 +3014,14 @@ function renderCustomer360Detail() {
   const recallState = inferVehicleRecallState(vehicle, tasks);
   const maintenanceState = inferVehicleMaintenanceState(appointments, tasks);
   const archiveCount = currentCustomerNotes.length + currentCustomerTimeline.length + calls.length;
+  const latestVehicleArtifact = getLatestTaggedArtifact("[vehicle]", currentCustomerNotes, currentCustomerTimeline);
+  const latestArchiveArtifact = getLatestTaggedArtifact("[archive]", currentCustomerNotes, currentCustomerTimeline);
+  const latestVehiclePresentation = latestVehicleArtifact
+    ? getTaggedTimelinePresentation(latestVehicleArtifact.body || "", "Vehicle Health", "Vehicle intelligence")
+    : null;
+  const latestArchivePresentation = latestArchiveArtifact
+    ? getTaggedTimelinePresentation(latestArchiveArtifact.body || "", "VIN Archive", "VIN-specific record")
+    : null;
   const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
@@ -3104,6 +3134,18 @@ function renderCustomer360Detail() {
         <strong>${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</strong>
         <span>Geo-enabled inventory anchor for ${escapeHtml(vehicleDisplayName(vehicle))} tied to the VIN archive, service lane, and technician dispatch flow.</span>
       </div>
+      ${latestVehiclePresentation ? `
+        <div class="customer360-geo-card">
+          <strong>Latest Health Event</strong>
+          <span>${escapeHtml(latestVehiclePresentation.body.split("\n")[0] || "Vehicle health logged.")}</span>
+        </div>
+      ` : ""}
+      ${latestArchivePresentation ? `
+        <div class="customer360-geo-card">
+          <strong>Latest VIN Archive Entry</strong>
+          <span>${escapeHtml(latestArchivePresentation.body.split("\n")[0] || "VIN archive updated.")}</span>
+        </div>
+      ` : ""}
       <div class="customer360-vehicle-actions">
         <button class="customer360-toolbar-btn" style="width:100%;" onclick="startVehicleHealthEventNote()">Log Health Event</button>
         <button class="customer360-toolbar-btn" style="width:100%;" onclick="startLoanerTask()">Create Loaner Task</button>
@@ -3174,6 +3216,19 @@ function renderCustomer360Detail() {
 
   if (filesPanelEl) {
     const archiveItems = buildLensArchiveItems(vehicle, customer, calls, currentCustomerNotes, appointments);
+    const liveArchiveItems = [
+      latestArchivePresentation ? {
+        icon: "🗂",
+        title: "Latest VIN Entry",
+        meta: `${(latestArchivePresentation.body.split("\n")[0] || "VIN archive updated.").slice(0, 72)}`
+      } : null,
+      latestVehiclePresentation ? {
+        icon: "🩺",
+        title: "Latest Health Event",
+        meta: `${(latestVehiclePresentation.body.split("\n")[0] || "Vehicle health event recorded.").slice(0, 72)}`
+      } : null,
+      ...archiveItems
+    ].filter(Boolean).slice(0, 5);
     filesPanelEl.innerHTML = `
       <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
         <span>${escapeHtml(vehicle?.vin || "VIN pending")}</span>
@@ -3184,7 +3239,7 @@ function renderCustomer360Detail() {
         <button class="customer360-toolbar-btn secondary" style="width:100%;" onclick="startVehicleHealthEventNote()">Log Vehicle Evidence</button>
       </div>
       <div class="customer360-archive-list">
-        ${archiveItems.map((item) => `
+        ${liveArchiveItems.map((item) => `
           <div class="customer360-archive-item">
             <div style="display:flex;align-items:center;gap:12px;min-width:0;">
               <div class="customer360-archive-icon">${item.icon}</div>
