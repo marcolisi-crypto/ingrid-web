@@ -327,6 +327,14 @@
     .customer360-vehicle-kpi{padding:12px;border-radius:12px;background:linear-gradient(180deg,#1a2640 0%,#152238 100%);border:1px solid rgba(255,255,255,.06)}
     .customer360-vehicle-kpi small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#88a4cb;margin-bottom:6px}
     .customer360-vehicle-kpi strong{display:block;font-size:18px;color:#f4f8ff}
+    .customer360-vehicle-badges{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 6px}
+    .customer360-status-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#22304b;color:#dce5f7;font-size:11px;font-weight:700}
+    .customer360-status-pill.good{background:rgba(34,197,94,.14);color:#9ff3b0}
+    .customer360-status-pill.warn{background:rgba(245,158,11,.14);color:#ffd180}
+    .customer360-status-pill.info{background:rgba(59,130,246,.16);color:#b7d1ff}
+    .customer360-geo-card{margin-top:12px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#18253c 0%,#142036 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-geo-card strong{display:block;color:#f4f8ff;margin-bottom:4px}
+    .customer360-geo-card span{display:block;color:#9eb2d2;font-size:12px;line-height:1.5}
     .customer360-map{margin-top:14px;height:132px;border-radius:10px;background:radial-gradient(circle at 62% 42%, #c85d40 0 8px, transparent 9px),linear-gradient(45deg, rgba(245,190,110,.85) 0 6px, transparent 6px),linear-gradient(-22deg, rgba(236,167,70,.75) 0 8px, transparent 8px),linear-gradient(180deg,#efe2ca 0%,#dccdb2 100%);position:relative;overflow:hidden}
     .customer360-contact-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;background:#22304b;color:#dce3eb;font-size:12px}
     .customer360-map::after{content:"Current Location";position:absolute;left:12px;bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(42,50,60,.86);color:#f7f7f4;font-size:12px}
@@ -339,6 +347,18 @@
     .customer360-dock-btn.call{background:linear-gradient(180deg,#295dcb 0%,#214ca8 100%);color:#fff}
     .customer360-dock-btn.sms{background:linear-gradient(180deg,#af7d34 0%,#8f6427 100%);color:#fff}
     .customer360-empty{padding:22px;border:1px dashed rgba(255,255,255,.18);border-radius:10px;color:#d5d9de;background:#323844}
+    .customer360-service-card{display:grid;gap:12px}
+    .customer360-service-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06)}
+    .customer360-service-row:first-child{border-top:none;padding-top:0}
+    .customer360-service-label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;font-weight:700;margin-bottom:4px}
+    .customer360-service-value{color:#f3f7ff;font-weight:700}
+    .customer360-service-copy{color:#9eb2d2;font-size:12px;line-height:1.45}
+    .customer360-service-actions{display:grid;grid-template-columns:1fr;gap:8px}
+    .customer360-archive-list{display:grid;gap:10px}
+    .customer360-archive-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-archive-item strong{display:block;color:#f3f7ff;font-size:13px}
+    .customer360-archive-item span{display:block;color:#9eb2d2;font-size:12px;margin-top:4px}
+    .customer360-archive-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#22304b;color:#b7d1ff;font-size:16px;flex:0 0 auto}
 
     @media (max-width: 1200px){
       .cards4{grid-template-columns:repeat(3,1fr)}
@@ -858,12 +878,12 @@
             </div>
 
             <div class="customer360-rail-card">
-              <div class="customer360-eyebrow">Tasks</div>
-              <div id="customer360RightTask"></div>
+              <div class="customer360-eyebrow">Service + Loaner</div>
+              <div id="customer360ServiceLane"></div>
             </div>
 
             <div class="customer360-rail-card">
-              <div class="customer360-eyebrow">Vehicle Files</div>
+              <div class="customer360-eyebrow">VIN Archive</div>
               <div id="customer360FilesPanel"></div>
             </div>
 

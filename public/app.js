@@ -443,6 +443,40 @@ function getCustomer360ComposerCopy(mode = "note") {
   return "Capture a customer or advisor note directly into the VIN-linked record.";
 }
 
+function inferVehicleGeoLabel(vehicle, customer) {
+  if (!vehicle && !customer) return "Location unavailable";
+  const seed = `${vehicle?.vin || ""}${customer?.id || ""}`.length;
+  const zones = ["Front Line North", "Service Lane 2", "Loaner Row", "Photo Bay", "Overflow West"];
+  return zones[seed % zones.length];
+}
+
+function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
+  const vinLabel = vehicle?.vin || "VIN pending";
+  const serviceDate = appointments[0]?.date || "Next available";
+  return [
+    {
+      icon: "🪪",
+      title: "Registration Scan",
+      meta: `${vinLabel} • Updated from delivery packet`
+    },
+    {
+      icon: "📋",
+      title: "Multi-Point Inspection",
+      meta: `${notes.length || 1} advisor notes • Service lane packet`
+    },
+    {
+      icon: "🎥",
+      title: "Walkaround Media",
+      meta: `${calls.length || 2} media items • Customer proof set`
+    },
+    {
+      icon: "🛠",
+      title: "Service History",
+      meta: `Next lane touchpoint ${serviceDate}`
+    }
+  ];
+}
+
 function inferVehicleBatteryHealth(vehicle, appointments = []) {
   if (!vehicle) return "Unknown";
   if (typeof vehicle.batteryHealth === "number") return `${vehicle.batteryHealth}%`;
@@ -1042,7 +1076,7 @@ function renderCustomer360Detail() {
   const archiveCountEl = document.getElementById("customer360ArchiveCount");
   const tasksBoardEl = document.getElementById("customer360TasksBoard");
   const notesBoardEl = document.getElementById("customer360NotesBoard");
-  const rightTaskEl = document.getElementById("customer360RightTask");
+  const serviceLaneEl = document.getElementById("customer360ServiceLane");
   const filesPanelEl = document.getElementById("customer360FilesPanel");
   const timelineEl = document.getElementById("customer360Timeline");
 
@@ -1056,7 +1090,7 @@ function renderCustomer360Detail() {
     if (archiveCountEl) archiveCountEl.textContent = "0 Items";
     if (tasksBoardEl) tasksBoardEl.innerHTML = `<div class="customer360-empty">No tasks yet.</div>`;
     if (notesBoardEl) notesBoardEl.innerHTML = `<div class="customer360-empty">No notes yet.</div>`;
-    if (rightTaskEl) rightTaskEl.innerHTML = `<div class="customer360-empty">No open tasks.</div>`;
+    if (serviceLaneEl) serviceLaneEl.innerHTML = `<div class="customer360-empty">Service lane, appointment, and loaner signals will appear here.</div>`;
     if (filesPanelEl) filesPanelEl.innerHTML = `<div class="customer360-empty">VIN files will appear here.</div>`;
     if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
     return;
@@ -1116,12 +1150,21 @@ function renderCustomer360Detail() {
           <strong>${archiveCount} items</strong>
         </div>
       </div>
+      <div class="customer360-vehicle-badges">
+        <span class="customer360-status-pill good">Battery ${escapeHtml(batteryState)}</span>
+        <span class="customer360-status-pill ${String(recallState).toLowerCase().includes("0") ? "good" : "warn"}">${escapeHtml(recallState)}</span>
+        <span class="customer360-status-pill info">${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</span>
+      </div>
       <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
       <div class="customer360-vehicle-line"><span>Geo:</span><strong>${escapeHtml(vehicle.status || "Inventory Live")}</strong></div>
       <div class="customer360-vehicle-line"><span>Battery Health:</span><strong class="customer360-vehicle-good">${escapeHtml(batteryState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Recalls:</span><strong>${escapeHtml(recallState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Maintenance:</span><strong class="customer360-vehicle-warn">${escapeHtml(maintenanceState === "Scheduled" ? "Due Soon" : maintenanceState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Loaner:</span><strong>${appointments.length ? "Potentially needed" : "Not requested"}</strong></div>
+      <div class="customer360-geo-card">
+        <strong>${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</strong>
+        <span>Geo-enabled inventory anchor for ${escapeHtml(vehicleDisplayName(vehicle))} tied to the VIN archive, service lane, and technician dispatch flow.</span>
+      </div>
     ` : `<div class="customer360-empty">Vehicle status will appear here.</div>`;
   }
 
@@ -1147,26 +1190,67 @@ function renderCustomer360Detail() {
     `).join("") : `<div class="customer360-empty">No notes captured yet.</div>`;
   }
 
-  if (rightTaskEl) {
+  if (serviceLaneEl) {
     const topTask = openTasks[0];
-    rightTaskEl.innerHTML = topTask ? `
-      <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
-        <div>
-          <strong>${escapeHtml(topTask.title || "Warranty Inquiry")}</strong>
-          <div class="customer360-meta">${escapeHtml(topTask.description || "Follow up with the customer.")}</div>
+    const nextAppointment = appointments[0];
+    const loanerState = String(getDepartmentLensConfig().name).toLowerCase().includes("service") || maintenanceState === "Scheduled" || !!nextAppointment
+      ? "Suggested"
+      : "Standby";
+    serviceLaneEl.innerHTML = `
+      <div class="customer360-service-card">
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Lane Status</div>
+            <div class="customer360-service-value">${nextAppointment ? "Appointment Ready" : "Pre-Arrival"}</div>
+            <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
+          </div>
+          <span class="customer360-status-pill ${nextAppointment ? "good" : "info"}">${nextAppointment ? "Booked" : "Open"}</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Loaner Desk</div>
+            <div class="customer360-service-value">${loanerState}</div>
+            <div class="customer360-service-copy">${appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
+          </div>
+          <span class="customer360-status-pill ${loanerState === "Suggested" ? "warn" : "info"}">${loanerState}</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Open Follow-Up</div>
+            <div class="customer360-service-value">${escapeHtml(topTask?.title || "No active task")}</div>
+            <div class="customer360-service-copy">${escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
+          </div>
+          ${topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
+        </div>
+        <div class="customer360-service-actions">
+          ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Open Service Composer</button>
         </div>
       </div>
-      <button class="customer360-toolbar-btn" style="width:100%;margin-top:10px;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Complete</button>
-    ` : `<div class="customer360-empty">No open task assigned.</div>`;
+    `;
   }
 
   if (filesPanelEl) {
+    const archiveItems = buildVinArchiveItems(vehicle, customer, calls, currentCustomerNotes, appointments);
     filesPanelEl.innerHTML = `
       <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
         <span>${escapeHtml(vehicle?.vin || "VIN pending")}</span>
         <span class="customer360-contact-pill">${archiveCount} files</span>
       </div>
-      <div class="customer360-meta">ID scans, media, inspection photos, delivery files, and vehicle evidence will live here.</div>
+      <div class="customer360-archive-list">
+        ${archiveItems.map((item) => `
+          <div class="customer360-archive-item">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+              <div class="customer360-archive-icon">${item.icon}</div>
+              <div>
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.meta)}</span>
+              </div>
+            </div>
+            <span class="customer360-status-pill info">VIN</span>
+          </div>
+        `).join("")}
+      </div>
     `;
   }
 
