@@ -2240,9 +2240,9 @@ function buildServiceSignalMarkup(signals = []) {
   `;
 }
 
-function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "" } = {}) {
+function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "", focused = false } = {}) {
   return `
-    <button type="button" class="customer360-manager-card" ${action ? `onclick="${action}"` : ""}>
+    <button type="button" class="customer360-manager-card ${focused ? "focused" : ""}" ${action ? `onclick="${action}"` : ""}>
       <div class="customer360-manager-card-top">
         <div>
           <h4>${escapeHtml(label || "Lane")}</h4>
@@ -4168,11 +4168,64 @@ function renderCustomer360Detail() {
     const salesTopTask = salesTasks[0] || appointments[0] || null;
     const accountingTopTask = accountingTasks[0] || null;
 
+    const managerCards = [
+      {
+        key: "service",
+        label: "Service Advisor",
+        headline: serviceTopTask ? (serviceTopTask.title || serviceTopTask.service || "Lane work active") : "Lane queue clear",
+        copy: serviceTopTask ? "Promised time, transport, and advisor follow-up are tied to the same service lane queue." : "No active advisor queue items right now.",
+        tone: serviceTasks.length ? (serviceTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : "warn") : appointments.length ? "info" : "good",
+        countLabel: `${serviceTasks.length} open`,
+        ownerLabel: appointments[0]?.advisor ? `Owner ${appointments[0].advisor}` : "Advisor queue",
+        action: serviceTopTask ? (serviceTopTask.service ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(serviceTopTask.id || serviceTopTask.appointmentId || serviceTopTask.createdAtUtc || serviceTopTask.date || ""))}','service')` : `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(serviceTopTask.id || serviceTopTask.taskId || serviceTopTask.createdAtUtc || serviceTopTask.title || ""))}','service')`) : "setDepartmentLens('service')"
+      },
+      {
+        key: "bdc",
+        label: "BDC",
+        headline: bdcTopTask ? (bdcTopTask.title || (bdcTopTask.from ? `Missed call from ${bdcTopTask.from}` : "Callback queue active")) : "Callback queue clear",
+        copy: bdcTopTask ? "Missed calls, callbacks, and reply SLA are visible from one manager surface." : "No BDC rescue or callback tasks open right now.",
+        tone: calls.some((call) => String(call.status || "").toLowerCase().includes("miss")) ? "danger" : bdcTasks.length ? "warn" : "good",
+        countLabel: `${bdcTasks.length} callbacks`,
+        ownerLabel: "BDC queue",
+        action: bdcTopTask ? (bdcTopTask.from ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(bdcTopTask.id || bdcTopTask.callId || bdcTopTask.createdAtUtc || bdcTopTask.from || ""))}','bdc')` : `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTopTask.id || bdcTopTask.taskId || bdcTopTask.createdAtUtc || bdcTopTask.title || ""))}','bdc')`) : "setDepartmentLens('bdc')"
+      },
+      {
+        key: "sales",
+        label: "Sales",
+        headline: salesTopTask ? (salesTopTask.title || salesTopTask.service || "Deal pressure active") : "Deal desk clear",
+        copy: salesTopTask ? "Deals, showroom commitments, and desk risk stay visible from the same customer record." : "No sales desk items are currently open.",
+        tone: salesTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : salesTasks.length || appointments.length ? "warn" : "good",
+        countLabel: `${salesTasks.length} deal steps`,
+        ownerLabel: appointments[0] ? "Visit queued" : "Sales queue",
+        action: salesTopTask ? (salesTopTask.service ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(salesTopTask.id || salesTopTask.appointmentId || salesTopTask.createdAtUtc || salesTopTask.date || ""))}','sales')` : `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTopTask.id || salesTopTask.taskId || salesTopTask.createdAtUtc || salesTopTask.title || ""))}','sales')`) : "setDepartmentLens('sales')"
+      },
+      {
+        key: "accounting",
+        label: "Accounting",
+        headline: accountingTopTask ? (accountingTopTask.title || "Invoice review active") : "Back office clear",
+        copy: accountingTopTask ? "Invoice review, statement aging, and ledger follow-up are surfaced in one accounting queue." : "No accounting review items are open right now.",
+        tone: accountingTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : accountingTasks.length ? "warn" : "good",
+        countLabel: `${accountingTasks.length} reviews`,
+        ownerLabel: "Accounting queue",
+        action: accountingTopTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTopTask.id || accountingTopTask.taskId || accountingTopTask.createdAtUtc || accountingTopTask.title || ""))}','accounting')` : "setDepartmentLens('accounting')"
+      }
+    ];
+    const focusedManagerLens = ["service", "bdc", "sales", "accounting"].includes(String(currentDepartmentLens || "").toLowerCase())
+      ? String(currentDepartmentLens || "").toLowerCase()
+      : "";
+    const visibleManagerCards = focusedManagerLens
+      ? managerCards.filter((card) => card.key === focusedManagerLens).map((card) => ({ ...card, focused: true }))
+      : managerCards;
+    const managerTitle = focusedManagerLens ? `${titleCase(focusedManagerLens)} Queue` : "Manager Queue";
+    const managerSubtitle = focusedManagerLens
+      ? `Focused ${titleCase(focusedManagerLens)} view with the live queue, owner posture, and next actionable item.`
+      : `${queueHeadline}. ${queueCopy}`;
+
     managerQueueEl.innerHTML = `
       <div class="customer360-manager-head">
         <div>
-          <h3>Manager Queue</h3>
-          <span>${escapeHtml(queueHeadline)}. ${escapeHtml(queueCopy)}</span>
+          <h3>${escapeHtml(managerTitle)}</h3>
+          <span>${escapeHtml(managerSubtitle)}</span>
         </div>
         <div class="customer360-manager-strip">
           <span class="customer360-manager-pill ${managerPressureTone}">${escapeHtml(overdueTasks.length ? `${overdueTasks.length} overdue` : urgentTasks.length ? `${urgentTasks.length} at risk` : "On track")}</span>
@@ -4180,47 +4233,8 @@ function renderCustomer360Detail() {
           <span class="customer360-manager-pill good">${escapeHtml(`${appointments.length} visits`)}</span>
         </div>
       </div>
-      <div class="customer360-manager-grid">
-        ${buildManagerQueueCard({
-          key: "service",
-          label: "Service Advisor",
-          headline: serviceTopTask ? (serviceTopTask.title || serviceTopTask.service || "Lane work active") : "Lane queue clear",
-          copy: serviceTopTask ? "Promised time, transport, and advisor follow-up are tied to the same service lane queue." : "No active advisor queue items right now.",
-          tone: serviceTasks.length ? (serviceTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : "warn") : appointments.length ? "info" : "good",
-          countLabel: `${serviceTasks.length} open`,
-          ownerLabel: appointments[0]?.advisor ? `Owner ${appointments[0].advisor}` : "Advisor queue",
-          action: serviceTopTask ? (serviceTopTask.service ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(serviceTopTask.id || serviceTopTask.appointmentId || serviceTopTask.createdAtUtc || serviceTopTask.date || ""))}','service')` : `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(serviceTopTask.id || serviceTopTask.taskId || serviceTopTask.createdAtUtc || serviceTopTask.title || ""))}','service')`) : "setDepartmentLens('service')"
-        })}
-        ${buildManagerQueueCard({
-          key: "bdc",
-          label: "BDC",
-          headline: bdcTopTask ? (bdcTopTask.title || (bdcTopTask.from ? `Missed call from ${bdcTopTask.from}` : "Callback queue active")) : "Callback queue clear",
-          copy: bdcTopTask ? "Missed calls, callbacks, and reply SLA are visible from one manager surface." : "No BDC rescue or callback tasks open right now.",
-          tone: calls.some((call) => String(call.status || "").toLowerCase().includes("miss")) ? "danger" : bdcTasks.length ? "warn" : "good",
-          countLabel: `${bdcTasks.length} callbacks`,
-          ownerLabel: "BDC queue",
-          action: bdcTopTask ? (bdcTopTask.from ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(bdcTopTask.id || bdcTopTask.callId || bdcTopTask.createdAtUtc || bdcTopTask.from || ""))}','bdc')` : `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTopTask.id || bdcTopTask.taskId || bdcTopTask.createdAtUtc || bdcTopTask.title || ""))}','bdc')`) : "setDepartmentLens('bdc')"
-        })}
-        ${buildManagerQueueCard({
-          key: "sales",
-          label: "Sales",
-          headline: salesTopTask ? (salesTopTask.title || salesTopTask.service || "Deal pressure active") : "Deal desk clear",
-          copy: salesTopTask ? "Deals, showroom commitments, and desk risk stay visible from the same customer record." : "No sales desk items are currently open.",
-          tone: salesTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : salesTasks.length || appointments.length ? "warn" : "good",
-          countLabel: `${salesTasks.length} deal steps`,
-          ownerLabel: appointments[0] ? "Visit queued" : "Sales queue",
-          action: salesTopTask ? (salesTopTask.service ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(salesTopTask.id || salesTopTask.appointmentId || salesTopTask.createdAtUtc || salesTopTask.date || ""))}','sales')` : `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTopTask.id || salesTopTask.taskId || salesTopTask.createdAtUtc || salesTopTask.title || ""))}','sales')`) : "setDepartmentLens('sales')"
-        })}
-        ${buildManagerQueueCard({
-          key: "accounting",
-          label: "Accounting",
-          headline: accountingTopTask ? (accountingTopTask.title || "Invoice review active") : "Back office clear",
-          copy: accountingTopTask ? "Invoice review, statement aging, and ledger follow-up are surfaced in one accounting queue." : "No accounting review items are open right now.",
-          tone: accountingTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : accountingTasks.length ? "warn" : "good",
-          countLabel: `${accountingTasks.length} reviews`,
-          ownerLabel: "Accounting queue",
-          action: accountingTopTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTopTask.id || accountingTopTask.taskId || accountingTopTask.createdAtUtc || accountingTopTask.title || ""))}','accounting')` : "setDepartmentLens('accounting')"
-        })}
+      <div class="customer360-manager-grid ${focusedManagerLens ? "focused" : ""}">
+        ${visibleManagerCards.map((card) => buildManagerQueueCard(card)).join("")}
       </div>
     `;
   }

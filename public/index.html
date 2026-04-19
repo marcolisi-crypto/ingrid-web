@@ -268,8 +268,10 @@
     .customer360-manager-head span{display:block;margin-top:4px;color:#96acd0;font-size:12px;line-height:1.45}
     .customer360-manager-strip{display:flex;gap:8px;flex-wrap:wrap}
     .customer360-manager-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .customer360-manager-grid.focused{grid-template-columns:minmax(0,1fr)}
     .customer360-manager-card{padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#18243b 0%,#131f33 100%);display:grid;gap:10px;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
     .customer360-manager-card:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.34);box-shadow:0 12px 20px rgba(0,0,0,.18)}
+    .customer360-manager-card.focused{padding:14px 16px;background:radial-gradient(circle at top right, rgba(55,102,214,.14), transparent 34%),linear-gradient(180deg,#1a2740 0%,#132034 100%)}
     .customer360-manager-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
     .customer360-manager-card h4{margin:0;color:#f4f8ff;font-size:14px}
     .customer360-manager-card p{margin:0;color:#9eb2d2;font-size:12px;line-height:1.45}
