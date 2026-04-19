@@ -1544,6 +1544,15 @@ function startLoanerTask() {
   });
 }
 
+function startVehicleGeoMovementNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nGeo / movement update:\n- Current zone:\n- Next destination:\n- Dispatch or lane note:\n- Responsible team:`,
+    status: "Vehicle movement note template loaded."
+  });
+}
+
 function hasKeywordMatch(items = [], keywords = []) {
   return items.some((item) => {
     const haystack = `${item.title || ""} ${item.description || ""} ${item.body || ""}`.toLowerCase();
@@ -1937,6 +1946,26 @@ function openVehicleOpsContext(mode = "signals") {
     setCustomer360ComposerMode("note");
   }
   renderCustomer360Timeline();
+}
+
+function openVehicleRailAction(mode = "loaner") {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer || !vehicle) return;
+
+  if (mode === "loaner") {
+    setDepartmentLens("service");
+    startLoanerTask();
+    setCustomer360ComposerStatus("Loaner workflow opened from the vehicle rail.", "success");
+    return;
+  }
+
+  if (mode === "geo") {
+    setDepartmentLens("service");
+    startVehicleGeoMovementNote();
+    setCustomer360ComposerStatus("Geo / movement workflow opened from the vehicle rail.", "success");
+    return;
+  }
 }
 
 function triggerJourneyFeedback(stageKey = "", message = "") {
@@ -3392,12 +3421,12 @@ function renderCustomer360Detail() {
         </div>
       </div>
       <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
-      <div class="customer360-vehicle-line"><span>Geo:</span><strong>${escapeHtml(vehicle.status || "Inventory Live")}</strong></div>
+      <div class="customer360-vehicle-line" style="cursor:pointer;" onclick="openVehicleRailAction('geo')"><span>Geo:</span><strong>${escapeHtml(vehicle.status || "Inventory Live")}</strong></div>
       <div class="customer360-vehicle-line"><span>Battery Health:</span><strong class="customer360-vehicle-good">${escapeHtml(batteryState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Recalls:</span><strong>${escapeHtml(recallState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Maintenance:</span><strong class="customer360-vehicle-warn">${escapeHtml(maintenanceState === "Scheduled" ? "Due Soon" : maintenanceState)}</strong></div>
-      <div class="customer360-vehicle-line"><span>Loaner:</span><strong>${appointments.length ? "Potentially needed" : "Not requested"}</strong></div>
-      <div class="customer360-geo-card">
+      <div class="customer360-vehicle-line" style="cursor:pointer;" onclick="openVehicleRailAction('loaner')"><span>Loaner:</span><strong>${appointments.length ? "Potentially needed" : "Not requested"}</strong></div>
+      <div class="customer360-geo-card" style="cursor:pointer;" onclick="openVehicleRailAction('geo')">
         <strong>${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</strong>
         <span>Geo-enabled inventory anchor for ${escapeHtml(vehicleDisplayName(vehicle))} tied to the VIN archive, service lane, and technician dispatch flow.</span>
       </div>
