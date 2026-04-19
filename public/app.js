@@ -1390,6 +1390,14 @@ function getJourneyStageOwner(stageKey = "", status = "") {
 }
 
 function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appointments = []) {
+  const taskMatchesStage = (task, key) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    if (key === "technicians") return haystack.includes("[technician]");
+    if (key === "parts") return haystack.includes("[parts]");
+    if (key === "accounting") return haystack.includes("[accounting]");
+    return false;
+  };
+
   if (stageKey === "service") {
     const appointment = appointments[0];
     if (appointment) {
@@ -1413,6 +1421,21 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
     }
   }
 
+  const stageTasks = tasks.filter((item) => taskMatchesStage(item, stageKey));
+  const preferredOpenTask = stageTasks.find((item) => String(item.status || "").toLowerCase() !== "completed");
+  const latestStageTask = preferredOpenTask || stageTasks[0];
+
+  if (latestStageTask) {
+    const isAutoCreated = String(latestStageTask.description || "").toLowerCase().includes("auto-created");
+    return {
+      label: isAutoCreated ? "Auto handoff task" : "Latest task",
+      detail: `${String(latestStageTask.title || "").replace(/\[(technician|parts|accounting)\]/ig, "").trim() || "Tagged task"}`,
+      interactive: true,
+      kind: "tasks",
+      sourceId: latestStageTask.id || latestStageTask.taskId || latestStageTask.createdAtUtc || latestStageTask.title
+    };
+  }
+
   const tag = stageKey === "technicians"
     ? "[technician]"
     : stageKey === "parts"
@@ -1422,16 +1445,6 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         : "";
 
   if (tag) {
-    const task = tasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes(tag));
-    if (task) {
-      return {
-        label: "Latest task",
-        detail: `${String(task.title || "").replace(new RegExp(tag, "i"), "").trim() || "Tagged task"}`,
-        interactive: true,
-        kind: "tasks",
-        sourceId: task.id || task.taskId || task.createdAtUtc || task.title
-      };
-    }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes(tag));
     if (note) {
       return {
