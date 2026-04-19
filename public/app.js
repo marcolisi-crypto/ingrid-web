@@ -1825,6 +1825,29 @@ function openJourneyArtifact(stageKey = "service") {
   document.getElementById("customer360ComposerBody")?.focus();
 }
 
+function openCustomer360FocusedArtifact(kind = "notes", sourceId = "", lens = currentDepartmentLens) {
+  const normalizedKind = normalizeCustomer360TimelineFilter(kind);
+  const id = String(sourceId || "");
+  if (!id) return;
+
+  if (lens) setDepartmentLens(lens);
+  currentCustomer360Focus = { kind: normalizedKind, sourceId: id };
+  currentCustomer360TimelineFilter = normalizedKind;
+  document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+    item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+  });
+
+  if (normalizedKind === "appointments") {
+    setCustomer360ComposerMode("appointment");
+  } else if (normalizedKind === "tasks") {
+    setCustomer360ComposerMode("task");
+  } else {
+    setCustomer360ComposerMode("note");
+  }
+
+  renderCustomer360Timeline();
+}
+
 function triggerJourneyFeedback(stageKey = "", message = "") {
   currentJourneyFeedbackStage = stageKey;
   currentJourneyFeedbackMessage = message;
@@ -3135,13 +3158,13 @@ function renderCustomer360Detail() {
         <span>Geo-enabled inventory anchor for ${escapeHtml(vehicleDisplayName(vehicle))} tied to the VIN archive, service lane, and technician dispatch flow.</span>
       </div>
       ${latestVehiclePresentation ? `
-        <div class="customer360-geo-card">
+        <div class="customer360-geo-card" style="cursor:pointer;" onclick="openCustomer360FocusedArtifact('notes','${escapeHtml(String(latestVehicleArtifact?.id || ""))}','home')">
           <strong>Latest Health Event</strong>
           <span>${escapeHtml(latestVehiclePresentation.body.split("\n")[0] || "Vehicle health logged.")}</span>
         </div>
       ` : ""}
       ${latestArchivePresentation ? `
-        <div class="customer360-geo-card">
+        <div class="customer360-geo-card" style="cursor:pointer;" onclick="openCustomer360FocusedArtifact('notes','${escapeHtml(String(latestArchiveArtifact?.id || ""))}','home')">
           <strong>Latest VIN Archive Entry</strong>
           <span>${escapeHtml(latestArchivePresentation.body.split("\n")[0] || "VIN archive updated.")}</span>
         </div>
@@ -3216,16 +3239,22 @@ function renderCustomer360Detail() {
 
   if (filesPanelEl) {
     const archiveItems = buildLensArchiveItems(vehicle, customer, calls, currentCustomerNotes, appointments);
-    const liveArchiveItems = [
+      const liveArchiveItems = [
       latestArchivePresentation ? {
         icon: "🗂",
         title: "Latest VIN Entry",
-        meta: `${(latestArchivePresentation.body.split("\n")[0] || "VIN archive updated.").slice(0, 72)}`
+        meta: `${(latestArchivePresentation.body.split("\n")[0] || "VIN archive updated.").slice(0, 72)}`,
+        sourceId: latestArchiveArtifact?.id || "",
+        kind: "notes",
+        lens: "home"
       } : null,
       latestVehiclePresentation ? {
         icon: "🩺",
         title: "Latest Health Event",
-        meta: `${(latestVehiclePresentation.body.split("\n")[0] || "Vehicle health event recorded.").slice(0, 72)}`
+        meta: `${(latestVehiclePresentation.body.split("\n")[0] || "Vehicle health event recorded.").slice(0, 72)}`,
+        sourceId: latestVehicleArtifact?.id || "",
+        kind: "notes",
+        lens: "home"
       } : null,
       ...archiveItems
     ].filter(Boolean).slice(0, 5);
@@ -3240,7 +3269,7 @@ function renderCustomer360Detail() {
       </div>
       <div class="customer360-archive-list">
         ${liveArchiveItems.map((item) => `
-          <div class="customer360-archive-item">
+          <div class="customer360-archive-item" ${item.sourceId ? `style="cursor:pointer;" onclick="openCustomer360FocusedArtifact('${escapeHtml(String(item.kind || "notes"))}','${escapeHtml(String(item.sourceId || ""))}','${escapeHtml(String(item.lens || "home"))}')"` : ""}>
             <div style="display:flex;align-items:center;gap:12px;min-width:0;">
               <div class="customer360-archive-icon">${item.icon}</div>
               <div>
