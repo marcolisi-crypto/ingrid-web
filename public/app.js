@@ -448,6 +448,7 @@ function categorizeCustomer360TimelineItem(item) {
   if (type.includes("phone") || type.includes("call") || eventType.includes("call")) return "calls";
   if (type.includes("sms") || eventType.includes("sms") || eventType.includes("message")) return "sms";
   if (eventType.includes("journey_assignment")) return "activity";
+  if (eventType.includes("vehicle_health") || eventType.includes("vehicle_movement") || eventType.includes("vin_archive")) return "notes";
   if (type.includes("note") || type.includes("transcript") || eventType.includes("note")) return "notes";
   if (type.includes("task") || eventType.includes("task")) return "tasks";
   if (type.includes("appointment") || type.includes("service event") || eventType.includes("appointment")) return "appointments";
@@ -473,8 +474,30 @@ function inferVehicleGeoLabel(vehicle, customer) {
   return zones[seed % zones.length];
 }
 
-function getTaggedTimelinePresentation(body = "", fallbackType = "Note", fallbackSubcopy = "Internal") {
+function getTaggedTimelinePresentation(body = "", fallbackType = "Note", fallbackSubcopy = "Internal", explicitEventType = "") {
   const normalized = String(body || "").toLowerCase();
+  const normalizedEventType = String(explicitEventType || "").toLowerCase();
+  if (normalizedEventType === "vehicle_health") {
+    return {
+      type: "Vehicle Health",
+      body: String(body || "").trim(),
+      subcopy: "Vehicle intelligence"
+    };
+  }
+  if (normalizedEventType === "vehicle_movement") {
+    return {
+      type: "Vehicle Movement",
+      body: String(body || "").trim(),
+      subcopy: "Vehicle location flow"
+    };
+  }
+  if (normalizedEventType === "vin_archive") {
+    return {
+      type: "VIN Archive",
+      body: String(body || "").trim(),
+      subcopy: "VIN-specific record"
+    };
+  }
   if (normalized.startsWith("[vehicle]")) {
     const cleanedBody = String(body || "").replace(/\[vehicle\]\s*/i, "").trim();
     const isMovement = cleanedBody.toLowerCase().includes("geo / movement update") || cleanedBody.toLowerCase().includes("current zone");
@@ -681,6 +704,20 @@ function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appoint
       meta: `Next lane touchpoint ${serviceDate}`
     }
   ];
+}
+
+function inferExplicitVehicleTimelineEvent(body = "") {
+  const normalized = String(body || "").trim().toLowerCase();
+  if (normalized.startsWith("[vehicle]")) {
+    if (normalized.includes("geo / movement update") || normalized.includes("current zone")) {
+      return { eventType: "vehicle_movement", title: "Vehicle movement" };
+    }
+    return { eventType: "vehicle_health", title: "Vehicle health" };
+  }
+  if (normalized.startsWith("[archive]")) {
+    return { eventType: "vin_archive", title: "VIN archive" };
+  }
+  return null;
 }
 
 function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
@@ -3210,6 +3247,27 @@ async function createCustomer360Note() {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to create note");
+
+  const explicitTimeline = inferExplicitVehicleTimelineEvent(body);
+  if (explicitTimeline) {
+    await fetch("/.netlify/functions/timeline-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: customer.id,
+        vehicleId: vehicle?.id || null,
+        eventType: explicitTimeline.eventType,
+        title: explicitTimeline.title,
+        body: explicitTimeline.eventType === "vin_archive"
+          ? body.replace(/\[archive\]\s*/i, "").trim()
+          : body.replace(/\[vehicle\]\s*/i, "").trim(),
+        department: currentDepartmentLens || "service",
+        sourceSystem: "ingrid.web",
+        sourceId: data?.note?.id || data?.id || ""
+      })
+    }).catch(() => null);
+  }
+
   return data;
 }
 
@@ -3810,7 +3868,12 @@ function renderCustomer360Detail() {
     const eventType = String(event.eventType || "activity").toLowerCase();
     const isJourneyAssignment = eventType === "journey_assignment";
     const department = titleCase(event.department || event.sourceSystem || "ingrid");
-    const tagged = getTaggedTimelinePresentation(event.body || "", titleCase(event.title || event.eventType || "Timeline Event"), department);
+    const tagged = getTaggedTimelinePresentation(
+      event.body || "",
+      titleCase(event.title || event.eventType || "Timeline Event"),
+      department,
+      event.eventType || ""
+    );
     return {
       type: isJourneyAssignment ? "Ownership Change" : tagged.type,
       eventType: event.eventType || "activity",
@@ -3858,7 +3921,8 @@ function renderCustomer360Detail() {
     const tagged = getTaggedTimelinePresentation(
       currentCustomerNotes[0].body || "",
       "Note",
-      titleCase(currentCustomerNotes[0].noteType || "internal")
+      titleCase(currentCustomerNotes[0].noteType || "internal"),
+      ""
     );
     timelineCards.push({
       type: tagged.type,
