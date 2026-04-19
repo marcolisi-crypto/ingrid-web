@@ -23,16 +23,16 @@ let currentCustomer360TimelineFilter = "all";
 let currentCustomer360ComposerMode = "note";
 
 const DEPARTMENT_LENSES = {
-  home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"] },
-  sales: { name: "Sales", copy: "Lead, quote, trade, and deal actions stay anchored to the same customer and vehicle timeline.", summaryTitle: "Sales Summary", timelineLabel: "Sales lens", actions: ["Start Deal", "Log Test Drive", "Send Quote"] },
-  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"] },
-  bdc: { name: "BDC", copy: "Inbound calls, SMS, queues, and campaign follow-ups work from the same contact record.", summaryTitle: "BDC Summary", timelineLabel: "BDC lens", actions: ["Open Call Queue", "Send Follow-up", "Start Campaign"] },
-  technicians: { name: "Technicians", copy: "Open jobs, inspection updates, and technician notes remain linked to the customer and VIN timeline.", summaryTitle: "Tech Summary", timelineLabel: "Technician lens", actions: ["Start Job", "Complete Job", "Add Internal Note"] },
-  fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"] },
-  parts: { name: "Parts", copy: "Parts demand, special orders, and vehicle-linked parts history remain connected to service work.", summaryTitle: "Parts Summary", timelineLabel: "Parts lens", actions: ["Order Part", "Assign to RO", "Check Availability"] },
-  accounting: { name: "Accounting", copy: "Invoices, payouts, and payment events will surface against the same customer and vehicle timeline.", summaryTitle: "Accounting Summary", timelineLabel: "Accounting lens", actions: ["Post Payment", "Review Invoice", "Export Statement"] },
-  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"] },
-  settings: { name: "Settings", copy: "Role-based menus, permissions, defaults, and store-level configuration will lock this shell down later.", summaryTitle: "Settings Summary", timelineLabel: "Settings lens", actions: ["Manage Roles", "Update Defaults", "Review Access"] }
+  home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
+  sales: { name: "Sales", copy: "Lead, quote, trade, and deal actions stay anchored to the same customer and vehicle timeline.", summaryTitle: "Sales Summary", timelineLabel: "Sales lens", actions: ["Start Deal", "Log Test Drive", "Send Quote"], dashboardTitle: "Sales 360°", primaryPanelTitle: "Opportunity Tasks", secondaryPanelTitle: "Deal Notes", railTitle: "Sales Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
+  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"], dashboardTitle: "Service Advisor 360°", primaryPanelTitle: "Lane Tasks", secondaryPanelTitle: "Advisor Notes", railTitle: "Service Lane", archiveTitle: "VIN Archive", defaultFilter: "appointments", composerMode: "appointment" },
+  bdc: { name: "BDC", copy: "Inbound calls, SMS, queues, and campaign follow-ups work from the same contact record.", summaryTitle: "BDC Summary", timelineLabel: "BDC lens", actions: ["Open Call Queue", "Send Follow-up", "Start Campaign"], dashboardTitle: "BDC 360°", primaryPanelTitle: "Follow-Ups", secondaryPanelTitle: "Conversation Notes", railTitle: "Communications Queue", archiveTitle: "Customer Files", defaultFilter: "calls", composerMode: "task" },
+  technicians: { name: "Technicians", copy: "Open jobs, inspection updates, and technician notes remain linked to the customer and VIN timeline.", summaryTitle: "Tech Summary", timelineLabel: "Technician lens", actions: ["Start Job", "Complete Job", "Add Internal Note"], dashboardTitle: "Technician 360°", primaryPanelTitle: "Job Tasks", secondaryPanelTitle: "Inspection Notes", railTitle: "Work Bay", archiveTitle: "VIN Archive", defaultFilter: "tasks", composerMode: "note" },
+  fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"], dashboardTitle: "F&I 360°", primaryPanelTitle: "Closing Tasks", secondaryPanelTitle: "Funding Notes", railTitle: "Delivery Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
+  parts: { name: "Parts", copy: "Parts demand, special orders, and vehicle-linked parts history remain connected to service work.", summaryTitle: "Parts Summary", timelineLabel: "Parts lens", actions: ["Order Part", "Assign to RO", "Check Availability"], dashboardTitle: "Parts 360°", primaryPanelTitle: "Parts Tasks", secondaryPanelTitle: "Order Notes", railTitle: "Parts Runner", archiveTitle: "VIN Archive", defaultFilter: "activity", composerMode: "task" },
+  accounting: { name: "Accounting", copy: "Invoices, payouts, and payment events will surface against the same customer and vehicle timeline.", summaryTitle: "Accounting Summary", timelineLabel: "Accounting lens", actions: ["Post Payment", "Review Invoice", "Export Statement"], dashboardTitle: "Accounting 360°", primaryPanelTitle: "Accounting Tasks", secondaryPanelTitle: "Ledger Notes", railTitle: "Payment Desk", archiveTitle: "Financial File", defaultFilter: "activity", composerMode: "note" },
+  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"], dashboardTitle: "Executive 360°", primaryPanelTitle: "Strategic Tasks", secondaryPanelTitle: "Leadership Notes", railTitle: "Performance Snapshot", archiveTitle: "Executive File", defaultFilter: "all", composerMode: "note" },
+  settings: { name: "Settings", copy: "Role-based menus, permissions, defaults, and store-level configuration will lock this shell down later.", summaryTitle: "Settings Summary", timelineLabel: "Settings lens", actions: ["Manage Roles", "Update Defaults", "Review Access"], dashboardTitle: "Settings 360°", primaryPanelTitle: "Role Tasks", secondaryPanelTitle: "Config Notes", railTitle: "Access Control", archiveTitle: "Platform Archive", defaultFilter: "activity", composerMode: "note" }
 };
 
 const COMM_SCRIPT_LIBRARY = [
@@ -477,6 +477,123 @@ function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appoint
   ];
 }
 
+function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
+  if (currentDepartmentLens === "sales") {
+    return [
+      { icon: "💰", title: "Quote Pack", meta: `${vehicleDisplayName(vehicle)} pricing worksheet` },
+      { icon: "🚗", title: "Trade Walkaround", meta: `${calls.length || 1} sales touchpoints logged` },
+      { icon: "🧾", title: "Credit + F&I Prep", meta: `${customerDisplayName(customer)} delivery checklist` },
+      { icon: "📸", title: "Merchandising Media", meta: `Vehicle media set ready for handoff` }
+    ];
+  }
+
+  if (currentDepartmentLens === "bdc") {
+    return [
+      { icon: "💬", title: "Conversation History", meta: `${calls.length} calls/SMS linked to this customer` },
+      { icon: "📋", title: "Lead Notes", meta: `${notes.length || 1} notes available for the next agent` },
+      { icon: "📞", title: "Callback Packet", meta: `Preferred number ${customer?.phones?.[0] || "not set"}` },
+      { icon: "🗂", title: "Customer Profile", meta: `${customerDisplayName(customer)} communication archive` }
+    ];
+  }
+
+  return buildVinArchiveItems(vehicle, customer, calls, notes, appointments);
+}
+
+function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [], calls = []) {
+  const nextAppointment = appointments[0];
+  const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+
+  if (currentDepartmentLens === "bdc") {
+    return `
+      <div class="customer360-service-card">
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Queue Status</div>
+            <div class="customer360-service-value">${missedCalls ? `${missedCalls} missed contact${missedCalls === 1 ? "" : "s"}` : "Live conversation ready"}</div>
+            <div class="customer360-service-copy">BDC should keep calls, SMS, and follow-up tasks moving from this one record.</div>
+          </div>
+          <span class="customer360-status-pill ${missedCalls ? "warn" : "good"}">${missedCalls ? "Needs reply" : "Active"}</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Next Outreach</div>
+            <div class="customer360-service-value">${escapeHtml(topTask?.title || "Send follow-up" )}</div>
+            <div class="customer360-service-copy">${escapeHtml(topTask?.description || "Use SMS or voice to move the customer into a confirmed next step.")}</div>
+          </div>
+          <span class="customer360-status-pill info">BDC</span>
+        </div>
+        <div class="customer360-service-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Follow-Up</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())">Open SMS Dock</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "sales") {
+    return `
+      <div class="customer360-service-card">
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Opportunity</div>
+            <div class="customer360-service-value">${vehicle ? vehicleDisplayName(vehicle) : "Customer opportunity"}</div>
+            <div class="customer360-service-copy">Sales should keep quote, trade, and test-drive actions tied to the same customer and vehicle record.</div>
+          </div>
+          <span class="customer360-status-pill good">Open</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Next Step</div>
+            <div class="customer360-service-value">${nextAppointment ? "Confirmed visit" : "Schedule test drive"}</div>
+            <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Move this lead toward an in-store appointment or quote review."}</div>
+          </div>
+          <span class="customer360-status-pill info">Sales</span>
+        </div>
+        <div class="customer360-service-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Visit</button>
+        </div>
+      </div>
+    `;
+  }
+
+  const loanerState = String(getDepartmentLensConfig().name).toLowerCase().includes("service") || !!nextAppointment
+    ? "Suggested"
+    : "Standby";
+  return `
+    <div class="customer360-service-card">
+      <div class="customer360-service-row">
+        <div>
+          <div class="customer360-service-label">Lane Status</div>
+          <div class="customer360-service-value">${nextAppointment ? "Appointment Ready" : "Pre-Arrival"}</div>
+          <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
+        </div>
+        <span class="customer360-status-pill ${nextAppointment ? "good" : "info"}">${nextAppointment ? "Booked" : "Open"}</span>
+      </div>
+      <div class="customer360-service-row">
+        <div>
+          <div class="customer360-service-label">Loaner Desk</div>
+          <div class="customer360-service-value">${loanerState}</div>
+          <div class="customer360-service-copy">${appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
+        </div>
+        <span class="customer360-status-pill ${loanerState === "Suggested" ? "warn" : "info"}">${loanerState}</span>
+      </div>
+      <div class="customer360-service-row">
+        <div>
+          <div class="customer360-service-label">Open Follow-Up</div>
+          <div class="customer360-service-value">${escapeHtml(topTask?.title || "No active task")}</div>
+          <div class="customer360-service-copy">${escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
+        </div>
+        ${topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
+      </div>
+      <div class="customer360-service-actions">
+        ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Open Service Composer</button>
+      </div>
+    </div>
+  `;
+}
+
 function inferVehicleBatteryHealth(vehicle, appointments = []) {
   if (!vehicle) return "Unknown";
   if (typeof vehicle.batteryHealth === "number") return `${vehicle.batteryHealth}%`;
@@ -609,6 +726,7 @@ async function refreshSelectedCustomer360() {
 }
 
 function renderCustomer360() {
+  syncCustomer360LensUi();
   renderCustomer360List();
   renderCustomer360Detail();
 }
@@ -686,19 +804,18 @@ function formatPhoneActionLink(phone, label = "", mode = "call") {
   return `<a href="#" class="phone-link" data-phone="${escapeHtml(normalized)}" data-mode="${escapeHtml(mode)}">📞 ${escapeHtml(display)}</a>`;
 }
 
-function setDepartmentLens(department = "home") {
-  currentDepartmentLens = DEPARTMENT_LENSES[department] ? department : "home";
+function syncCustomer360LensUi() {
   const config = getDepartmentLensConfig();
-
-  document.querySelectorAll(".department-menu-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.department === currentDepartmentLens);
-  });
-
   const contextName = document.getElementById("customer360ContextName");
   const contextCopy = document.getElementById("customer360ContextCopy");
   const toolbarMeta = document.getElementById("customer360ToolbarMeta");
   const summaryTitle = document.getElementById("customer360SummaryTitle");
   const timelineLens = document.getElementById("customer360TimelineLens");
+  const mainTitle = document.getElementById("customer360MainTitle");
+  const primaryPanelTitle = document.getElementById("customer360PrimaryPanelTitle");
+  const secondaryPanelTitle = document.getElementById("customer360SecondaryPanelTitle");
+  const railTitle = document.getElementById("customer360RailTitle");
+  const archiveTitle = document.getElementById("customer360ArchiveTitle");
   const actions = [
     document.getElementById("customer360ActionOne"),
     document.getElementById("customer360ActionTwo"),
@@ -710,12 +827,34 @@ function setDepartmentLens(department = "home") {
   if (toolbarMeta) toolbarMeta.textContent = `Pinnacle Auto Group • ${config.name}`;
   if (summaryTitle) summaryTitle.textContent = config.summaryTitle;
   if (timelineLens) timelineLens.textContent = config.timelineLabel;
+  if (mainTitle) mainTitle.textContent = config.dashboardTitle || "Customer 360° Dashboard";
+  if (primaryPanelTitle) primaryPanelTitle.textContent = config.primaryPanelTitle || "Tasks";
+  if (secondaryPanelTitle) secondaryPanelTitle.textContent = config.secondaryPanelTitle || "Notes";
+  if (railTitle) railTitle.textContent = config.railTitle || "Service + Loaner";
+  if (archiveTitle) archiveTitle.textContent = config.archiveTitle || "VIN Archive";
+
   actions.forEach((el, index) => {
     if (!el) return;
-    const iconEl = el.querySelector('.customer360-action-icon');
+    const iconEl = el.querySelector(".customer360-action-icon");
     const label = config.actions[index] || "Action";
     el.innerHTML = `<span><span class="customer360-action-icon">${iconEl?.textContent || "◔"}</span> ${escapeHtml(label)}</span><span>›</span>`;
   });
+}
+
+function setDepartmentLens(department = "home") {
+  currentDepartmentLens = DEPARTMENT_LENSES[department] ? department : "home";
+  const config = getDepartmentLensConfig();
+
+  document.querySelectorAll(".department-menu-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.department === currentDepartmentLens);
+  });
+  syncCustomer360LensUi();
+  currentCustomer360TimelineFilter = normalizeCustomer360TimelineFilter(config.defaultFilter || "all");
+  document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+    item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+  });
+  setCustomer360ComposerMode(config.composerMode || "note");
+  renderCustomer360();
 }
 
 function initDepartmentMenu() {
@@ -1082,7 +1221,7 @@ function renderCustomer360Detail() {
 
   if (!customer) {
     currentCustomer360TimelineCards = [];
-    if (summaryTitleEl) summaryTitleEl.textContent = "AI Summary";
+    if (summaryTitleEl) summaryTitleEl.textContent = getDepartmentLensConfig().summaryTitle || "AI Summary";
     if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
     if (vehicleTitleEl) vehicleTitleEl.textContent = "No linked vehicle";
@@ -1097,7 +1236,7 @@ function renderCustomer360Detail() {
   }
 
   if (summaryTitleEl) {
-    summaryTitleEl.textContent = `AI Summary: ${customerDisplayName(customer)}`;
+    summaryTitleEl.textContent = `${getDepartmentLensConfig().summaryTitle || "AI Summary"}: ${customerDisplayName(customer)}`;
   }
 
   if (customerCardEl) {
@@ -1173,65 +1312,43 @@ function renderCustomer360Detail() {
   }
 
   if (tasksBoardEl) {
-    tasksBoardEl.innerHTML = tasks.length ? tasks.slice(0, 3).map((task) => `
+    const lensTasks = currentDepartmentLens === "sales"
+      ? [...openTasks, ...tasks.filter((task) => String(task.status || "").toLowerCase() === "completed")].slice(0, 3)
+      : openTasks.slice(0, 3);
+    const emptyTaskCopy = currentDepartmentLens === "bdc"
+      ? "No BDC follow-ups queued yet."
+      : currentDepartmentLens === "sales"
+      ? "No deal tasks linked yet."
+      : "No tasks linked yet.";
+    tasksBoardEl.innerHTML = lensTasks.length ? lensTasks.map((task) => `
       <div class="customer360-panel-item">
         <span>${escapeHtml(task.title || "Task")}</span>
         <button class="customer360-panel-action">•</button>
       </div>
-    `).join("") : `<div class="customer360-empty">No tasks linked yet.</div>`;
+    `).join("") : `<div class="customer360-empty">${emptyTaskCopy}</div>`;
   }
 
   if (notesBoardEl) {
+    const noteEmptyCopy = currentDepartmentLens === "sales"
+      ? "No deal notes captured yet."
+      : currentDepartmentLens === "bdc"
+      ? "No conversation notes captured yet."
+      : "No notes captured yet.";
     notesBoardEl.innerHTML = currentCustomerNotes.length ? currentCustomerNotes.slice(0, 2).map((note) => `
       <div class="customer360-panel-item">
         <span>${escapeHtml((note.body || "").slice(0, 60) || "Internal note")}</span>
         <button class="customer360-panel-action">•</button>
       </div>
-    `).join("") : `<div class="customer360-empty">No notes captured yet.</div>`;
+    `).join("") : `<div class="customer360-empty">${noteEmptyCopy}</div>`;
   }
 
   if (serviceLaneEl) {
     const topTask = openTasks[0];
-    const nextAppointment = appointments[0];
-    const loanerState = String(getDepartmentLensConfig().name).toLowerCase().includes("service") || maintenanceState === "Scheduled" || !!nextAppointment
-      ? "Suggested"
-      : "Standby";
-    serviceLaneEl.innerHTML = `
-      <div class="customer360-service-card">
-        <div class="customer360-service-row">
-          <div>
-            <div class="customer360-service-label">Lane Status</div>
-            <div class="customer360-service-value">${nextAppointment ? "Appointment Ready" : "Pre-Arrival"}</div>
-            <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
-          </div>
-          <span class="customer360-status-pill ${nextAppointment ? "good" : "info"}">${nextAppointment ? "Booked" : "Open"}</span>
-        </div>
-        <div class="customer360-service-row">
-          <div>
-            <div class="customer360-service-label">Loaner Desk</div>
-            <div class="customer360-service-value">${loanerState}</div>
-            <div class="customer360-service-copy">${appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
-          </div>
-          <span class="customer360-status-pill ${loanerState === "Suggested" ? "warn" : "info"}">${loanerState}</span>
-        </div>
-        <div class="customer360-service-row">
-          <div>
-            <div class="customer360-service-label">Open Follow-Up</div>
-            <div class="customer360-service-value">${escapeHtml(topTask?.title || "No active task")}</div>
-            <div class="customer360-service-copy">${escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
-          </div>
-          ${topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
-        </div>
-        <div class="customer360-service-actions">
-          ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Open Service Composer</button>
-        </div>
-      </div>
-    `;
+    serviceLaneEl.innerHTML = buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments, calls);
   }
 
   if (filesPanelEl) {
-    const archiveItems = buildVinArchiveItems(vehicle, customer, calls, currentCustomerNotes, appointments);
+    const archiveItems = buildLensArchiveItems(vehicle, customer, calls, currentCustomerNotes, appointments);
     filesPanelEl.innerHTML = `
       <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
         <span>${escapeHtml(vehicle?.vin || "VIN pending")}</span>
