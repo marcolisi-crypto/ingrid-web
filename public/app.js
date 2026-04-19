@@ -622,6 +622,40 @@ function openVehicleJourneyStage(stageKey = "health") {
   }
 }
 
+function getVehicleJourneyNextAction(state) {
+  const current = state?.current?.key || "health";
+  if (current === "health") {
+    return {
+      stageKey: "health",
+      title: "Open service follow-up",
+      detail: "Turn the latest vehicle health signal into an advisor-owned next step.",
+      label: "Review Health"
+    };
+  }
+  if (current === "movement") {
+    return {
+      stageKey: "movement",
+      title: "Log movement update",
+      detail: "Capture the next zone, dispatch note, or lane destination for this VIN.",
+      label: "Open Movement"
+    };
+  }
+  if (current === "service") {
+    return {
+      stageKey: "service",
+      title: "Advance service work",
+      detail: "Open the active lane, loaner, or visit workflow tied to this vehicle.",
+      label: "Open Service"
+    };
+  }
+  return {
+    stageKey: "archive",
+    title: "Work archive evidence",
+    detail: "Turn the latest VIN evidence into a linked task or documentation follow-up.",
+    label: "Open Archive"
+  };
+}
+
 function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
   const vinLabel = vehicle?.vin || "VIN pending";
   const serviceDate = appointments[0]?.date || "Next available";
@@ -3473,6 +3507,7 @@ function renderCustomer360Detail() {
     ? formatDisplayDateTime(lastVehicleOpsAt).replace(/^Today at\s*/i, "")
     : "Now";
   const vehicleJourney = buildVehicleJourneyState(currentCustomerNotes, tasks, appointments);
+  const vehicleJourneyNext = getVehicleJourneyNextAction(vehicleJourney);
   const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
@@ -3611,6 +3646,14 @@ function renderCustomer360Detail() {
               <span>${escapeHtml(stage.detail)}</span>
             </div>
           `).join("")}
+        </div>
+        <div class="customer360-journey-next" style="margin-top:10px;padding:10px 12px;">
+          <div class="customer360-journey-next-copy">
+            <small>VIN Next Best Action</small>
+            <strong>${escapeHtml(vehicleJourneyNext.title)}</strong>
+            <span>${escapeHtml(vehicleJourneyNext.detail)}</span>
+          </div>
+          <button type="button" class="customer360-journey-next-btn" onclick="openVehicleJourneyStage('${escapeHtml(vehicleJourneyNext.stageKey || "health")}')">${escapeHtml(vehicleJourneyNext.label)}</button>
         </div>
       </div>
       <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
