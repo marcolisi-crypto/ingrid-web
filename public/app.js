@@ -473,6 +473,29 @@ function inferVehicleGeoLabel(vehicle, customer) {
   return zones[seed % zones.length];
 }
 
+function getTaggedTimelinePresentation(body = "", fallbackType = "Note", fallbackSubcopy = "Internal") {
+  const normalized = String(body || "").toLowerCase();
+  if (normalized.startsWith("[vehicle]")) {
+    return {
+      type: "Vehicle Health",
+      body: String(body || "").replace(/\[vehicle\]\s*/i, "").trim(),
+      subcopy: "Vehicle intelligence"
+    };
+  }
+  if (normalized.startsWith("[archive]")) {
+    return {
+      type: "VIN Archive",
+      body: String(body || "").replace(/\[archive\]\s*/i, "").trim(),
+      subcopy: "VIN-specific record"
+    };
+  }
+  return {
+    type: fallbackType,
+    body: String(body || "").trim(),
+    subcopy: fallbackSubcopy
+  };
+}
+
 function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
   const vinLabel = vehicle?.vin || "VIN pending";
   const serviceDate = appointments[0]?.date || "Next available";
@@ -3194,17 +3217,18 @@ function renderCustomer360Detail() {
     const eventType = String(event.eventType || "activity").toLowerCase();
     const isJourneyAssignment = eventType === "journey_assignment";
     const department = titleCase(event.department || event.sourceSystem || "ingrid");
+    const tagged = getTaggedTimelinePresentation(event.body || "", titleCase(event.title || event.eventType || "Timeline Event"), department);
     return {
-      type: isJourneyAssignment ? "Ownership Change" : titleCase(event.title || event.eventType || "Timeline Event"),
+      type: isJourneyAssignment ? "Ownership Change" : tagged.type,
       eventType: event.eventType || "activity",
       sourceId: event.id || event.timelineEventId || event.createdAtUtc || event.title || "timeline",
       time: formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc),
       body: isJourneyAssignment
         ? `${department} reassigned to ${event.body || "new owner"}.`
-        : event.body || "Timeline detail captured.",
+        : tagged.body || "Timeline detail captured.",
       subcopy: isJourneyAssignment
         ? `${department} • Journey assignment`
-        : `${department}`
+        : tagged.subcopy
     };
   });
 
@@ -3236,13 +3260,18 @@ function renderCustomer360Detail() {
   }
 
   if (currentCustomerNotes[0]) {
+    const tagged = getTaggedTimelinePresentation(
+      currentCustomerNotes[0].body || "",
+      "Note",
+      titleCase(currentCustomerNotes[0].noteType || "internal")
+    );
     timelineCards.push({
-      type: "Note",
+      type: tagged.type,
       eventType: "notes",
       sourceId: currentCustomerNotes[0].id || currentCustomerNotes[0].noteId || currentCustomerNotes[0].createdAtUtc || currentCustomerNotes[0].body || "note",
       time: formatDisplayDateTime(currentCustomerNotes[0].updatedAtUtc || currentCustomerNotes[0].createdAtUtc),
-      body: currentCustomerNotes[0].body || "Recent note captured in the customer record.",
-      subcopy: titleCase(currentCustomerNotes[0].noteType || "internal")
+      body: tagged.body || "Recent note captured in the customer record.",
+      subcopy: tagged.subcopy
     });
   }
 
