@@ -448,7 +448,8 @@ function categorizeCustomer360TimelineItem(item) {
   if (type.includes("phone") || type.includes("call") || eventType.includes("call")) return "calls";
   if (type.includes("sms") || eventType.includes("sms") || eventType.includes("message")) return "sms";
   if (eventType.includes("journey_assignment")) return "activity";
-  if (eventType.includes("vehicle_health") || eventType.includes("vehicle_movement") || eventType.includes("vin_archive")) return "notes";
+  if (eventType.includes("vehicle_health") || eventType.includes("vehicle_movement") || eventType.includes("vin_archive")) return "vin";
+  if (type.includes("vehicle health") || type.includes("vehicle movement") || type.includes("vin archive")) return "vin";
   if (type.includes("note") || type.includes("transcript") || eventType.includes("note")) return "notes";
   if (type.includes("task") || eventType.includes("task")) return "tasks";
   if (type.includes("appointment") || type.includes("service event") || eventType.includes("appointment")) return "appointments";
@@ -1334,6 +1335,9 @@ function inferVehicleMaintenanceState(appointments = [], tasks = []) {
 
 function getTimelineEventIcon(type = "") {
   const normalized = String(type).toLowerCase();
+  if (normalized.includes("vehicle health")) return "🩺";
+  if (normalized.includes("vehicle movement")) return "🧭";
+  if (normalized.includes("vin archive")) return "🗂";
   if (normalized.includes("call")) return "📞";
   if (normalized.includes("sms") || normalized.includes("message")) return "💬";
   if (normalized.includes("voicemail")) return "📍";
@@ -3173,7 +3177,7 @@ function renderCustomer360Timeline() {
   });
 
   if (!items.length) {
-    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter)} on this timeline yet.</div>`;
+    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter === "vin" ? "VIN events" : filter)} on this timeline yet.</div>`;
     return;
   }
 
