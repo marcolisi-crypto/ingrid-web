@@ -1349,6 +1349,14 @@ function getTimelineEventIcon(type = "") {
   return "●";
 }
 
+function getTimelineVisualTone(item) {
+  const type = String(item?.type || "").toLowerCase();
+  if (type.includes("vehicle health")) return "vin-health";
+  if (type.includes("vehicle movement")) return "vin-movement";
+  if (type.includes("vin archive")) return "vin-archive";
+  return "";
+}
+
 function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks, appointments) {
   const latestSummaryEvent = timelineEvents.find((event) =>
     /summary|transcript/i.test(String(event.eventType || event.title || ""))
@@ -3182,7 +3190,7 @@ function renderCustomer360Timeline() {
   }
 
   timelineEl.innerHTML = items.map((item) => `
-    <div class="customer360-timeline-item ${currentCustomer360Focus && currentCustomer360Focus.kind === categorizeCustomer360TimelineItem(item) && String(currentCustomer360Focus.sourceId) === String(item.sourceId || "") ? "focused" : ""}">
+    <div class="customer360-timeline-item ${getTimelineVisualTone(item)} ${currentCustomer360Focus && currentCustomer360Focus.kind === categorizeCustomer360TimelineItem(item) && String(currentCustomer360Focus.sourceId) === String(item.sourceId || "") ? "focused" : ""}">
       <div class="customer360-timeline-inner">
         <div class="customer360-timeline-item-head">
           <div class="customer360-timeline-kind">

@@ -377,10 +377,19 @@
     .customer360-timeline-item{position:relative;margin-left:14px;padding:0;background:linear-gradient(180deg,#171f30 0%,#121a29 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#f6f6f4;overflow:hidden}
     .customer360-timeline-item.focused{border-color:rgba(117,164,255,.55);box-shadow:0 0 0 1px rgba(117,164,255,.18),0 16px 30px rgba(0,0,0,.18)}
     .customer360-timeline-item::before{content:"";position:absolute;left:-19px;top:22px;width:10px;height:10px;border-radius:50%;background:#8bc1ff;box-shadow:0 0 0 4px rgba(55,102,214,.18)}
+    .customer360-timeline-item.vin-health{border-color:rgba(69,208,169,.22);background:linear-gradient(180deg,#15252d 0%,#101b24 100%)}
+    .customer360-timeline-item.vin-health::before{background:#59d9b5;box-shadow:0 0 0 4px rgba(69,208,169,.18)}
+    .customer360-timeline-item.vin-movement{border-color:rgba(109,182,255,.24);background:linear-gradient(180deg,#14253a 0%,#101c2e 100%)}
+    .customer360-timeline-item.vin-movement::before{background:#79baff;box-shadow:0 0 0 4px rgba(109,182,255,.2)}
+    .customer360-timeline-item.vin-archive{border-color:rgba(245,190,110,.24);background:linear-gradient(180deg,#2b2117 0%,#1f1811 100%)}
+    .customer360-timeline-item.vin-archive::before{background:#f6c274;box-shadow:0 0 0 4px rgba(245,190,110,.18)}
     .customer360-timeline-inner{padding:16px 18px}
     .customer360-timeline-item-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .customer360-timeline-kind{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}
     .customer360-timeline-kind-icon{width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:#233149;color:#8fc2ff;font-size:18px}
+    .customer360-timeline-item.vin-health .customer360-timeline-kind-icon{background:rgba(69,208,169,.16);color:#9af3d8}
+    .customer360-timeline-item.vin-movement .customer360-timeline-kind-icon{background:rgba(109,182,255,.18);color:#c0e0ff}
+    .customer360-timeline-item.vin-archive .customer360-timeline-kind-icon{background:rgba(245,190,110,.18);color:#ffe0a1}
     .customer360-timeline-time{color:#90a7c9;font-size:13px;white-space:nowrap}
     .customer360-timeline-copy{margin-top:10px;color:#eef2f7;font-size:16px;line-height:1.45}
     .customer360-timeline-subcopy{margin-top:8px;color:#a9b8cd;font-size:13px;line-height:1.45}
