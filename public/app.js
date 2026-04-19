@@ -547,6 +547,81 @@ function buildVehicleJourneyState(notes = [], tasks = [], appointments = []) {
   };
 }
 
+function openVehicleJourneyStage(stageKey = "health") {
+  const tasks = (currentTasks || []).filter((task) => task.customerId === selectedCustomerId);
+  const appointments = (currentAppointments || []).filter((item) => item.customerId === selectedCustomerId);
+  const latestVehicleArtifact = getLatestTaggedArtifact("[vehicle]", currentCustomerNotes, currentCustomerTimeline || []);
+  const latestArchiveArtifact = getLatestTaggedArtifact("[archive]", currentCustomerNotes, currentCustomerTimeline || []);
+  const latestVehiclePresentation = latestVehicleArtifact
+    ? getTaggedTimelinePresentation(latestVehicleArtifact.body || "", "Vehicle Health", "Vehicle intelligence")
+    : null;
+  const loanerTask = tasks.find((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("loaner") || haystack.includes("transport");
+  });
+
+  if (stageKey === "health" && latestVehicleArtifact && latestVehiclePresentation?.type === "Vehicle Health") {
+    openCustomer360FocusedArtifact(
+      "notes",
+      latestVehicleArtifact.id || latestVehicleArtifact.noteId || latestVehicleArtifact.timelineEventId || latestVehicleArtifact.createdAtUtc || latestVehicleArtifact.body,
+      "home"
+    );
+    preloadFocusedVehicleServiceFollowUp({
+      body: String(latestVehicleArtifact.body || "").replace(/\[vehicle\]\s*/i, "").trim()
+    });
+    setCustomer360ComposerStatus("VIN journey health stage opened.", "success");
+    return;
+  }
+
+  if (stageKey === "movement" && latestVehicleArtifact && latestVehiclePresentation?.type === "Vehicle Movement") {
+    openCustomer360FocusedArtifact(
+      "notes",
+      latestVehicleArtifact.id || latestVehicleArtifact.noteId || latestVehicleArtifact.timelineEventId || latestVehicleArtifact.createdAtUtc || latestVehicleArtifact.body,
+      "home"
+    );
+    startVehicleGeoMovementNote();
+    setCustomer360ComposerStatus("VIN journey movement stage opened.", "success");
+    return;
+  }
+
+  if (stageKey === "service") {
+    if (loanerTask) {
+      openCustomer360FocusedArtifact(
+        "tasks",
+        loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title,
+        "service"
+      );
+      setCustomer360ComposerStatus("VIN journey service stage opened.", "success");
+      return;
+    }
+    if (appointments[0]) {
+      openCustomer360FocusedArtifact(
+        "appointments",
+        appointments[0].id || appointments[0].appointmentId || `${appointments[0].date || ""}-${appointments[0].time || ""}`,
+        "service"
+      );
+      setCustomer360ComposerStatus("VIN journey service stage opened.", "success");
+      return;
+    }
+    setDepartmentLens("service");
+    startServiceWriteUp();
+    setCustomer360ComposerStatus("VIN journey service stage opened.", "success");
+    return;
+  }
+
+  if (stageKey === "archive" && latestArchiveArtifact) {
+    openCustomer360FocusedArtifact(
+      "notes",
+      latestArchiveArtifact.id || latestArchiveArtifact.noteId || latestArchiveArtifact.timelineEventId || latestArchiveArtifact.createdAtUtc || latestArchiveArtifact.body,
+      "home"
+    );
+    preloadFocusedArchiveAction({
+      body: String(latestArchiveArtifact.body || "").replace(/\[archive\]\s*/i, "").trim()
+    }, "task");
+    setCustomer360ComposerStatus("VIN journey archive stage opened.", "success");
+  }
+}
+
 function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
   const vinLabel = vehicle?.vin || "VIN pending";
   const serviceDate = appointments[0]?.date || "Next available";
@@ -3528,7 +3603,7 @@ function renderCustomer360Detail() {
         </div>
         <div class="customer360-journey-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px;">
           ${vehicleJourney.stages.map((stage) => `
-            <div class="customer360-journey-stage ${stage.active ? "active" : "upcoming"}" style="padding:10px;">
+            <div class="customer360-journey-stage ${stage.active ? "active" : "upcoming"}" style="padding:10px;cursor:pointer;" onclick="openVehicleJourneyStage('${escapeHtml(stage.key)}')">
               <div class="customer360-journey-stage-top">
                 <b>${escapeHtml(stage.label)}</b>
                 <span class="customer360-status-pill ${stage.active ? "warn" : "info"}">${stage.active ? "Live" : "Queued"}</span>
