@@ -1389,6 +1389,15 @@ function getJourneyStageOwner(stageKey = "", status = "") {
   return "INGRID";
 }
 
+function getJourneyArtifactMovedAtLabel(value) {
+  if (!value) return "Awaiting update";
+  try {
+    return `Moved ${formatDisplayDateTime(value)}`;
+  } catch {
+    return "Moved recently";
+  }
+}
+
 function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appointments = []) {
   const taskMatchesStage = (task, key) => {
     const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
@@ -1406,7 +1415,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         detail: `${appointment.service || "Service visit"} • ${appointment.date || "TBD"} ${appointment.time || ""}`.trim(),
         interactive: true,
         kind: "appointments",
-        sourceId: appointment.id || `${appointment.date || ""}-${appointment.time || ""}`
+        sourceId: appointment.id || `${appointment.date || ""}-${appointment.time || ""}`,
+        owner: "Advisor",
+        movedAt: appointment.updatedAtUtc || appointment.createdAtUtc || appointment.date
       };
     }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes("[service]"));
@@ -1416,7 +1427,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         detail: String(note.body || "").replace(/\[service\]\s*/i, "").slice(0, 72),
         interactive: true,
         kind: "notes",
-        sourceId: note.id || note.noteId || note.createdAtUtc || note.body
+        sourceId: note.id || note.noteId || note.createdAtUtc || note.body,
+        owner: "Advisor",
+        movedAt: note.updatedAtUtc || note.createdAtUtc
       };
     }
   }
@@ -1432,7 +1445,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
       detail: `${String(latestStageTask.title || "").replace(/\[(technician|parts|accounting)\]/ig, "").trim() || "Tagged task"}`,
       interactive: true,
       kind: "tasks",
-      sourceId: latestStageTask.id || latestStageTask.taskId || latestStageTask.createdAtUtc || latestStageTask.title
+      sourceId: latestStageTask.id || latestStageTask.taskId || latestStageTask.createdAtUtc || latestStageTask.title,
+      owner: getJourneyStageOwner(stageKey, "active"),
+      movedAt: latestStageTask.updatedAtUtc || latestStageTask.createdAtUtc || latestStageTask.dueAtUtc
     };
   }
 
@@ -1452,7 +1467,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         detail: `${String(note.body || "").replace(new RegExp(tag, "i"), "").trim().slice(0, 72)}`,
         interactive: true,
         kind: "notes",
-        sourceId: note.id || note.noteId || note.createdAtUtc || note.body
+        sourceId: note.id || note.noteId || note.createdAtUtc || note.body,
+        owner: getJourneyStageOwner(stageKey, "active"),
+        movedAt: note.updatedAtUtc || note.createdAtUtc
       };
     }
   }
@@ -1462,7 +1479,9 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
     detail: "No linked artifact yet",
     interactive: false,
     kind: "all",
-    sourceId: ""
+    sourceId: "",
+    owner: getJourneyStageOwner(stageKey, "upcoming"),
+    movedAt: ""
   };
 }
 
@@ -1751,7 +1770,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
       ${(() => {
         const artifact = getLatestJourneyArtifact(stage.key, tasks, notes, appointments);
         currentJourneyArtifacts[stage.key] = artifact;
-        return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span></div>`;
+        return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span><div class="customer360-journey-artifact-meta"><small>${escapeHtml(artifact.owner || getJourneyStageOwner(stage.key, stage.status))}</small><small>${escapeHtml(getJourneyArtifactMovedAtLabel(artifact.movedAt))}</small></div></div>`;
       })()}
     </div>
   `;
