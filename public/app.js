@@ -23,6 +23,9 @@ let currentCustomer360TimelineFilter = "all";
 let currentCustomer360ComposerMode = "note";
 let currentCustomer360Focus = null;
 let currentJourneyArtifacts = {};
+let currentJourneyFeedbackMessage = "";
+let currentJourneyFeedbackStage = "";
+let currentJourneyFeedbackTimer = null;
 
 const DEPARTMENT_LENSES = {
   home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", lensPanelTitle: "Work Queue", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
@@ -1477,6 +1480,26 @@ function openJourneyArtifact(stageKey = "service") {
   document.getElementById("customer360ComposerBody")?.focus();
 }
 
+function triggerJourneyFeedback(stageKey = "", message = "") {
+  currentJourneyFeedbackStage = stageKey;
+  currentJourneyFeedbackMessage = message;
+  if (currentJourneyFeedbackTimer) clearTimeout(currentJourneyFeedbackTimer);
+  renderCustomer360Journey(
+    (currentTasks || []).filter((task) => task.customerId === selectedCustomerId),
+    currentCustomerNotes,
+    (currentAppointments || []).filter((item) => item.customerId === selectedCustomerId)
+  );
+  currentJourneyFeedbackTimer = setTimeout(() => {
+    currentJourneyFeedbackStage = "";
+    currentJourneyFeedbackMessage = "";
+    renderCustomer360Journey(
+      (currentTasks || []).filter((task) => task.customerId === selectedCustomerId),
+      currentCustomerNotes,
+      (currentAppointments || []).filter((item) => item.customerId === selectedCustomerId)
+    );
+  }, 2200);
+}
+
 function preloadFocusedTaskFollowUp(item) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -1488,19 +1511,21 @@ function preloadFocusedTaskFollowUp(item) {
   });
 }
 
-function advanceFocusedJourneyItem(kind = "tasks", sourceId = "") {
+async function advanceFocusedJourneyItem(kind = "tasks", sourceId = "") {
   const normalizedKind = normalizeCustomer360TimelineFilter(kind);
   const id = String(sourceId || "");
   if (!id) return;
 
   if (normalizedKind === "tasks") {
-    completeTask(id);
+    await completeTask(id);
+    triggerJourneyFeedback(currentDepartmentLens, "Focused task completed and journey updated.");
     return;
   }
 
   if (normalizedKind === "appointments") {
     setDepartmentLens("technicians");
     setCustomer360ComposerStatus("Technician flow opened from the focused appointment.", "success");
+    triggerJourneyFeedback("technicians", "Appointment advanced into technician flow.");
     return;
   }
 
@@ -1510,6 +1535,7 @@ function advanceFocusedJourneyItem(kind = "tasks", sourceId = "") {
       String(entry.sourceId || "") === id
     );
     preloadFocusedTaskFollowUp(item);
+    triggerJourneyFeedback(currentDepartmentLens, "Follow-up task loaded from the focused note.");
     return;
   }
 }
@@ -1598,7 +1624,8 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   const stagesEl = document.getElementById("customer360JourneyStages");
   const actionsEl = document.getElementById("customer360JourneyActions");
   const statusEl = document.getElementById("customer360JourneyStatus");
-  if (!stagesEl || !actionsEl || !statusEl) return;
+  const feedbackEl = document.getElementById("customer360JourneyFeedback");
+  if (!stagesEl || !actionsEl || !statusEl || !feedbackEl) return;
 
   const { stages, activeStage, overallStatus } = buildServiceJourneyState(tasks, notes, appointments);
   currentJourneyArtifacts = {};
@@ -1606,7 +1633,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   statusEl.className = `customer360-status-pill ${overallStatus === "Waiting" ? "info" : overallStatus.includes("technician") || overallStatus.includes("Lane") ? "warn" : "good"}`;
 
   stagesEl.innerHTML = stages.map((stage) => `
-    <div class="customer360-journey-stage">
+    <div class="customer360-journey-stage ${currentJourneyFeedbackStage === stage.key ? "feedback" : ""}">
       <div class="customer360-journey-stage-top">
         <b>${escapeHtml(stage.label)}</b>
         <span class="customer360-status-pill ${stage.status === "complete" ? "good" : stage.status === "active" ? "warn" : "info"}">${stage.status === "complete" ? "Done" : stage.status === "active" ? "Now" : "Next"}</span>
@@ -1624,6 +1651,9 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   actionsEl.innerHTML = stages.map((stage) => `
     <button type="button" class="customer360-journey-btn ${currentDepartmentLens === stage.key ? "active" : ""}" onclick="setDepartmentLens('${escapeHtml(stage.key)}')">${escapeHtml(stage.label)}</button>
   `).join("");
+
+  feedbackEl.style.display = currentJourneyFeedbackMessage ? "block" : "none";
+  feedbackEl.textContent = currentJourneyFeedbackMessage;
 
   if (activeStage && currentDepartmentLens === "home") {
     const preferredMode = activeStage.key === "service" ? "appointment" : activeStage.key === "accounting" ? "note" : "task";

@@ -274,6 +274,7 @@
     .customer360-journey-copy{margin-top:4px;color:#9fb3d2;font-size:13px;line-height:1.45}
     .customer360-journey-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     .customer360-journey-stage{padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06);display:grid;gap:8px}
+    .customer360-journey-stage.feedback{border-color:rgba(117,164,255,.55);box-shadow:0 0 0 1px rgba(117,164,255,.18),0 16px 28px rgba(0,0,0,.18);animation:journeyStagePulse 1.2s ease}
     .customer360-journey-stage-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
     .customer360-journey-stage b{display:block;color:#f4f8ff;font-size:14px}
     .customer360-journey-stage span{display:block;color:#9eb2d2;font-size:12px;line-height:1.4}
@@ -284,8 +285,10 @@
     .customer360-journey-artifact strong{display:block;color:#f4f8ff;font-size:12px;margin-bottom:4px}
     .customer360-journey-artifact span{display:block;color:#9eb2d2;font-size:12px;line-height:1.4}
     .customer360-journey-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .customer360-journey-feedback{margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(43,94,203,.14);border:1px solid rgba(117,164,255,.24);color:#dce8ff;font-size:12px;font-weight:700}
     .customer360-journey-btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#1b2a45;color:#e4ecfa;font-weight:700;font-size:12px;cursor:pointer}
     .customer360-journey-btn.active{background:linear-gradient(180deg,#2b5ecb 0%,#214ca8 100%);color:#fff}
+    @keyframes journeyStagePulse{0%{transform:scale(.985);box-shadow:0 0 0 0 rgba(117,164,255,.0)}50%{transform:scale(1.01);box-shadow:0 0 0 1px rgba(117,164,255,.28),0 18px 32px rgba(0,0,0,.2)}100%{transform:scale(1);box-shadow:0 0 0 1px rgba(117,164,255,.18),0 16px 28px rgba(0,0,0,.18)}}
     .customer360-lower-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px}
     .customer360-stack{display:flex;flex-direction:column;gap:12px}
     .customer360-panel{padding:14px}
@@ -843,6 +846,7 @@
               </div>
               <div id="customer360JourneyStages" class="customer360-journey-grid"></div>
               <div id="customer360JourneyActions" class="customer360-journey-actions"></div>
+              <div id="customer360JourneyFeedback" class="customer360-journey-feedback" style="display:none;"></div>
             </section>
 
             <div class="customer360-lower-grid">
