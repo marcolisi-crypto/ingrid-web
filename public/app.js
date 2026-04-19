@@ -520,6 +520,33 @@ function getLatestTaggedArtifact(prefix = "", notes = [], timeline = []) {
     .sort((a, b) => new Date(b.occurredAtUtc || 0).getTime() - new Date(a.occurredAtUtc || 0).getTime())[0] || null;
 }
 
+function buildVehicleJourneyState(notes = [], tasks = [], appointments = []) {
+  const latestVehicleArtifact = getLatestTaggedArtifact("[vehicle]", notes, currentCustomerTimeline || []);
+  const latestArchiveArtifact = getLatestTaggedArtifact("[archive]", notes, currentCustomerTimeline || []);
+  const latestVehiclePresentation = latestVehicleArtifact
+    ? getTaggedTimelinePresentation(latestVehicleArtifact.body || "", "Vehicle Health", "Vehicle intelligence")
+    : null;
+  const hasHealth = !!latestVehicleArtifact && latestVehiclePresentation?.type === "Vehicle Health";
+  const hasMovement = !!latestVehicleArtifact && latestVehiclePresentation?.type === "Vehicle Movement";
+  const hasService = appointments.length > 0 || tasks.some((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("[service]") || haystack.includes("loaner") || haystack.includes("transport");
+  });
+  const hasArchive = !!latestArchiveArtifact;
+  const stageStates = [
+    { key: "health", label: "Health", active: hasHealth, detail: hasHealth ? "Signal captured" : "Waiting for signal" },
+    { key: "movement", label: "Movement", active: hasMovement, detail: hasMovement ? "Vehicle moving" : "Location steady" },
+    { key: "service", label: "Service", active: hasService, detail: hasService ? "Lane work active" : "No lane workflow yet" },
+    { key: "archive", label: "Archive", active: hasArchive, detail: hasArchive ? "VIN evidence added" : "No archive update yet" }
+  ];
+  const activeCount = stageStates.filter((item) => item.active).length;
+  return {
+    stages: stageStates,
+    percent: Math.round((activeCount / stageStates.length) * 100),
+    current: stageStates.filter((item) => item.active).slice(-1)[0] || stageStates[0]
+  };
+}
+
 function buildVinArchiveItems(vehicle, customer, calls = [], notes = [], appointments = []) {
   const vinLabel = vehicle?.vin || "VIN pending";
   const serviceDate = appointments[0]?.date || "Next available";
@@ -3370,6 +3397,7 @@ function renderCustomer360Detail() {
   const vehicleOpsFreshness = lastVehicleOpsAt
     ? formatDisplayDateTime(lastVehicleOpsAt).replace(/^Today at\s*/i, "")
     : "Now";
+  const vehicleJourney = buildVehicleJourneyState(currentCustomerNotes, tasks, appointments);
   const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
@@ -3488,6 +3516,26 @@ function renderCustomer360Detail() {
         <div class="customer360-vehicle-kpi">
           <small>Last Updated</small>
           <strong>${escapeHtml(vehicleOpsFreshness)}</strong>
+        </div>
+      </div>
+      <div class="customer360-geo-card" style="margin-top:10px;">
+        <strong>VIN Journey</strong>
+        <span>${escapeHtml(vehicleJourney.percent)}% active • Current: ${escapeHtml(vehicleJourney.current.label)}</span>
+        <div class="customer360-journey-progress" style="margin-top:10px;margin-bottom:0;">
+          <div class="customer360-journey-progress-bar">
+            <div class="customer360-journey-progress-fill" style="width:${Math.max(8, Math.min(vehicleJourney.percent, 100))}%"></div>
+          </div>
+        </div>
+        <div class="customer360-journey-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px;">
+          ${vehicleJourney.stages.map((stage) => `
+            <div class="customer360-journey-stage ${stage.active ? "active" : "upcoming"}" style="padding:10px;">
+              <div class="customer360-journey-stage-top">
+                <b>${escapeHtml(stage.label)}</b>
+                <span class="customer360-status-pill ${stage.active ? "warn" : "info"}">${stage.active ? "Live" : "Queued"}</span>
+              </div>
+              <span>${escapeHtml(stage.detail)}</span>
+            </div>
+          `).join("")}
         </div>
       </div>
       <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
