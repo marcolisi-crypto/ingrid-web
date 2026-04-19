@@ -826,6 +826,26 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   const movementCopy = latestMovementNote && getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").type === "Vehicle Movement"
     ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").body.split("\n")[0]
     : "";
+  const serviceSignals = [
+    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info" },
+    { label: "Loaner", value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby", tone: loanerTask ? "warn" : appointments.length ? "info" : "good" },
+    { label: "Risk", value: overdueLaneTasks.length ? "High" : urgentLaneTasks.length ? "Watch" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good" }
+  ];
+  const bdcSignals = [
+    { label: "Missed", value: `${missedCalls}`, tone: missedCalls ? "danger" : "good" },
+    { label: "Queue", value: `${bdcTask ? 1 : 0}`, tone: bdcTask ? "info" : "good" },
+    { label: "SLA", value: missedCalls ? "Rescue" : urgentLaneTasks.length ? "Watch" : "On", tone: missedCalls ? "danger" : urgentLaneTasks.length ? "warn" : "good" }
+  ];
+  const salesSignals = [
+    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn" },
+    { label: "Deal", value: salesTask ? "Live" : "New", tone: salesTask ? "info" : "good" },
+    { label: "Risk", value: overdueLaneTasks.length ? "High" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good" }
+  ];
+  const accountingSignals = [
+    { label: "Review", value: accountingTask ? "Live" : "Clear", tone: accountingTask ? "warn" : "good" },
+    { label: "Aging", value: overdueLaneTasks.length ? `${overdueLaneTasks.length}` : "0", tone: overdueLaneTasks.length ? "danger" : "good" },
+    { label: "Ledger", value: ledgerNote ? "Open" : "Clear", tone: ledgerNote ? "info" : "good" }
+  ];
 
   if (currentDepartmentLens === "bdc") {
     return `
@@ -847,6 +867,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           </div>
           <span class="customer360-status-pill info">BDC</span>
         </div>
+        ${buildServiceSignalMarkup(bdcSignals)}
         <div class="customer360-service-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"}">${bdcTask ? "Open Follow-Up" : "Queue Follow-Up"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())">Open SMS Dock</button>
@@ -875,6 +896,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           </div>
           <span class="customer360-status-pill info">Sales</span>
         </div>
+        ${buildServiceSignalMarkup(salesSignals)}
         <div class="customer360-service-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"}">${salesTask ? "Open Deal Task" : "Create Deal Task"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"}">${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
@@ -987,6 +1009,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           </div>
           <span class="customer360-status-pill info">Accounting</span>
         </div>
+        ${buildServiceSignalMarkup(accountingSignals)}
         <div class="customer360-service-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"}">${ledgerNote ? "Open Ledger Note" : "Add Ledger Note"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"}">${accountingTask ? "Open Invoice Task" : "Queue Invoice Task"}</button>
@@ -1031,6 +1054,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         </div>
         ${topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
       </div>
+      ${buildServiceSignalMarkup(serviceSignals)}
       <div class="customer360-service-actions">
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
         ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Task</button>` : ""}
@@ -2180,6 +2204,21 @@ function buildLaneSignalMarkup(signals = []) {
       ${activeSignals.map((signal) => `
         <div class="customer360-lane-signal ${escapeHtml(signal.tone || "info")}">
           <small>${escapeHtml(signal.label || "Signal")}</small>
+          <strong>${escapeHtml(signal.value || "0")}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function buildServiceSignalMarkup(signals = []) {
+  const activeSignals = signals.filter(Boolean);
+  if (!activeSignals.length) return "";
+  return `
+    <div class="customer360-service-signals">
+      ${activeSignals.map((signal) => `
+        <div class="customer360-service-signal ${escapeHtml(signal.tone || "info")}">
+          <span>${escapeHtml(signal.label || "Signal")}</span>
           <strong>${escapeHtml(signal.value || "0")}</strong>
         </div>
       `).join("")}
