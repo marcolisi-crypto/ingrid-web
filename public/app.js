@@ -4402,6 +4402,15 @@ function renderCustomer360Detail() {
     const bdcTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[bdc]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("callback"));
     const salesTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[sales]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("quote") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("deal"));
     const accountingTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[accounting]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("invoice") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("ledger"));
+    const overdueServiceTask = serviceTasks.find((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+    const overdueBdcTask = bdcTasks.find((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+    const overdueSalesTask = salesTasks.find((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+    const overdueAccountingTask = accountingTasks.find((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+    const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss")) || null;
+    const loanerTask = serviceTasks.find((task) => {
+      const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+      return haystack.includes("loaner") || haystack.includes("transport");
+    }) || null;
     const managerPressureTone = overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good";
     const queueHeadline = overdueTasks.length
       ? `${overdueTasks.length} blocked handoff${overdueTasks.length === 1 ? "" : "s"}`
@@ -4413,10 +4422,10 @@ function renderCustomer360Detail() {
       : urgentTasks.length
         ? "Attention items are live across the operating lanes below."
         : "Cross-department queues are balanced right now.";
-    const serviceTopTask = serviceTasks[0] || appointments[0] || null;
-    const bdcTopTask = bdcTasks[0] || calls.find((call) => String(call.status || "").toLowerCase().includes("miss")) || null;
-    const salesTopTask = salesTasks[0] || appointments[0] || null;
-    const accountingTopTask = accountingTasks[0] || null;
+    const serviceTopTask = overdueServiceTask || loanerTask || serviceTasks[0] || appointments[0] || null;
+    const bdcTopTask = missedCall || overdueBdcTask || bdcTasks[0] || null;
+    const salesTopTask = overdueSalesTask || salesTasks[0] || appointments[0] || null;
+    const accountingTopTask = overdueAccountingTask || accountingTasks[0] || null;
 
     const managerCards = [
       {
