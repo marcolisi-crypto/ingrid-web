@@ -2250,6 +2250,7 @@ async function createCustomer360Note() {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to create note");
+  return data;
 }
 
 async function createCustomer360Task() {
@@ -2274,6 +2275,7 @@ async function createCustomer360Task() {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to create task");
+  return data;
 }
 
 async function createCustomer360Appointment() {
@@ -2309,6 +2311,99 @@ async function createCustomer360Appointment() {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to schedule service");
+  return data;
+}
+
+async function createAutomaticJourneyTask({ customer, vehicle, title, description, dueAtUtc = null }) {
+  const res = await fetch("/.netlify/functions/tasks-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      title,
+      description,
+      priority: "normal",
+      dueAtUtc
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to create automatic journey task");
+  return data;
+}
+
+function inferAutomaticJourneyHandoff({ mode = "note", lens = "home", body = "", title = "", service = "" }) {
+  const haystack = `${title} ${body} ${service}`.toLowerCase();
+
+  if (mode === "appointment" && (lens === "service" || lens === "home")) {
+    return "technicians";
+  }
+
+  if (lens === "technicians" && (mode === "note" || mode === "task") && haystack.includes("[technician]")) {
+    return "parts";
+  }
+
+  if (lens === "parts" && (mode === "note" || mode === "task") && haystack.includes("[parts]")) {
+    return "accounting";
+  }
+
+  return "";
+}
+
+function buildAutomaticJourneyTaskPayload(target = "", customer, vehicle, context = {}) {
+  const customerName = customerDisplayName(customer);
+  const vehicleName = vehicleDisplayName(vehicle);
+  const dueAtUtc = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const concern = context.service || "customer concern";
+
+  if (target === "technicians") {
+    return {
+      title: `[TECHNICIAN] ${vehicleName} diagnostic review`,
+      description: `[TECHNICIAN] ${customerName} • ${vehicleName}\nAuto-created from service write-up.\nConcern: ${concern}\nNext step:\n- Verify concern\n- Capture findings\n- Return recommendations to advisor`,
+      dueAtUtc
+    };
+  }
+
+  if (target === "parts") {
+    return {
+      title: `[PARTS] ${vehicleName} sourcing review`,
+      description: `[PARTS] ${customerName} • ${vehicleName}\nAuto-created from technician findings.\nInspection context:\n${context.body || "Technician findings saved."}\nNext step:\n- Confirm stock / transfer / special order\n- Set ETA\n- Route to bay / runner`,
+      dueAtUtc
+    };
+  }
+
+  if (target === "accounting") {
+    return {
+      title: `[ACCOUNTING] ${vehicleName} invoice review`,
+      description: `[ACCOUNTING] ${customerName} • ${vehicleName}\nAuto-created from parts workflow.\nParts context:\n${context.body || context.title || "Parts workflow progressed."}\nNext step:\n- Review billable items\n- Prepare statement / payment request\n- Reconcile service outcome`,
+      dueAtUtc
+    };
+  }
+
+  return null;
+}
+
+async function maybeCreateAutomaticJourneyHandoff({ mode = "note", lens = "home", body = "", title = "", service = "" }) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer) return "";
+
+  const target = inferAutomaticJourneyHandoff({ mode, lens, body, title, service });
+  if (!target) return "";
+
+  const payload = buildAutomaticJourneyTaskPayload(target, customer, vehicle, { body, title, service });
+  if (!payload) return "";
+
+  await createAutomaticJourneyTask({
+    customer,
+    vehicle,
+    title: payload.title,
+    description: payload.description,
+    dueAtUtc: payload.dueAtUtc
+  });
+
+  return target;
 }
 
 async function submitCustomer360Composer() {
@@ -2316,15 +2411,33 @@ async function submitCustomer360Composer() {
     setCustomer360ComposerStatus("Saving...");
     const rawBody = getValue("customer360ComposerBody").trim();
     const rawTitle = getValue("customer360TaskTitle").trim();
+    const rawService = getValue("customer360AppointmentService").trim();
     const handoffTarget = currentCustomer360ComposerMode === "task"
       ? inferJourneyHandoffTarget(rawTitle, rawBody)
       : "";
+    const automaticTarget = inferAutomaticJourneyHandoff({
+      mode: currentCustomer360ComposerMode,
+      lens: currentDepartmentLens,
+      body: stampJourneyArtifact(rawBody),
+      title: stampJourneyArtifact(rawTitle),
+      service: rawService
+    });
     if (currentCustomer360ComposerMode === "task") {
       await createCustomer360Task();
     } else if (currentCustomer360ComposerMode === "appointment") {
       await createCustomer360Appointment();
     } else {
       await createCustomer360Note();
+    }
+
+    if (automaticTarget) {
+      await maybeCreateAutomaticJourneyHandoff({
+        mode: currentCustomer360ComposerMode,
+        lens: currentDepartmentLens,
+        body: stampJourneyArtifact(rawBody),
+        title: stampJourneyArtifact(rawTitle),
+        service: rawService
+      });
     }
 
     const composerBody = document.getElementById("customer360ComposerBody");
@@ -2346,9 +2459,10 @@ async function submitCustomer360Composer() {
     renderCustomer360();
     seedCustomer360ComposerDefaults();
 
-    if (handoffTarget && (currentDepartmentLens === "technicians" || currentDepartmentLens === "parts")) {
-      setDepartmentLens(handoffTarget);
-      setCustomer360ComposerStatus(`${titleCase(handoffTarget)} handoff created and ready.`, "success");
+    const nextLens = automaticTarget || handoffTarget;
+    if (nextLens && (currentDepartmentLens === "service" || currentDepartmentLens === "home" || currentDepartmentLens === "technicians" || currentDepartmentLens === "parts")) {
+      setDepartmentLens(nextLens);
+      setCustomer360ComposerStatus(`${titleCase(nextLens)} handoff created and ready.`, "success");
     }
   } catch (err) {
     setCustomer360ComposerStatus(err.message || "Unable to save.", "error");
