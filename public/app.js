@@ -599,6 +599,15 @@ function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appoin
 function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [], calls = []) {
   const nextAppointment = appointments[0];
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+  const loanerTask = (currentTasks || []).find((item) => {
+    if (item.customerId !== customer?.id) return false;
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("loaner") || haystack.includes("transport");
+  });
+  const latestMovementNote = getLatestTaggedArtifact("[vehicle]", currentCustomerNotes, currentCustomerTimeline || []);
+  const movementCopy = latestMovementNote && getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").type === "Vehicle Movement"
+    ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").body.split("\n")[0]
+    : "";
 
   if (currentDepartmentLens === "bdc") {
     return `
@@ -768,26 +777,33 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
     `;
   }
 
-  const loanerState = String(getDepartmentLensConfig().name).toLowerCase().includes("service") || !!nextAppointment
-    ? "Suggested"
-    : "Standby";
+  const loanerState = loanerTask
+    ? "In Progress"
+    : (String(getDepartmentLensConfig().name).toLowerCase().includes("service") || !!nextAppointment
+      ? "Suggested"
+      : "Standby");
+  const laneStatus = nextAppointment
+    ? "Appointment Ready"
+    : movementCopy
+      ? "Vehicle Moving"
+      : "Pre-Arrival";
   return `
     <div class="customer360-service-card">
       <div class="customer360-service-row">
         <div>
           <div class="customer360-service-label">Lane Status</div>
-          <div class="customer360-service-value">${nextAppointment ? "Appointment Ready" : "Pre-Arrival"}</div>
-          <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
+          <div class="customer360-service-value">${laneStatus}</div>
+          <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : movementCopy ? `${escapeHtml(movementCopy)}.` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
         </div>
-        <span class="customer360-status-pill ${nextAppointment ? "good" : "info"}">${nextAppointment ? "Booked" : "Open"}</span>
+        <span class="customer360-status-pill ${nextAppointment ? "good" : movementCopy ? "warn" : "info"}">${nextAppointment ? "Booked" : movementCopy ? "Moving" : "Open"}</span>
       </div>
       <div class="customer360-service-row">
         <div>
           <div class="customer360-service-label">Loaner Desk</div>
           <div class="customer360-service-value">${loanerState}</div>
-          <div class="customer360-service-copy">${appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
+          <div class="customer360-service-copy">${loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
         </div>
-        <span class="customer360-status-pill ${loanerState === "Suggested" ? "warn" : "info"}">${loanerState}</span>
+        <span class="customer360-status-pill ${loanerState === "In Progress" ? "warn" : loanerState === "Suggested" ? "warn" : "info"}">${loanerState}</span>
       </div>
       <div class="customer360-service-row">
         <div>
@@ -799,6 +815,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
       </div>
       <div class="customer360-service-actions">
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
+        ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Task</button>` : ""}
         <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Open Service Composer</button>
       </div>
     </div>
