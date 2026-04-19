@@ -1514,6 +1514,63 @@ function getJourneyStageSubcopy(stage, isFeedback = false) {
   return "Waiting on prior step";
 }
 
+function getJourneyNextAction(stageKey = "") {
+  if (stageKey === "service") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Finish the advisor write-up",
+      detail: "Confirm the concern, promised time, and transportation before sending the visit into the lane.",
+      label: "Open Write-Up",
+      run: () => {
+        setDepartmentLens("service");
+        startServiceWriteUp();
+      }
+    };
+  }
+
+  if (stageKey === "technicians") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Log technician findings",
+      detail: "Capture the inspection result and recommended repair so the downstream handoff stays attached to the same record.",
+      label: "Log Finding",
+      run: () => {
+        setDepartmentLens("technicians");
+        startTechnicianInspectionNote();
+      }
+    };
+  }
+
+  if (stageKey === "parts") {
+    return {
+      eyebrow: "Next Best Action",
+      title: "Create the parts request",
+      detail: "Open the stock pull or sourcing task and route it to counter, bay, or runner.",
+      label: "Create Parts Request",
+      run: () => {
+        setDepartmentLens("parts");
+        createPartsPickTask();
+      }
+    };
+  }
+
+  return {
+    eyebrow: "Next Best Action",
+    title: "Queue invoice review",
+    detail: "Move the service outcome into statement, payment, and reconciliation posture.",
+    label: "Open Invoice Review",
+    run: () => {
+      setDepartmentLens("accounting");
+      queueAccountingInvoiceReview();
+    }
+  };
+}
+
+function runJourneyNextAction(stageKey = "") {
+  const action = getJourneyNextAction(stageKey);
+  action?.run?.();
+}
+
 function preloadFocusedTaskFollowUp(item) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -1637,9 +1694,10 @@ function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
 function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   const stagesEl = document.getElementById("customer360JourneyStages");
   const actionsEl = document.getElementById("customer360JourneyActions");
+  const nextEl = document.getElementById("customer360JourneyNext");
   const statusEl = document.getElementById("customer360JourneyStatus");
   const feedbackEl = document.getElementById("customer360JourneyFeedback");
-  if (!stagesEl || !actionsEl || !statusEl || !feedbackEl) return;
+  if (!stagesEl || !actionsEl || !nextEl || !statusEl || !feedbackEl) return;
 
   const { stages, activeStage, overallStatus } = buildServiceJourneyState(tasks, notes, appointments);
   currentJourneyArtifacts = {};
@@ -1671,6 +1729,22 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   actionsEl.innerHTML = stages.map((stage) => `
     <button type="button" class="customer360-journey-btn ${currentDepartmentLens === stage.key ? "active" : ""}" onclick="setDepartmentLens('${escapeHtml(stage.key)}')">${escapeHtml(stage.label)}</button>
   `).join("");
+
+  if (activeStage) {
+    const nextAction = getJourneyNextAction(activeStage.key);
+    nextEl.style.display = "flex";
+    nextEl.innerHTML = `
+      <div class="customer360-journey-next-copy">
+        <small>${escapeHtml(nextAction.eyebrow)}</small>
+        <strong>${escapeHtml(nextAction.title)}</strong>
+        <span>${escapeHtml(nextAction.detail)}</span>
+      </div>
+      <button type="button" class="customer360-journey-next-btn" onclick="runJourneyNextAction('${escapeHtml(activeStage.key)}')">${escapeHtml(nextAction.label)}</button>
+    `;
+  } else {
+    nextEl.style.display = "none";
+    nextEl.innerHTML = "";
+  }
 
   feedbackEl.style.display = currentJourneyFeedbackMessage ? "block" : "none";
   feedbackEl.textContent = currentJourneyFeedbackMessage;
