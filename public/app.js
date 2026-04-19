@@ -28,7 +28,8 @@ const DEPARTMENT_LENSES = {
   fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"] },
   parts: { name: "Parts", copy: "Parts demand, special orders, and vehicle-linked parts history remain connected to service work.", summaryTitle: "Parts Summary", timelineLabel: "Parts lens", actions: ["Order Part", "Assign to RO", "Check Availability"] },
   accounting: { name: "Accounting", copy: "Invoices, payouts, and payment events will surface against the same customer and vehicle timeline.", summaryTitle: "Accounting Summary", timelineLabel: "Accounting lens", actions: ["Post Payment", "Review Invoice", "Export Statement"] },
-  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"] }
+  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"] },
+  settings: { name: "Settings", copy: "Role-based menus, permissions, defaults, and store-level configuration will lock this shell down later.", summaryTitle: "Settings Summary", timelineLabel: "Settings lens", actions: ["Manage Roles", "Update Defaults", "Review Access"] }
 };
 
 const COMM_SCRIPT_LIBRARY = [
@@ -664,7 +665,6 @@ function wireCustomer360Dock() {
 function renderCustomer360Detail() {
   const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
   const vehicle = getCustomerPrimaryVehicle(customer);
-  const customerVehicles = getCustomerVehicleMatches(customer);
   const calls = (currentCalls || []).filter((call) => {
     const phones = customer?.phones || [];
     return phones.includes(normalizePhoneNumber(call.from || "")) || phones.includes(normalizePhoneNumber(call.to || ""));
@@ -678,45 +678,63 @@ function renderCustomer360Detail() {
   const archiveCount = currentCustomerNotes.length + currentCustomerTimeline.length + calls.length;
   const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
-  const profileCardEl = document.getElementById("customer360ProfileCard");
+  const summaryTitleEl = document.getElementById("customer360SummaryTitle");
+  const customerCardEl = document.getElementById("customer360CustomerCard");
   const aiSummaryEl = document.getElementById("customer360AiSummary");
   const vehicleTitleEl = document.getElementById("customer360VehicleTitle");
   const vehicleRailEl = document.getElementById("customer360VehicleRail");
   const archiveCountEl = document.getElementById("customer360ArchiveCount");
+  const tasksBoardEl = document.getElementById("customer360TasksBoard");
+  const notesBoardEl = document.getElementById("customer360NotesBoard");
+  const rightTaskEl = document.getElementById("customer360RightTask");
+  const filesPanelEl = document.getElementById("customer360FilesPanel");
   const timelineEl = document.getElementById("customer360Timeline");
 
   if (!customer) {
-    if (profileCardEl) {
-      profileCardEl.innerHTML = `
-        <div class="customer360-profile-name">Select a customer</div>
-        <div class="customer360-vip">VIP Customer</div>
-      `;
-    }
+    if (summaryTitleEl) summaryTitleEl.textContent = "AI Summary";
+    if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
     if (vehicleTitleEl) vehicleTitleEl.textContent = "No linked vehicle";
     if (vehicleRailEl) vehicleRailEl.innerHTML = `<div class="customer360-empty">Choose a customer to load vehicle intelligence.</div>`;
     if (archiveCountEl) archiveCountEl.textContent = "0 Items";
+    if (tasksBoardEl) tasksBoardEl.innerHTML = `<div class="customer360-empty">No tasks yet.</div>`;
+    if (notesBoardEl) notesBoardEl.innerHTML = `<div class="customer360-empty">No notes yet.</div>`;
+    if (rightTaskEl) rightTaskEl.innerHTML = `<div class="customer360-empty">No open tasks.</div>`;
+    if (filesPanelEl) filesPanelEl.innerHTML = `<div class="customer360-empty">VIN files will appear here.</div>`;
     if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
     return;
   }
 
-  if (profileCardEl) {
+  if (summaryTitleEl) {
+    summaryTitleEl.textContent = `AI Summary: ${customerDisplayName(customer)}`;
+  }
+
+  if (customerCardEl) {
     const phones = (customer.phones || []).slice(0, 2);
-    profileCardEl.innerHTML = `
-      <div class="customer360-profile-name">${escapeHtml(customerDisplayName(customer))}</div>
-      <div class="customer360-vip">◉ VIP Customer</div>
-      ${phones.map((phone, index) => `
-        <div class="customer360-contact-row">
-          <span>${formatPhoneActionLink(phone, formatPhonePretty(phone))}</span>
-          <span class="customer360-contact-pill">${index === 0 ? "Mobile" : "Home"}</span>
+    const primaryPhone = phones[0] ? normalizePhoneNumber(phones[0]) : "";
+    const secondaryPhone = phones[1] ? normalizePhoneNumber(phones[1]) : "";
+    customerCardEl.innerHTML = `
+      <div class="customer360-customer-top">
+        <div class="customer360-avatar"></div>
+        <div>
+          <div class="customer360-profile-name">${escapeHtml(customerDisplayName(customer))}</div>
+          <div class="customer360-profile-lines">
+            ${primaryPhone ? escapeHtml(formatPhonePretty(primaryPhone)) : "No primary phone"}<br />
+            ${customer.email ? escapeHtml(customer.email) : "No email on file"}
+          </div>
         </div>
-      `).join("")}
-      ${customer.email ? `
-        <div class="customer360-contact-row">
-          <span>${escapeHtml(customer.email)}</span>
-        </div>
-      ` : ""}
-      <div class="customer360-language">Preferred Language: ${escapeHtml(customer.preferredLanguage || "English")}</div>
+      </div>
+      <div class="customer360-action-row">
+        ${primaryPhone ? `<a href="#" class="customer360-action-chip phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="call">✓ Call</a>` : `<span class="customer360-action-chip">✓ Call</span>`}
+        ${primaryPhone ? `<a href="#" class="customer360-action-chip secondary phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="sms">✉ Text</a>` : `<span class="customer360-action-chip secondary">✉ Text</span>`}
+        <a href="${customer.email ? `mailto:${encodeURIComponent(customer.email)}` : "#"}" class="customer360-action-chip secondary">✉ Email</a>
+      </div>
+      <div class="customer360-tag-row">
+        <span class="customer360-tag">High Value</span>
+        <span class="customer360-tag">Warranty Inquiry</span>
+        <span class="customer360-tag">${escapeHtml(customer.preferredLanguage || "English")}</span>
+        ${secondaryPhone ? `<span class="customer360-tag">${escapeHtml(formatPhonePretty(secondaryPhone))}</span>` : ""}
+      </div>
     `;
   }
 
@@ -741,6 +759,47 @@ function renderCustomer360Detail() {
 
   if (archiveCountEl) {
     archiveCountEl.textContent = `${archiveCount} Items`;
+  }
+
+  if (tasksBoardEl) {
+    tasksBoardEl.innerHTML = tasks.length ? tasks.slice(0, 3).map((task) => `
+      <div class="customer360-panel-item">
+        <span>${escapeHtml(task.title || "Task")}</span>
+        <button class="customer360-panel-action">•</button>
+      </div>
+    `).join("") : `<div class="customer360-empty">No tasks linked yet.</div>`;
+  }
+
+  if (notesBoardEl) {
+    notesBoardEl.innerHTML = currentCustomerNotes.length ? currentCustomerNotes.slice(0, 2).map((note) => `
+      <div class="customer360-panel-item">
+        <span>${escapeHtml((note.body || "").slice(0, 60) || "Internal note")}</span>
+        <button class="customer360-panel-action">•</button>
+      </div>
+    `).join("") : `<div class="customer360-empty">No notes captured yet.</div>`;
+  }
+
+  if (rightTaskEl) {
+    const topTask = openTasks[0];
+    rightTaskEl.innerHTML = topTask ? `
+      <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
+        <div>
+          <strong>${escapeHtml(topTask.title || "Warranty Inquiry")}</strong>
+          <div class="customer360-meta">${escapeHtml(topTask.description || "Follow up with the customer.")}</div>
+        </div>
+      </div>
+      <button class="customer360-toolbar-btn" style="width:100%;margin-top:10px;">Mark Complete</button>
+    ` : `<div class="customer360-empty">No open task assigned.</div>`;
+  }
+
+  if (filesPanelEl) {
+    filesPanelEl.innerHTML = `
+      <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
+        <span>${escapeHtml(vehicle?.vin || "VIN pending")}</span>
+        <span class="customer360-contact-pill">${archiveCount} files</span>
+      </div>
+      <div class="customer360-meta">ID scans, media, inspection photos, delivery files, and vehicle evidence will live here.</div>
+    `;
   }
 
   const timelineCards = [];

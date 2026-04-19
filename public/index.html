@@ -201,88 +201,130 @@
     .scheduler-board-cell{min-width:180px;border-radius:10px;padding:8px}
     .scheduler-available{background:#f8fafc;color:#6b7280}
     .scheduler-booked{background:#dbeafe}
-    .customer360-shell{background:#09111d;border-radius:26px;border:1px solid rgba(0,194,255,.12);box-shadow:0 30px 70px rgba(0,0,0,.32);overflow:hidden}
-    .customer360-topbar{display:grid;grid-template-columns:300px minmax(220px,340px) 1fr auto;align-items:center;gap:16px;padding:12px 20px;background:linear-gradient(180deg,#0d1728 0%,#0a1221 100%);border-bottom:1px solid rgba(0,194,255,.24)}
-    .customer360-brand{font-size:26px;font-weight:800;letter-spacing:.03em;color:#f7f7f4}
-    .customer360-brand span{color:#00c2ff}
-    .customer360-toolbar-search input{background:#3a404d;border-color:#4a5160;color:#f8fafc;border-radius:10px}
-    .customer360-toolbar-search input::placeholder{color:#cbd5e1}
-    .customer360-toolbar-meta{color:#f5f5f4;font-weight:700;font-size:15px}
-    .customer360-toolbar-icons{display:flex;align-items:center;gap:14px;color:#f5f5f4;font-size:19px}
-    .customer360-toolbar-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#2d3440;border:1px solid rgba(255,255,255,.08)}
-    .customer360-layout{display:grid;grid-template-columns:320px minmax(0,1fr) 330px;gap:18px;padding:18px;background:linear-gradient(180deg,#0c1525 0%,#0b1320 100%)}
+    .customer360-shell{background:#111827;border-radius:26px;border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 70px rgba(0,0,0,.28);overflow:hidden}
+    .customer360-topbar{display:grid;grid-template-columns:260px minmax(340px,1fr) auto auto auto;align-items:center;gap:14px;padding:14px 18px;background:radial-gradient(circle at top left, rgba(61,120,255,.28), transparent 30%),linear-gradient(180deg,#15213d 0%,#10182a 100%);border-bottom:1px solid rgba(82,135,255,.32)}
+    .customer360-brand-lockup{display:flex;align-items:center;gap:14px}
+    .customer360-brand-logo{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 10px 26px rgba(55,122,255,.32))}
+    .customer360-brand-stack{display:flex;flex-direction:column;line-height:1}
+    .customer360-brand{font-size:20px;font-weight:800;letter-spacing:.12em;color:#f7f7f4}
+    .customer360-brand-sub{margin-top:8px;font-size:10px;letter-spacing:.22em;color:#76afff;font-weight:700}
+    .customer360-toolbar-search input{background:rgba(17,27,46,.92);border-color:rgba(93,130,214,.26);color:#f8fafc;border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+    .customer360-toolbar-search input::placeholder{color:#a6b4cd}
+    .customer360-toolbar-btn{padding:10px 18px;border-radius:12px;border:1px solid rgba(98,140,238,.22);background:linear-gradient(180deg,#244db8 0%,#18398f 100%);color:#fff;font-weight:700;cursor:pointer}
+    .customer360-toolbar-btn.secondary{background:linear-gradient(180deg,#1f2d53 0%,#15203f 100%)}
+    .customer360-toolbar-meta{display:flex;align-items:center;gap:12px;color:#cbd7ee;font-weight:700;font-size:13px}
+    .customer360-toolbar-icons{display:flex;align-items:center;gap:12px}
+    .customer360-toolbar-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#1d2a44 0%,#172237 100%);border:1px solid rgba(255,255,255,.08);color:#d9e7ff}
+    .customer360-toolbar-profile{display:flex;align-items:center;gap:10px;color:#fff}
+    .customer360-toolbar-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(180deg,#f2d1b0,#76584b);border:2px solid rgba(255,255,255,.18)}
+    .customer360-toolbar-profile small{display:block;color:#9fb6de;font-size:11px}
+    .customer360-layout{display:grid;grid-template-columns:260px minmax(0,1fr) 300px;gap:16px;padding:16px;background:radial-gradient(circle at top center, rgba(55,102,214,.08), transparent 28%),linear-gradient(180deg,#111827 0%,#151d2a 100%)}
     .customer360-sidebar,.customer360-main,.customer360-rail{min-width:0}
-    .customer360-sidebar{display:flex;flex-direction:column;gap:10px}
-    .customer360-nav-card,.customer360-profile-card,.customer360-action-card,.customer360-picker-card,.customer360-rail-card{background:linear-gradient(180deg,#343b47 0%,#e5eef9 100%);border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
-    .customer360-nav-card{padding:16px 18px;color:#f6f6f4;font-weight:700;font-size:16px}
-    .customer360-profile-card{overflow:hidden;color:#f6f6f4}
-    .customer360-portrait{height:190px;background:radial-gradient(circle at 50% 30%, rgba(255,224,189,.82), transparent 16%),radial-gradient(circle at 50% 36%, rgba(246,203,164,.52), transparent 24%),linear-gradient(135deg, rgba(237,220,199,.35), rgba(74,84,99,.12)),linear-gradient(180deg,#676e78 0%,#272d37 100%);position:relative}
-    .customer360-portrait::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 28%, rgba(255,240,220,.9) 0 7%, transparent 8%),radial-gradient(circle at 50% 44%, rgba(27,32,41,.48) 0 14%, transparent 15%),radial-gradient(circle at 50% 14%, rgba(217,178,120,.55) 0 12%, transparent 13%);opacity:.7}
-    .customer360-profile-body{padding:14px 18px 10px}
-    .customer360-profile-name{color:#fff;font-size:22px;font-weight:800;margin:0 0 8px}
-    .customer360-vip{color:#00c2ff;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:12px}
-    .customer360-contact-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);color:#f5f5f4}
-    .customer360-contact-row:first-of-type{border-top:none}
-    .customer360-contact-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;background:#454c58;color:#dce3eb;font-size:12px}
-    .customer360-language{border-top:1px solid rgba(255,255,255,.08);margin-top:8px;padding-top:12px;color:#d3d8df;font-size:14px}
-    .customer360-action-card{padding:16px 18px;color:#f8fafc;display:flex;justify-content:space-between;align-items:center;font-weight:700;cursor:pointer;transition:transform .15s ease,border-color .15s ease}
-    .customer360-action-icon{color:#00c2ff;font-size:18px}
-    .customer360-picker-card{padding:14px;display:flex;flex-direction:column;gap:12px}
-    .customer360-eyebrow,.customer360-label{font-size:11px;color:#b8c0cc;text-transform:uppercase;letter-spacing:.12em;font-weight:700}
-    .customer360-picker-card input{background:#434b57;border-color:#4f5865;color:#fff}
-    .customer360-picker-card input::placeholder{color:#cbd5e1}
-    .customer360-summary-copy{color:#c8d0db;font-size:13px}
-    .customer360-list{display:flex;flex-direction:column;gap:10px;max-height:280px;overflow:auto}
-    .customer360-item{border-radius:12px;padding:12px;cursor:pointer;background:#3a424e;border:1px solid rgba(255,255,255,.08);color:#f3f4f6}
-    .customer360-item.active{background:linear-gradient(180deg,#143058 0%,#102744 100%);border-color:#00c2ff;box-shadow:0 0 0 1px rgba(0,194,255,.22)}
+    .customer360-sidebar{display:flex;flex-direction:column;gap:12px}
+    .customer360-sidebar-block,.customer360-panel,.customer360-rail-card{background:linear-gradient(180deg,#161f30 0%,#121a29 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+    .customer360-context-card{padding:14px 16px;background:radial-gradient(circle at top right, rgba(55,102,214,.18), transparent 46%),linear-gradient(180deg,#14203a 0%,#10192d 100%)}
+    .customer360-context-title{font-size:11px;color:#86a8df;text-transform:uppercase;letter-spacing:.16em;font-weight:700}
+    .customer360-context-name{font-size:22px;color:#f4f8ff;font-weight:800;margin-top:8px}
+    .customer360-context-copy{margin-top:8px;color:#b8c6dc;font-size:13px;line-height:1.45}
+    .department-menu-panel{padding:10px;background:linear-gradient(180deg,#101827 0%,#0f1522 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px}
+    .department-menu-title{padding:6px 8px 12px;color:#7e9fd0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.16em}
+    .department-menu{display:flex;flex-direction:column;gap:8px}
+    .department-menu-btn{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:14px 16px;border:none;background:transparent;color:#f4f7fb;border-radius:12px;font-weight:700;cursor:pointer;text-align:left}
+    .department-menu-btn span{display:flex;align-items:center;gap:12px}
+    .department-menu-btn small{color:#87a6d6;font-size:11px;font-weight:700}
+    .department-menu-btn.active{background:linear-gradient(180deg,#2d67db 0%,#224ea8 100%);box-shadow:0 12px 24px rgba(34,82,191,.28)}
+    .department-menu-btn.active small{color:#d7e5ff}
+    .department-menu-icon{width:18px;text-align:center;color:#8eb5ff}
+    .customer360-picker-card{padding:12px;display:flex;flex-direction:column;gap:10px}
+    .customer360-eyebrow,.customer360-label{font-size:11px;color:#8da7cf;text-transform:uppercase;letter-spacing:.14em;font-weight:700}
+    .customer360-picker-card input{background:#1d2940;border-color:#2f4266;color:#fff}
+    .customer360-picker-card input::placeholder{color:#90a2bf}
+    .customer360-summary-copy{color:#b7c3d7;font-size:13px}
+    .customer360-list{display:flex;flex-direction:column;gap:8px;max-height:250px;overflow:auto}
+    .customer360-item{border-radius:12px;padding:12px;cursor:pointer;background:#1a2233;border:1px solid rgba(255,255,255,.05);color:#f3f4f6}
+    .customer360-item.active{background:linear-gradient(180deg,#21375f 0%,#172944 100%);border-color:#4d7df1;box-shadow:0 0 0 1px rgba(77,125,241,.2)}
     .customer360-item-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-    .customer360-item-badge{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;border-radius:50%;background:#00c2ff;color:#1b2029;font-size:11px;font-weight:800}
-    .customer360-meta{font-size:12px;color:#cad2db;margin-top:4px;line-height:1.45}
-    .customer360-item-stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-    .customer360-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#102744;color:#dce9fb;font-size:11px;font-weight:700}
-    .customer360-main{display:flex;flex-direction:column;gap:14px}
-    .customer360-summary-card{background:linear-gradient(180deg,#0f1d33 0%,#122744 100%);color:#e5eef9;border-radius:14px;border:1px solid rgba(0,194,255,.14);padding:18px 20px;box-shadow:0 18px 30px rgba(0,0,0,.18)}
-    .customer360-summary-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;color:#e5eef9;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid rgba(0,0,0,.12)}
-    .customer360-summary-icon{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#00c2ff;color:#26303a;font-size:14px}
-    .customer360-summary-body{font-size:18px;line-height:1.45;color:#d6e7fb}
-    .customer360-timeline{display:flex;flex-direction:column;gap:0;position:relative;margin-left:18px}
-    .customer360-timeline::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:#6f7681}
-    .customer360-timeline-item{position:relative;margin-left:24px;margin-bottom:10px;padding:0;background:linear-gradient(180deg,#10203a 0%,#0c1729 100%);border:1px solid rgba(0,194,255,.1);border-radius:12px;color:#f6f6f4;overflow:hidden}
-    .customer360-timeline-item::before{content:"";position:absolute;left:-31px;top:22px;width:12px;height:12px;border-radius:50%;background:#00c2ff;box-shadow:0 0 0 4px rgba(0,194,255,.12)}
+    .customer360-item-badge{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;border-radius:50%;background:#2f59c7;color:#fff;font-size:11px;font-weight:800}
+    .customer360-meta{font-size:12px;color:#a6b4ca;margin-top:4px;line-height:1.45}
+    .customer360-item-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    .customer360-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#22304b;color:#dfe8f7;font-size:11px;font-weight:700}
+    .customer360-main{display:flex;flex-direction:column;gap:12px}
+    .customer360-main-title{font-size:34px;color:#f5f8fd;font-weight:800;margin:0 0 2px}
+    .customer360-title-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .customer360-title-tools{display:flex;gap:8px}
+    .customer360-mini-btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#18243b;color:#dfe7f7;font-weight:700;font-size:12px}
+    .customer360-main-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px}
+    .customer360-customer-card{padding:16px;background:linear-gradient(180deg,#172234 0%,#141d2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#fff}
+    .customer360-customer-top{display:flex;gap:14px;align-items:flex-start}
+    .customer360-avatar{width:76px;height:76px;border-radius:16px;background:linear-gradient(180deg,#d9b79a,#6f5649);flex:0 0 auto}
+    .customer360-profile-name{color:#fff;font-size:28px;font-weight:800;margin:0 0 6px}
+    .customer360-profile-lines{color:#c2cfdf;font-size:14px;line-height:1.5}
+    .customer360-action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+    .customer360-action-chip{padding:10px 14px;border-radius:10px;background:linear-gradient(180deg,#244db8 0%,#1a3e98 100%);color:#fff;font-weight:700;border:1px solid rgba(255,255,255,.08);text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+    .customer360-action-chip.secondary{background:#1d2940}
+    .customer360-tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .customer360-tag{padding:6px 10px;border-radius:999px;background:#212d44;color:#d9e5f7;font-size:12px;font-weight:700}
+    .customer360-summary-card{background:radial-gradient(circle at top right, rgba(55,102,214,.24), transparent 34%),linear-gradient(180deg,#16233a 0%,#121d31 100%);color:#e7eef9;border-radius:14px;border:1px solid rgba(255,255,255,.06);padding:18px 20px;box-shadow:0 12px 24px rgba(0,0,0,.18)}
+    .customer360-summary-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:#eaf1fb;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .customer360-summary-icon{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#2b5ecb;color:#fff;font-size:14px}
+    .customer360-summary-body{font-size:20px;line-height:1.5;color:#f2f5fa}
+    .customer360-lower-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px}
+    .customer360-stack{display:flex;flex-direction:column;gap:12px}
+    .customer360-panel{padding:14px}
+    .customer360-panel h3{margin:0 0 12px;color:#f2f5fa;font-size:18px}
+    .customer360-panel-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);color:#d8e2f0}
+    .customer360-panel-item:first-child{border-top:none;padding-top:0}
+    .customer360-panel-action{background:#22304b;border:none;color:#dfe8f7;border-radius:999px;padding:5px 8px}
+    .customer360-quick-actions{display:grid;grid-template-columns:1fr;gap:8px}
+    .customer360-quick-action{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#1b2740 0%,#152238 100%);color:#f1f6ff;font-weight:700;cursor:pointer}
+    .customer360-quick-action span{display:flex;align-items:center;gap:12px}
+    .customer360-action-icon{color:#8cb9ff}
+    .customer360-composer{padding:12px 14px;border-radius:14px;background:linear-gradient(180deg,#182338 0%,#131d2f 100%);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;color:#97abc8}
+    .customer360-composer-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(180deg,#d9b79a,#6f5649)}
+    .customer360-composer-actions{margin-left:auto;display:flex;gap:8px}
+    .customer360-composer-btn{padding:6px 10px;border-radius:8px;background:#22304b;color:#dfe8f7;border:none}
+    .customer360-timeline{display:flex;flex-direction:column;gap:10px;position:relative;padding-left:18px}
+    .customer360-timeline::before{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#3766d6,#6aa2ff)}
+    .customer360-timeline-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+    .customer360-filter-chip{padding:6px 10px;border-radius:999px;background:#1d2940;color:#dce6f7;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.06)}
+    .customer360-filter-chip.active{background:#2f59c7;color:#fff}
+    .customer360-timeline-item{position:relative;margin-left:14px;padding:0;background:linear-gradient(180deg,#171f30 0%,#121a29 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#f6f6f4;overflow:hidden}
+    .customer360-timeline-item::before{content:"";position:absolute;left:-19px;top:22px;width:10px;height:10px;border-radius:50%;background:#8bc1ff;box-shadow:0 0 0 4px rgba(55,102,214,.18)}
     .customer360-timeline-inner{padding:16px 18px}
     .customer360-timeline-item-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .customer360-timeline-kind{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}
-    .customer360-timeline-kind-icon{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:#102744;color:#38414d;font-size:18px}
-    .customer360-timeline-time{color:#d5d9de;font-size:14px;white-space:nowrap}
+    .customer360-timeline-kind-icon{width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:#233149;color:#8fc2ff;font-size:18px}
+    .customer360-timeline-time{color:#90a7c9;font-size:13px;white-space:nowrap}
     .customer360-timeline-copy{margin-top:10px;color:#eef2f7;font-size:16px;line-height:1.45}
-    .customer360-timeline-subcopy{margin-top:8px;color:#d5d9de;font-size:13px;line-height:1.45}
-    .customer360-timeline-actions{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap}
-    .customer360-chip-callout{display:inline-flex;align-items:center;gap:8px;border-radius:8px;padding:8px 12px;font-weight:800;font-size:14px;background:#1e90ff;color:#2c313b}
-    .customer360-chip-callout.light{background:#112640}
-    .customer360-rail{display:flex;flex-direction:column;gap:14px}
-    .customer360-rail-card{padding:18px;color:#f7f7f4}
-    .customer360-vehicle-title{font-size:22px;font-weight:800;color:#fff;margin:0 0 12px}
-    .customer360-vehicle-line{padding:12px 0;border-top:1px solid rgba(255,255,255,.08);color:#d9dee5;font-size:14px;display:flex;justify-content:space-between;gap:12px}
+    .customer360-timeline-subcopy{margin-top:8px;color:#a9b8cd;font-size:13px;line-height:1.45}
+    .customer360-timeline-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+    .customer360-chip-callout{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:8px 12px;font-weight:800;font-size:13px;background:#214ca8;color:#fff}
+    .customer360-chip-callout.light{background:#233149;color:#dce5f7}
+    .customer360-rail{display:flex;flex-direction:column;gap:12px}
+    .customer360-rail-card{padding:16px;color:#f7f7f4}
+    .customer360-vehicle-title{font-size:26px;font-weight:800;color:#fff;margin:0 0 12px}
+    .customer360-vehicle-line{padding:10px 0;border-top:1px solid rgba(255,255,255,.06);color:#d9dee5;font-size:14px;display:flex;justify-content:space-between;gap:12px}
     .customer360-vehicle-line:first-of-type{border-top:none;padding-top:0}
-    .customer360-vehicle-good{color:#79c66b;font-weight:800}
-    .customer360-vehicle-warn{color:#1e90ff;font-weight:800}
-    .customer360-map{margin-top:14px;height:160px;border-radius:8px;background:radial-gradient(circle at 62% 42%, #c85d40 0 8px, transparent 9px),linear-gradient(45deg, rgba(245,190,110,.85) 0 6px, transparent 6px),linear-gradient(-22deg, rgba(236,167,70,.75) 0 8px, transparent 8px),linear-gradient(180deg,#efe2ca 0%,#dccdb2 100%);background-size:auto,100% 100%,100% 100%,auto;position:relative;overflow:hidden}
+    .customer360-vehicle-good{color:#7ed77e;font-weight:800}
+    .customer360-vehicle-warn{color:#f2bb63;font-weight:800}
+    .customer360-map{margin-top:14px;height:132px;border-radius:10px;background:radial-gradient(circle at 62% 42%, #c85d40 0 8px, transparent 9px),linear-gradient(45deg, rgba(245,190,110,.85) 0 6px, transparent 6px),linear-gradient(-22deg, rgba(236,167,70,.75) 0 8px, transparent 8px),linear-gradient(180deg,#efe2ca 0%,#dccdb2 100%);position:relative;overflow:hidden}
+    .customer360-contact-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;background:#22304b;color:#dce3eb;font-size:12px}
     .customer360-map::after{content:"Current Location";position:absolute;left:12px;bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(42,50,60,.86);color:#f7f7f4;font-size:12px}
-    .customer360-car-shot{margin-top:16px;height:150px;border-radius:8px;background:linear-gradient(180deg, rgba(24,31,39,.2), rgba(24,31,39,.5)),radial-gradient(circle at 50% 75%, rgba(25,30,36,.95) 0 18%, transparent 19%),linear-gradient(180deg,#6f7782 0%,#2f3845 60%,#242a33 100%);position:relative;overflow:hidden}
-    .customer360-car-shot::before{content:"";position:absolute;left:50%;top:52%;width:72%;height:44%;transform:translate(-50%,-50%);border-radius:36px 46px 22px 22px;background:linear-gradient(180deg,#1c222c 0%,#0f1319 100%);box-shadow:0 22px 0 -10px rgba(0,0,0,.35)}
-    .customer360-car-shot::after{content:"";position:absolute;left:50%;bottom:20px;width:64%;height:18px;transform:translateX(-50%);border-radius:999px;background:rgba(0,0,0,.25)}
+    .customer360-car-shot{margin-top:14px;height:120px;border-radius:10px;background:linear-gradient(180deg, rgba(24,31,39,.2), rgba(24,31,39,.5)),radial-gradient(circle at 50% 75%, rgba(25,30,36,.95) 0 18%, transparent 19%),linear-gradient(180deg,#7a8390 0%,#2f3845 60%,#242a33 100%);position:relative;overflow:hidden}
+    .customer360-car-shot::before{content:"";position:absolute;left:50%;top:52%;width:72%;height:44%;transform:translate(-50%,-50%);border-radius:36px 46px 22px 22px;background:linear-gradient(180deg,#d8dde6 0%,#8a939e 100%);box-shadow:0 22px 0 -10px rgba(0,0,0,.35)}
+    .customer360-car-shot::after{content:"";position:absolute;left:50%;bottom:18px;width:64%;height:18px;transform:translateX(-50%);border-radius:999px;background:rgba(0,0,0,.25)}
     .customer360-media-row{margin-top:14px;display:flex;justify-content:space-between;align-items:center;color:#f5f5f4;font-weight:700}
-    .customer360-action-dock{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .customer360-dock-btn{padding:18px 14px;border-radius:18px;border:1px solid rgba(255,255,255,.12);font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}
-    .customer360-dock-btn.call{background:#28477a;color:#fff}
-    .customer360-dock-btn.sms{background:#a9772f;color:#fff}
+    .customer360-action-dock{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .customer360-dock-btn{padding:16px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.1);font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}
+    .customer360-dock-btn.call{background:linear-gradient(180deg,#295dcb 0%,#214ca8 100%);color:#fff}
+    .customer360-dock-btn.sms{background:linear-gradient(180deg,#af7d34 0%,#8f6427 100%);color:#fff}
     .customer360-empty{padding:22px;border:1px dashed rgba(255,255,255,.18);border-radius:10px;color:#d5d9de;background:#323844}
 
     @media (max-width: 1200px){
       .cards4{grid-template-columns:repeat(3,1fr)}
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
-      .customer360-layout{grid-template-columns:1fr}
+      .customer360-layout,.customer360-main-grid,.customer360-lower-grid{grid-template-columns:1fr}
     }
     @media (max-width: 960px){
       .grid,.split,.cards4,.form-grid,.form-grid-3{grid-template-columns:1fr}
@@ -625,55 +667,62 @@
     <section id="customer360Tab" class="tab active">
       <div class="customer360-shell">
         <div class="customer360-topbar">
-          <div class="customer360-brand-lockup"><img class="customer360-brand-logo" src="./INGRID.png" alt="INGRID"><div class="customer360-brand-stack"><div class="customer360-brand"><span>INGRID</span> DMS</div><div class="customer360-brand-sub">Automotive Intelligence</div></div></div>
-          <div class="customer360-toolbar-search">
-            <input id="customer360SearchBox" type="text" placeholder="Search..." />
+          <div class="customer360-brand-lockup">
+            <img class="customer360-brand-logo" src="./INGRID.png" alt="INGRID" />
+            <div class="customer360-brand-stack">
+              <div class="customer360-brand">INGRID</div>
+              <div class="customer360-brand-sub">AUTOMOTIVE INTELLIGENCE</div>
+            </div>
           </div>
+          <div class="customer360-toolbar-search">
+            <input id="customer360SearchBox" type="text" placeholder="Search customers, vehicles ..." />
+          </div>
+          <button class="customer360-toolbar-btn">＋ Create</button>
+          <button class="customer360-toolbar-btn secondary">★ AI Actions</button>
           <div class="customer360-toolbar-meta" id="customer360ToolbarMeta">Pinnacle Auto Group • DMS Home</div>
           <div class="customer360-toolbar-icons">
-            <div class="customer360-toolbar-icon">✉</div>
-            <div class="customer360-toolbar-icon">🔔</div>
-            <div class="customer360-toolbar-icon">🎙</div>
-            <div class="customer360-toolbar-icon">👤</div>
+            <div class="customer360-toolbar-icon">⚙</div>
+          </div>
+          <div class="customer360-toolbar-profile">
+            <div class="customer360-toolbar-avatar"></div>
+            <div>
+              <div>Rachel Smith</div>
+              <small>Attunes Motors</small>
+            </div>
           </div>
         </div>
 
         <div class="customer360-layout">
           <section class="customer360-sidebar">
-            <div class="customer360-nav-card customer360-context-card">
+            <div class="customer360-sidebar-block customer360-context-card">
               <div class="customer360-context-title">Main Operating Screen</div>
               <div id="customer360ContextName" class="customer360-context-name">DMS Home</div>
               <div id="customer360ContextCopy" class="customer360-context-copy">Customer + Vehicle 360 remains the core operating screen for every department.</div>
             </div>
 
-            <div class="customer360-picker-card">
+            <div class="department-menu-panel">
               <div class="department-menu-title">Department Menu</div>
               <div class="department-menu" id="departmentMenu">
-                <button class="department-menu-btn active" type="button" data-department="home"><span>DMS Home</span><small>360 Core</small></button>
-                <button class="department-menu-btn" type="button" data-department="sales"><span>Sales</span><small>Deals</small></button>
-                <button class="department-menu-btn" type="button" data-department="service"><span>Service Advisor</span><small>RO + Appts</small></button>
-                <button class="department-menu-btn" type="button" data-department="bdc"><span>BDC</span><small>Calls + SMS</small></button>
-                <button class="department-menu-btn" type="button" data-department="technicians"><span>Technicians</span><small>Jobs</small></button>
-                <button class="department-menu-btn" type="button" data-department="fi"><span>F&amp;I</span><small>Closing</small></button>
-                <button class="department-menu-btn" type="button" data-department="parts"><span>Parts</span><small>Inventory</small></button>
-                <button class="department-menu-btn" type="button" data-department="accounting"><span>Accounting</span><small>Financials</small></button>
-                <button class="department-menu-btn" type="button" data-department="executive"><span>Executive</span><small>KPIs</small></button>
+                <button class="department-menu-btn active" type="button" data-department="home"><span><span class="department-menu-icon">⌂</span>DMS Home</span><small>360 Core</small></button>
+                <button class="department-menu-btn" type="button" data-department="sales"><span><span class="department-menu-icon">◔</span>Sales</span><small>Deals</small></button>
+                <button class="department-menu-btn" type="button" data-department="service"><span><span class="department-menu-icon">🛠</span>Service Advisor</span><small>RO + Appts</small></button>
+                <button class="department-menu-btn" type="button" data-department="bdc"><span><span class="department-menu-icon">☎</span>BDC</span><small>Calls + SMS</small></button>
+                <button class="department-menu-btn" type="button" data-department="technicians"><span><span class="department-menu-icon">🧰</span>Technicians</span><small>Jobs</small></button>
+                <button class="department-menu-btn" type="button" data-department="fi"><span><span class="department-menu-icon">💳</span>F&amp;I</span><small>Closing</small></button>
+                <button class="department-menu-btn" type="button" data-department="parts"><span><span class="department-menu-icon">▣</span>Parts</span><small>Inventory</small></button>
+                <button class="department-menu-btn" type="button" data-department="accounting"><span><span class="department-menu-icon">▤</span>Accounting</span><small>Financials</small></button>
+                <button class="department-menu-btn" type="button" data-department="executive"><span><span class="department-menu-icon">⋯</span>Executive</span><small>KPIs</small></button>
+                <button class="department-menu-btn" type="button" data-department="settings"><span><span class="department-menu-icon">⚙</span>Settings</span><small>Roles later</small></button>
               </div>
             </div>
 
-            <div class="customer360-profile-card">
-              <div class="customer360-portrait"></div>
-              <div id="customer360ProfileCard" class="customer360-profile-body">
-                <div class="customer360-profile-name">Select a customer</div>
-                <div class="customer360-vip">VIP Customer</div>
-              </div>
+            <div class="customer360-quick-actions">
+              <button id="customer360ActionOne" class="customer360-quick-action" type="button"><span><span class="customer360-action-icon">◔</span>New Deal</span><span>›</span></button>
+              <button id="customer360ActionTwo" class="customer360-quick-action" type="button"><span><span class="customer360-action-icon">✚</span>Create Appointment</span><span>›</span></button>
+              <button id="customer360ActionThree" class="customer360-quick-action" type="button"><span><span class="customer360-action-icon">✎</span>Add Note</span><span>›</span></button>
             </div>
 
-            <div id="customer360ActionOne" class="customer360-action-card"><span><span class="customer360-action-icon">◔</span> New Deal</span><span>›</span></div>
-            <div id="customer360ActionTwo" class="customer360-action-card"><span><span class="customer360-action-icon">✚</span> Create Appointment</span><span>›</span></div>
-            <div id="customer360ActionThree" class="customer360-action-card"><span><span class="customer360-action-icon">✎</span> Add Note</span><span>›</span></div>
-
-            <div class="customer360-picker-card">
+            <div class="customer360-sidebar-block customer360-picker-card">
               <div class="customer360-eyebrow">Customer Records</div>
               <div id="customer360Summary" class="customer360-summary-copy">Loading customer records...</div>
               <button id="refreshCustomer360Btn" class="secondary">Refresh</button>
@@ -682,24 +731,62 @@
           </section>
 
           <section class="customer360-main">
-            <section class="customer360-summary-card">
-              <div class="customer360-summary-title">
-                <span class="customer360-summary-icon">✦</span>
-                <span id="customer360SummaryTitle">AI Summary</span>
+            <div class="customer360-title-row">
+              <h2 class="customer360-main-title">Customer 360° Dashboard</h2>
+              <div class="customer360-title-tools">
+                <button class="customer360-mini-btn">Hire</button>
+                <button class="customer360-mini-btn">Ridges</button>
+                <button class="customer360-mini-btn">⋯</button>
               </div>
-              <div id="customer360AiSummary" class="customer360-summary-body">Select a customer to generate a timeline-aware summary.</div>
-              <div class="customer360-inline-actions">
-                <button class="mini-btn" type="button" id="customer360PrimaryCallBtn">Call Customer</button>
-                <button class="mini-btn" type="button" id="customer360PrimarySmsBtn">Send SMS</button>
-                <button class="mini-btn" type="button">Create Task</button>
-                <button class="mini-btn" type="button">Create Appointment</button>
-              </div>
-            </section>
+            </div>
 
-            <section>
-              <div class="customer360-section-head"><h3>Unified Timeline</h3><span id="customer360TimelineLens" class="customer360-section-pill">All departments</span></div>
-              <div id="customer360Timeline" class="customer360-timeline"></div>
-            </section>
+            <div class="customer360-main-grid">
+              <section id="customer360CustomerCard" class="customer360-customer-card">
+                <div class="customer360-profile-name">Select a customer</div>
+              </section>
+
+              <section class="customer360-summary-card">
+                <div class="customer360-summary-title">
+                  <span class="customer360-summary-icon">✦</span>
+                  <span id="customer360SummaryTitle">AI Summary</span>
+                </div>
+                <div id="customer360AiSummary" class="customer360-summary-body">Select a customer to generate a timeline-aware summary.</div>
+              </section>
+            </div>
+
+            <div class="customer360-lower-grid">
+              <div class="customer360-stack">
+                <section class="customer360-panel">
+                  <h3>Tasks</h3>
+                  <div id="customer360TasksBoard"></div>
+                </section>
+                <section class="customer360-panel">
+                  <h3>Notes</h3>
+                  <div id="customer360NotesBoard"></div>
+                </section>
+              </div>
+
+                <section>
+                <div class="customer360-timeline-toolbar">
+                  <span id="customer360TimelineLens" class="customer360-filter-chip active">All departments</span>
+                  <span class="customer360-filter-chip">Calls</span>
+                  <span class="customer360-filter-chip">SMS</span>
+                  <span class="customer360-filter-chip">Notes</span>
+                  <span class="customer360-filter-chip">Tasks</span>
+                  <span class="customer360-filter-chip">Appointments</span>
+                  <span class="customer360-filter-chip">More ▾</span>
+                </div>
+                <div id="customer360Timeline" class="customer360-timeline"></div>
+                <div class="customer360-composer">
+                  <div class="customer360-composer-avatar"></div>
+                  <div>Write a note, create a task, or send a message...</div>
+                  <div class="customer360-composer-actions">
+                    <button class="customer360-composer-btn">Note</button>
+                    <button class="customer360-composer-btn">Task ▾</button>
+                  </div>
+                </div>
+              </section>
+            </div>
           </section>
 
           <aside class="customer360-rail">
@@ -712,6 +799,16 @@
                 <span>Media &amp; Docs</span>
                 <span id="customer360ArchiveCount">0 Items</span>
               </div>
+            </div>
+
+            <div class="customer360-rail-card">
+              <div class="customer360-eyebrow">Tasks</div>
+              <div id="customer360RightTask"></div>
+            </div>
+
+            <div class="customer360-rail-card">
+              <div class="customer360-eyebrow">Vehicle Files</div>
+              <div id="customer360FilesPanel"></div>
             </div>
 
             <div class="customer360-action-dock">
