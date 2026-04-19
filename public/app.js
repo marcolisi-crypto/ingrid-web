@@ -3900,24 +3900,72 @@ function renderCustomer360Detail() {
       const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
       return tone === "warn" || tone === "danger";
     });
+    const bdcTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[bdc]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("callback"));
+    const salesTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[sales]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("quote") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("deal"));
+    const accountingTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[accounting]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("invoice") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("ledger"));
     const activeAppointment = appointments[0] || null;
     const pressureTone = overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good";
     const pressureLabel = overdueTasks.length ? "Overdue risk" : urgentTasks.length ? "Attention" : "On track";
     const firstOpenTask = openTasks[0] || null;
     const firstTaskId = firstOpenTask ? escapeHtml(String(firstOpenTask.id || firstOpenTask.taskId || firstOpenTask.createdAtUtc || firstOpenTask.title || "")) : "";
     const firstAppointmentId = activeAppointment ? escapeHtml(String(activeAppointment.id || activeAppointment.appointmentId || activeAppointment.createdAtUtc || activeAppointment.date || "")) : "";
+    let workChipLabel = "Open Work";
+    let workChipValue = `${openTasks.length} tasks`;
+    let visitChipLabel = "Visits";
+    let visitChipValue = activeAppointment ? "Active booking" : "No active visit";
+    let pressureChipLabel = "Pressure";
+    let pressureChipValue = pressureLabel;
+    let workChipTone = openTasks.length ? "warn" : "good";
+    let visitChipTone = activeAppointment ? "info" : "good";
+
+    if (currentDepartmentLens === "service") {
+      workChipLabel = "Lane Tasks";
+      workChipValue = openTasks.length ? `${openTasks.length} active steps` : "Service queue clear";
+      visitChipLabel = "Arrival";
+      visitChipValue = activeAppointment ? `${activeAppointment.service || "Service visit"}` : "No booked arrival";
+      pressureChipLabel = "Promised Time";
+      pressureChipValue = activeAppointment ? pressureLabel : "Needs booking";
+      visitChipTone = activeAppointment ? "info" : "warn";
+    } else if (currentDepartmentLens === "bdc") {
+      workChipLabel = "Callback Queue";
+      workChipValue = bdcTasks.length ? `${bdcTasks.length} callbacks live` : "Queue clear";
+      visitChipLabel = "Visit Intent";
+      visitChipValue = activeAppointment ? "Commitment captured" : "No commitment yet";
+      pressureChipLabel = "Reply SLA";
+      pressureChipValue = pressureLabel;
+      workChipTone = bdcTasks.length ? "warn" : "good";
+      visitChipTone = activeAppointment ? "good" : "warn";
+    } else if (currentDepartmentLens === "sales") {
+      workChipLabel = "Deal Queue";
+      workChipValue = salesTasks.length ? `${salesTasks.length} deal steps live` : "No open deal";
+      visitChipLabel = "Showroom";
+      visitChipValue = activeAppointment ? "Visit scheduled" : "No drive booked";
+      pressureChipLabel = "Desk Pressure";
+      pressureChipValue = pressureLabel;
+      workChipTone = salesTasks.length ? "warn" : "good";
+      visitChipTone = activeAppointment ? "info" : "warn";
+    } else if (currentDepartmentLens === "accounting") {
+      workChipLabel = "Invoice Queue";
+      workChipValue = accountingTasks.length ? `${accountingTasks.length} reviews open` : "No pending review";
+      visitChipLabel = "Payment Rail";
+      visitChipValue = accountingTasks.length ? "Collection / statement active" : "Clear";
+      pressureChipLabel = "Back Office";
+      pressureChipValue = pressureLabel;
+      workChipTone = accountingTasks.length ? "warn" : "good";
+      visitChipTone = accountingTasks.length ? "info" : "good";
+    }
     opsStripEl.innerHTML = `
-      <button class="customer360-ops-chip ${openTasks.length ? "warn" : "good"}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('task')"`}>
-        <small>Open Work</small>
-        <strong>${escapeHtml(String(openTasks.length))} tasks</strong>
+      <button class="customer360-ops-chip ${workChipTone}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('task')"`}>
+        <small>${escapeHtml(workChipLabel)}</small>
+        <strong>${escapeHtml(workChipValue)}</strong>
       </button>
-      <button class="customer360-ops-chip ${activeAppointment ? "info" : "good"}" ${firstAppointmentId ? `onclick="openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('appointment')"`}>
-        <small>Visits</small>
-        <strong>${activeAppointment ? "Active booking" : "No active visit"}</strong>
+      <button class="customer360-ops-chip ${visitChipTone}" ${firstAppointmentId ? `onclick="openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('appointment')"`}>
+        <small>${escapeHtml(visitChipLabel)}</small>
+        <strong>${escapeHtml(visitChipValue)}</strong>
       </button>
       <button class="customer360-ops-chip ${pressureTone}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('${escapeHtml(String(getDepartmentLensConfig().composerMode || "task"))}')"`}>
-        <small>Pressure</small>
-        <strong>${escapeHtml(pressureLabel)}</strong>
+        <small>${escapeHtml(pressureChipLabel)}</small>
+        <strong>${escapeHtml(pressureChipValue)}</strong>
       </button>
     `;
   }
