@@ -496,6 +496,33 @@ function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appoin
     ];
   }
 
+  if (currentDepartmentLens === "technicians") {
+    return [
+      { icon: "🧰", title: "Inspection Packet", meta: `${vehicleDisplayName(vehicle)} MPI + repair notes` },
+      { icon: "📸", title: "Technician Media", meta: `${notes.length || 1} annotated photos or findings queued` },
+      { icon: "📦", title: "Parts Pick Ticket", meta: `${appointments.length ? "Linked to active lane visit" : "Ready once RO is written"}` },
+      { icon: "🗂", title: "VIN History", meta: `${customerDisplayName(customer)} prior service evidence` }
+    ];
+  }
+
+  if (currentDepartmentLens === "parts") {
+    return [
+      { icon: "📦", title: "Stock Pull Sheet", meta: `${vehicleDisplayName(vehicle)} pick list and shelf route` },
+      { icon: "🤖", title: "Runner Dispatch", meta: `${calls.length || 1} handoff signals for technician delivery` },
+      { icon: "🧾", title: "Special Order Packet", meta: `${notes.length || 1} notes tied to ETA and vendor status` },
+      { icon: "🗂", title: "Core Return File", meta: `${customerDisplayName(customer)} parts-side archive` }
+    ];
+  }
+
+  if (currentDepartmentLens === "accounting") {
+    return [
+      { icon: "💳", title: "Payment Record", meta: `${customerDisplayName(customer)} payment and refund evidence` },
+      { icon: "🧾", title: "Invoice Packet", meta: `${vehicleDisplayName(vehicle)} statement and line items` },
+      { icon: "📚", title: "Ledger Trail", meta: `${notes.length || 1} internal accounting notes` },
+      { icon: "🏦", title: "Settlement File", meta: `Stripe / QuickBooks-style reconciliation packet` }
+    ];
+  }
+
   return buildVinArchiveItems(vehicle, customer, calls, notes, appointments);
 }
 
@@ -552,6 +579,87 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         <div class="customer360-service-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Visit</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "technicians") {
+    return `
+      <div class="customer360-service-card">
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Bay Assignment</div>
+            <div class="customer360-service-value">${vehicle ? "Bay 4 • active" : "Awaiting dispatch"}</div>
+            <div class="customer360-service-copy">Technician work, media capture, and inspection updates should anchor back to this VIN record.</div>
+          </div>
+          <span class="customer360-status-pill good">In Shop</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Parts Readiness</div>
+            <div class="customer360-service-value">${topTask ? "Request queued" : "No part hold"}</div>
+            <div class="customer360-service-copy">${topTask ? escapeHtml(topTask.title || "Technician request") : "Parts request and robot runner status can surface here."}</div>
+          </div>
+          <span class="customer360-status-pill info">Tech</span>
+        </div>
+        <div class="customer360-service-actions">
+          ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Close Work Step</button>` : ""}
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Inspection Note</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "parts") {
+    return `
+      <div class="customer360-service-card">
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Counter Status</div>
+            <div class="customer360-service-value">${topTask ? "Pick in progress" : "Awaiting request"}</div>
+            <div class="customer360-service-copy">Special orders, shelf pulls, and robot-runner dispatches should stay tied to the same vehicle record.</div>
+          </div>
+          <span class="customer360-status-pill ${topTask ? "warn" : "info"}">${topTask ? "Active" : "Idle"}</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Delivery Route</div>
+            <div class="customer360-service-value">${appointments.length ? "Send to active bay" : "Stage for advisor"}</div>
+            <div class="customer360-service-copy">${appointments.length ? "A runner can deliver parts directly to the technician once the request is approved." : "No active lane event yet, so keep the order staged at counter."}</div>
+          </div>
+          <span class="customer360-status-pill info">Parts</span>
+        </div>
+        <div class="customer360-service-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Create Pick Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Log Parts Note</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "accounting") {
+    return `
+      <div class="customer360-service-card">
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Ledger Status</div>
+            <div class="customer360-service-value">${topTask ? "Needs posting" : "Balanced"}</div>
+            <div class="customer360-service-copy">Invoices, refunds, and Stripe-backed payments should reconcile from this same customer and VIN context.</div>
+          </div>
+          <span class="customer360-status-pill ${topTask ? "warn" : "good"}">${topTask ? "Review" : "Clear"}</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Payment Rail</div>
+            <div class="customer360-service-value">Stripe + Statement</div>
+            <div class="customer360-service-copy">${topTask ? "Open accounting work suggests a statement, invoice, or collection follow-up is active." : "Use this rail for invoice, payment, refund, and statement workflows."}</div>
+          </div>
+          <span class="customer360-status-pill info">Accounting</span>
+        </div>
+        <div class="customer360-service-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Ledger Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Invoice Task</button>
         </div>
       </div>
     `;
@@ -738,6 +846,147 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Test Drive</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "technicians") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Work Order</div>
+          <div class="customer360-lens-value">${vehicle?.vin ? `Bay job • ${escapeHtml(vehicle.vin.slice(-6))}` : "Work order pending"}</div>
+          <div class="customer360-lens-copy">Inspection findings, media, and technician notes should collect around this VIN-linked job record.</div>
+        </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Inspection Flow</small>
+            <strong>${notes.length ? "Findings captured" : "Awaiting first note"}</strong>
+            <span>${notes.length ? "Media and notes are ready to support advisor approvals." : "Use internal notes to start the digital inspection trail."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Robot Parts Runner</small>
+            <strong>${topTask ? "Request likely" : "Standby"}</strong>
+            <span>${topTask ? "Open tech tasks can become parts-runner dispatch requests." : "No active parts handoff has been created yet."}</span>
+          </div>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Next Procedure</div>
+          <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Start digital inspection")}</div>
+          <div class="customer360-lens-copy">${escapeHtml(topTask?.description || "Technician should progress diagnosis, media capture, and parts needs from here.")}</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Open inspection</b><span>Capture the first technician finding and attach media to the VIN archive.</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Request parts</b><span>${topTask ? "Convert the active task into a technician-to-parts handoff." : "No parts request has been created yet."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Return findings</b><span>Advisor approvals and status updates should flow back through the same timeline.</span></div>
+          </div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Log Technician Finding</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Request Parts</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "parts") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Parts Request</div>
+          <div class="customer360-lens-value">${vehicle ? `Stock pull • ${escapeHtml(vehicleName)}` : "Request pending"}</div>
+          <div class="customer360-lens-copy">Every pick, special order, and runner dispatch should stay tied to this VIN and repair context.</div>
+        </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Availability</small>
+            <strong>${topTask ? "Needs verification" : "No active SKU"}</strong>
+            <span>${topTask ? "Open task suggests a part request that should move through stock or special order." : "Once a request exists, shelf location and ETA can land here."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Runner Route</small>
+            <strong>${appointments.length ? "Bay delivery ready" : "Counter hold"}</strong>
+            <span>${appointments.length ? "A robot runner can hand off the part directly to the technician." : "Keep the order staged until the work order is actively in the bay."}</span>
+          </div>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Next Pick</div>
+          <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Create parts pick task")}</div>
+          <div class="customer360-lens-copy">${escapeHtml(topTask?.description || "Parts should own stock pull, special-order decision, and delivery-to-tech status from this block.")}</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Confirm SKU</b><span>Validate fitment and VIN match before the request leaves the counter.</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Choose source</b><span>${topTask ? "Decide between in-stock pull, transfer, or special order." : "No sourcing decision is required yet."}</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Dispatch delivery</b><span>Use the same record to send the part to advisor, bay, or robot runner workflow.</span></div>
+          </div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Create Parts Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add ETA Note</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "accounting") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Ledger</div>
+          <div class="customer360-lens-value">${vehicle ? `Open account • ${escapeHtml(vehicleName)}` : "Customer ledger"}</div>
+          <div class="customer360-lens-copy">Statements, invoice decisions, and payment events should remain attached to the same customer + VIN spine.</div>
+        </div>
+        <div class="customer360-lens-grid">
+          <div class="customer360-lens-stat">
+            <small>Invoice State</small>
+            <strong>${topTask ? "Needs review" : "Draft-ready"}</strong>
+            <span>${topTask ? "An open accounting task suggests invoice posting or statement follow-up is still pending." : "Use this block for modern QuickBooks-style invoice and statement flow."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Payment Rail</small>
+            <strong>Stripe linked</strong>
+            <span>Card, refund, and statement workflows can eventually settle here with QuickBooks-style bookkeeping posture.</span>
+          </div>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Next Financial Step</div>
+          <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Prepare invoice / statement")}</div>
+          <div class="customer360-lens-copy">${escapeHtml(topTask?.description || "Accounting should use this area for statement issue, payment follow-up, refund, and reconciliation actions.")}</div>
+        </div>
+        <div class="customer360-lens-checklist">
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">1</span>
+            <div><b>Validate charges</b><span>Review service, parts, and delivery items against the same operating timeline.</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">2</span>
+            <div><b>Issue payment request</b><span>Use Stripe-backed collection and customer statement language from this record.</span></div>
+          </div>
+          <div class="customer360-lens-check">
+            <span class="customer360-lens-check-mark">3</span>
+            <div><b>Reconcile</b><span>${notes.length ? "Recent notes can seed reconciliation comments and customer statement context." : "No reconciliation notes have been captured yet."}</span></div>
+          </div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Invoice Review</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Ledger Note</button>
         </div>
       </div>
     `;
