@@ -1406,7 +1406,18 @@ function getJourneyAssigneeKey(stageKey = "") {
   return `${selectedCustomerId || "global"}:${stageKey}`;
 }
 
+function getTimelineJourneyAssignment(stageKey = "") {
+  return (currentCustomerTimeline || []).find((event) => {
+    const sourceId = String(event.sourceId || "").toLowerCase();
+    const eventType = String(event.eventType || "").toLowerCase();
+    const department = String(event.department || "").toLowerCase();
+    return eventType === "journey_assignment" && sourceId === `journey-assignment:${stageKey}` && department === stageKey;
+  }) || null;
+}
+
 function getJourneyAssignedOwner(stageKey = "", status = "") {
+  const timelineAssignment = getTimelineJourneyAssignment(stageKey);
+  if (timelineAssignment?.body) return String(timelineAssignment.body);
   const assigned = customer360AssigneeMap[getJourneyAssigneeKey(stageKey)];
   return assigned || getJourneyStageOwner(stageKey, status);
 }
@@ -1419,12 +1430,54 @@ function renderJourneyAssigneeOptions(stageKey = "", selectedOwner = "") {
   `).join("");
 }
 
-function setJourneyAssignee(stageKey = "", owner = "") {
+async function persistJourneyAssignee(stageKey = "", owner = "") {
+  const customer = getSelectedCustomerRecord();
+  if (!customer) return;
+
+  const vehicle = getSelectedVehicleRecord();
+  const response = await fetch("/.netlify/functions/timeline-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      eventType: "journey_assignment",
+      title: `${titleCase(stageKey)} owner reassigned`,
+      body: owner,
+      department: stageKey,
+      sourceSystem: "ingrid-web",
+      sourceId: `journey-assignment:${stageKey}`,
+      occurredAtUtc: new Date().toISOString()
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Unable to persist journey assignment.");
+  }
+}
+
+async function setJourneyAssignee(stageKey = "", owner = "") {
   if (!stageKey || !selectedCustomerId) return;
+  const previousOwner = customer360AssigneeMap[getJourneyAssigneeKey(stageKey)] || "";
   const nextMap = { ...customer360AssigneeMap, [getJourneyAssigneeKey(stageKey)]: owner || getJourneyStageOwner(stageKey, "active") };
   saveJourneyAssigneeMap(nextMap);
-  setCustomer360ComposerStatus(`${titleCase(stageKey)} assigned to ${owner || "default owner"}.`, "success");
   renderCustomer360Detail();
+
+  try {
+    await persistJourneyAssignee(stageKey, owner || getJourneyStageOwner(stageKey, "active"));
+    await refreshSelectedCustomer360();
+    renderCustomer360Detail();
+    setCustomer360ComposerStatus(`${titleCase(stageKey)} assigned to ${owner || "default owner"}.`, "success");
+  } catch (err) {
+    const rollbackMap = { ...customer360AssigneeMap, [getJourneyAssigneeKey(stageKey)]: previousOwner };
+    if (!previousOwner) {
+      delete rollbackMap[getJourneyAssigneeKey(stageKey)];
+    }
+    saveJourneyAssigneeMap(rollbackMap);
+    renderCustomer360Detail();
+    setCustomer360ComposerStatus(err.message || "Unable to save assignee.", "error");
+  }
 }
 
 function getJourneyArtifactMovedAtLabel(value) {
