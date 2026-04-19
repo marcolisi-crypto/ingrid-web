@@ -1375,6 +1375,35 @@ function getVinTimelineSubtype(item) {
   return "all";
 }
 
+function getVinEmptyStateConfig(subtype = "all") {
+  if (subtype === "health") {
+    return {
+      label: "No health events on this VIN yet.",
+      actionLabel: "Log Health Event",
+      action: "startVehicleHealthEventNote()"
+    };
+  }
+  if (subtype === "movement") {
+    return {
+      label: "No movement updates on this VIN yet.",
+      actionLabel: "Log Movement",
+      action: "startVehicleGeoMovementNote()"
+    };
+  }
+  if (subtype === "archive") {
+    return {
+      label: "No archive entries on this VIN yet.",
+      actionLabel: "Add VIN Archive Entry",
+      action: "startVinArchiveEntryNote()"
+    };
+  }
+  return {
+    label: "No VIN events on this timeline yet.",
+    actionLabel: "Create VIN Event",
+    action: "startVehicleHealthEventNote()"
+  };
+}
+
 function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks, appointments) {
   const latestSummaryEvent = timelineEvents.find((event) =>
     /summary|transcript/i.test(String(event.eventType || event.title || ""))
@@ -3221,7 +3250,19 @@ function renderCustomer360Timeline() {
   });
 
   if (!items.length) {
-    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter === "vin" ? `${currentCustomer360VinFilter === "all" ? "VIN" : currentCustomer360VinFilter} events` : filter)} on this timeline yet.</div>`;
+    if (filter === "vin") {
+      const emptyState = getVinEmptyStateConfig(currentCustomer360VinFilter);
+      timelineEl.innerHTML = `
+        <div class="customer360-empty">
+          <div>${escapeHtml(emptyState.label)}</div>
+          <div style="margin-top:12px;">
+            <button type="button" class="customer360-mini-btn" onclick="${emptyState.action}">${escapeHtml(emptyState.actionLabel)}</button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter)} on this timeline yet.</div>`;
     return;
   }
 
