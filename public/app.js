@@ -1734,6 +1734,34 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         slaAt: note.updatedAtUtc || note.createdAtUtc
       };
     }
+
+    const vehicleSignal = getLatestTaggedArtifact("[vehicle]", notes, currentCustomerTimeline || []);
+    if (vehicleSignal) {
+      return {
+        label: "Vehicle health signal",
+        detail: String(vehicleSignal.body || "").replace(/\[vehicle\]\s*/i, "").trim().slice(0, 72),
+        interactive: true,
+        kind: "notes",
+        sourceId: vehicleSignal.id || vehicleSignal.noteId || vehicleSignal.timelineEventId || vehicleSignal.createdAtUtc || vehicleSignal.body,
+        owner: "Advisor",
+        movedAt: vehicleSignal.updatedAtUtc || vehicleSignal.occurredAtUtc || vehicleSignal.createdAtUtc,
+        slaAt: vehicleSignal.updatedAtUtc || vehicleSignal.occurredAtUtc || vehicleSignal.createdAtUtc
+      };
+    }
+
+    const archiveSignal = getLatestTaggedArtifact("[archive]", notes, currentCustomerTimeline || []);
+    if (archiveSignal) {
+      return {
+        label: "VIN evidence",
+        detail: String(archiveSignal.body || "").replace(/\[archive\]\s*/i, "").trim().slice(0, 72),
+        interactive: true,
+        kind: "notes",
+        sourceId: archiveSignal.id || archiveSignal.noteId || archiveSignal.timelineEventId || archiveSignal.createdAtUtc || archiveSignal.body,
+        owner: "Advisor",
+        movedAt: archiveSignal.updatedAtUtc || archiveSignal.occurredAtUtc || archiveSignal.createdAtUtc,
+        slaAt: archiveSignal.updatedAtUtc || archiveSignal.occurredAtUtc || archiveSignal.createdAtUtc
+      };
+    }
   }
 
   const stageTasks = tasks.filter((item) => taskMatchesStage(item, stageKey));
@@ -2149,7 +2177,10 @@ function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls =
   const hasFi = hasKeywordMatch(tasks, ["[fi]", "funding", "warranty", "finance"]) || hasKeywordMatch(notes, ["[fi]", "funding", "menu", "finance"]);
   const hasDelivery = hasKeywordMatch(tasks, ["delivery", "handoff", "vehicle pickup"]) || hasKeywordMatch(notes, ["delivery", "picked up"]);
 
-  const serviceReady = appointments.length > 0;
+  const hasServiceNote = hasKeywordMatch(notes, ["[service]"]);
+  const hasVehicleSignal = hasKeywordMatch(notes, ["[vehicle]"]);
+  const hasArchiveSignal = hasKeywordMatch(notes, ["[archive]"]);
+  const serviceReady = appointments.length > 0 || hasServiceNote || hasVehicleSignal || hasArchiveSignal;
   const techReady = hasKeywordMatch(tasks, ["[technician]", "diagn", "inspect", "tech", "repair"]) || hasKeywordMatch(notes, ["[technician]", "inspection", "finding", "diagn"]);
   const partsReady = hasKeywordMatch(tasks, ["[parts]", "part", "stock", "sku", "runner"]) || hasKeywordMatch(notes, ["[parts]", "eta", "part", "stock", "runner"]);
   const accountingReady = hasKeywordMatch(tasks, ["[accounting]", "invoice", "payment", "statement", "ledger"]) || hasKeywordMatch(notes, ["[accounting]", "statement", "ledger", "payment", "refund"]);
@@ -2203,7 +2234,15 @@ function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls =
     {
       key: "service",
       label: "Service Advisor",
-      detail: serviceReady ? "Visit booked and ready for write-up." : "Book visit and set promised time.",
+      detail: appointments.length
+        ? "Visit booked and ready for write-up."
+        : hasVehicleSignal
+          ? "Vehicle health signal captured and waiting for advisor review."
+          : hasArchiveSignal
+            ? "VIN evidence added and ready for advisor follow-up."
+            : serviceReady
+              ? "Advisor context is active and ready for the next lane step."
+              : "Book visit and set promised time.",
       status: serviceReady ? (techReady ? "complete" : "active") : "active"
     },
     {
@@ -2231,8 +2270,14 @@ function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls =
         ? "Parts engaged"
         : techReady
           ? "In technician flow"
-          : serviceReady
+          : appointments.length
             ? "Lane ready"
+            : hasVehicleSignal
+              ? "Vehicle signal captured"
+              : hasArchiveSignal
+                ? "VIN evidence added"
+                : serviceReady
+                  ? "Advisor engaged"
             : "Waiting"
   };
 }
