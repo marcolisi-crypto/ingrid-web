@@ -750,8 +750,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Write Service Visit</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Advisor Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startServiceWriteUp()">Write Service Visit</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startAdvisorJourneyNote()">Add Advisor Note</button>
         </div>
       </div>
     `;
@@ -1320,6 +1320,47 @@ function buildAccountingNotesMarkup(notes = []) {
   `).join("");
 }
 
+function getJourneyArtifactTag() {
+  if (currentDepartmentLens === "service") return "[SERVICE]";
+  if (currentDepartmentLens === "technicians") return "[TECHNICIAN]";
+  if (currentDepartmentLens === "parts") return "[PARTS]";
+  if (currentDepartmentLens === "accounting") return "[ACCOUNTING]";
+  return "";
+}
+
+function getJourneyArtifactLabel() {
+  if (currentDepartmentLens === "service") return "service advisor";
+  if (currentDepartmentLens === "technicians") return "technician";
+  if (currentDepartmentLens === "parts") return "parts";
+  if (currentDepartmentLens === "accounting") return "accounting";
+  return "department";
+}
+
+function stampJourneyArtifact(text = "") {
+  const trimmed = String(text || "").trim();
+  const tag = getJourneyArtifactTag();
+  if (!tag) return trimmed;
+  return trimmed.startsWith(tag) ? trimmed : `${tag} ${trimmed}`.trim();
+}
+
+function startServiceWriteUp() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("appointment", {
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nWrite-up summary:\n- Concern:\n- Promised time:\n- Transportation:\n- Advisor notes:`,
+    status: "Service write-up template loaded."
+  });
+}
+
+function startAdvisorJourneyNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nAdvisor follow-up:\n- Concern verified:\n- Next action for technician:\n- Customer expectation:`,
+    status: "Advisor note template loaded."
+  });
+}
+
 function hasKeywordMatch(items = [], keywords = []) {
   return items.some((item) => {
     const haystack = `${item.title || ""} ${item.description || ""} ${item.body || ""}`.toLowerCase();
@@ -1329,9 +1370,9 @@ function hasKeywordMatch(items = [], keywords = []) {
 
 function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
   const serviceReady = appointments.length > 0;
-  const techReady = notes.length > 0 || hasKeywordMatch(tasks, ["diagn", "inspect", "tech", "repair"]);
-  const partsReady = hasKeywordMatch(tasks, ["part", "stock", "sku", "runner"]) || hasKeywordMatch(notes, ["eta", "part", "stock", "runner"]);
-  const accountingReady = hasKeywordMatch(tasks, ["invoice", "payment", "statement", "ledger"]) || hasKeywordMatch(notes, ["statement", "ledger", "payment", "refund"]);
+  const techReady = hasKeywordMatch(tasks, ["[technician]", "diagn", "inspect", "tech", "repair"]) || hasKeywordMatch(notes, ["[technician]", "inspection", "finding", "diagn"]);
+  const partsReady = hasKeywordMatch(tasks, ["[parts]", "part", "stock", "sku", "runner"]) || hasKeywordMatch(notes, ["[parts]", "eta", "part", "stock", "runner"]);
+  const accountingReady = hasKeywordMatch(tasks, ["[accounting]", "invoice", "payment", "statement", "ledger"]) || hasKeywordMatch(notes, ["[accounting]", "statement", "ledger", "payment", "refund"]);
 
   const stages = [
     {
@@ -1837,7 +1878,7 @@ function initCustomer360TimelineFilters() {
 async function createCustomer360Note() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  const body = getValue("customer360ComposerBody").trim();
+  const body = stampJourneyArtifact(getValue("customer360ComposerBody").trim());
   if (!customer || !body) throw new Error("Select a customer and enter a note first.");
 
   const res = await fetch("/.netlify/functions/notes-create", {
@@ -1858,8 +1899,8 @@ async function createCustomer360Note() {
 async function createCustomer360Task() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  const body = getValue("customer360ComposerBody").trim();
-  const title = getValue("customer360TaskTitle").trim();
+  const body = stampJourneyArtifact(getValue("customer360ComposerBody").trim());
+  const title = stampJourneyArtifact(getValue("customer360TaskTitle").trim());
   if (!customer) throw new Error("Select a customer before creating a task.");
 
   const res = await fetch("/.netlify/functions/tasks-create", {
@@ -1906,7 +1947,7 @@ async function createCustomer360Appointment() {
       date: getValue("customer360AppointmentDate"),
       time: getValue("customer360AppointmentTime"),
       transport: getValue("customer360AppointmentTransport"),
-      notes: getValue("customer360ComposerBody").trim(),
+      notes: stampJourneyArtifact(getValue("customer360ComposerBody").trim()),
     }),
   });
 
@@ -1933,8 +1974,8 @@ async function submitCustomer360Composer() {
     }
 
     setCustomer360ComposerStatus(
-      currentCustomer360ComposerMode === "appointment" ? "Service scheduled." :
-      currentCustomer360ComposerMode === "task" ? "Task created." : "Note saved.",
+      currentCustomer360ComposerMode === "appointment" ? `${titleCase(getJourneyArtifactLabel())} step saved to the shared journey.` :
+      currentCustomer360ComposerMode === "task" ? `${titleCase(getJourneyArtifactLabel())} task added to the shared journey.` : `${titleCase(getJourneyArtifactLabel())} note saved to the shared journey.`,
       "success"
     );
 
