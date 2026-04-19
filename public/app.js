@@ -1023,6 +1023,10 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const salesTask = pickOpenTask("[sales]", "opportunity", "quote", "deal", "test-drive", "test drive");
   const fiTask = pickOpenTask("[fi]", "finance", "funding", "delivery", "menu", "warranty");
   const accountingTask = pickOpenTask("[accounting]", "invoice", "ledger", "statement", "reconciliation", "payment");
+  const technicianTask = pickOpenTask("[technician]", "inspection", "diagnostic", "diagnosis", "repair", "tech");
+  const partsTask = pickOpenTask("[parts]", "parts request", "stock pull", "sourcing", "eta", "runner", "special order", "pick task");
+  const partsEtaNote = [...notes].find((item) => `${item.body || ""}`.toLowerCase().includes("[parts]") || `${item.body || ""}`.toLowerCase().includes("parts eta"));
+  const ledgerNote = [...notes].find((item) => `${item.body || ""}`.toLowerCase().includes("[accounting]") || `${item.body || ""}`.toLowerCase().includes("ledger"));
   const latestMovementNote = getLatestTaggedArtifact("[vehicle]", notes, currentCustomerTimeline || []);
   const movementPresentation = latestMovementNote
     ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence")
@@ -1260,6 +1264,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${topTask ? "Open tech tasks can become parts-runner dispatch requests." : "No active parts handoff has been created yet."}</span>
           </div>
         </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="${technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "startTechnicianInspectionNote()"}"><span>🔧</span>${technicianTask ? "Open Job" : "Start Job"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createTechnicianPartsRequest()"}"><span>📦</span>${partsTask ? "Open Parts" : "Request Parts"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${latestNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestNote)}','technicians')` : "startTechnicianInspectionNote()"}"><span>📝</span>${latestNote ? "Open Finding" : "Log Finding"}</button>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Procedure</div>
           <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Start digital inspection")}</div>
@@ -1307,6 +1316,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <span>${appointments.length ? "A robot runner can hand off the part directly to the technician." : "Keep the order staged until the work order is actively in the bay."}</span>
           </div>
         </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="${partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"}"><span>📦</span>${partsTask ? "Open Pick" : "Create Pick"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${partsEtaNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsEtaNote)}','parts')` : "startPartsEtaNote()"}"><span>⏱</span>${partsEtaNote ? "Open ETA" : "Add ETA"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()"}"><span>🤖</span>${technicianTask ? "Return to Tech" : "Route to Tech"}</button>
+        </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Pick</div>
           <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Create parts pick task")}</div>
@@ -1353,6 +1367,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <strong>Stripe linked</strong>
             <span>Card, refund, and statement workflows can eventually settle here with QuickBooks-style bookkeeping posture.</span>
           </div>
+        </div>
+        <div class="customer360-lens-quickbar">
+          <button class="customer360-lens-quickbtn" onclick="${accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"}"><span>💳</span>${accountingTask ? "Open Invoice" : "Queue Invoice"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"}"><span>📘</span>${ledgerNote ? "Open Ledger" : "Add Ledger"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "queueAccountingInvoiceReview()"}"><span>🧾</span>${partsTask ? "Review Parts" : "Prep Statement"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Financial Step</div>
