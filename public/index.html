@@ -272,6 +272,14 @@
     .customer360-journey-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
     .customer360-journey-head h3{margin:0;color:#f3f7ff;font-size:18px}
     .customer360-journey-copy{margin-top:4px;color:#9fb3d2;font-size:13px;line-height:1.45}
+    .customer360-journey-progress{display:grid;gap:8px;margin:0 0 14px}
+    .customer360-journey-progress-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .customer360-journey-progress-top strong{color:#eef4ff;font-size:13px}
+    .customer360-journey-progress-top span{color:#8ea6cb;font-size:12px}
+    .customer360-journey-progress-bar{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid rgba(255,255,255,.05)}
+    .customer360-journey-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#4f8cff 0%,#72d1ff 100%);box-shadow:0 0 18px rgba(79,140,255,.35)}
+    .customer360-journey-progress-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .customer360-journey-progress-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#1a2942;color:#d8e4f6;font-size:11px;font-weight:700}
     .customer360-journey-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     .customer360-journey-stage{padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06);display:grid;gap:8px;transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease}
     .customer360-journey-stage.complete{border-color:rgba(92,198,138,.2);background:linear-gradient(180deg,#182a3d 0%,#132233 100%)}
@@ -856,6 +864,7 @@
                 </div>
                 <span id="customer360JourneyStatus" class="customer360-status-pill info">Waiting</span>
               </div>
+              <div id="customer360JourneyProgress" class="customer360-journey-progress"></div>
               <div id="customer360JourneyStages" class="customer360-journey-grid"></div>
               <div id="customer360JourneyActions" class="customer360-journey-actions"></div>
               <div id="customer360JourneyNext" class="customer360-journey-next" style="display:none;"></div>

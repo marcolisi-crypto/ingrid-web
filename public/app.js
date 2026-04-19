@@ -1678,6 +1678,10 @@ function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
   ];
 
   const activeStage = stages.find((stage) => stage.status === "active") || stages[0];
+  const completedCount = stages.filter((stage) => stage.status === "complete").length;
+  const liveCount = stages.filter((stage) => stage.status === "active").length;
+  const queuedCount = stages.filter((stage) => stage.status === "upcoming").length;
+  const progressPercent = Math.round(((completedCount + (liveCount * 0.5)) / stages.length) * 100);
   const overallStatus = accountingReady
     ? "Back office in motion"
     : partsReady
@@ -1688,21 +1692,35 @@ function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
           ? "Lane ready"
           : "Waiting";
 
-  return { stages, activeStage, overallStatus };
+  return { stages, activeStage, overallStatus, completedCount, liveCount, queuedCount, progressPercent };
 }
 
 function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   const stagesEl = document.getElementById("customer360JourneyStages");
   const actionsEl = document.getElementById("customer360JourneyActions");
   const nextEl = document.getElementById("customer360JourneyNext");
+  const progressEl = document.getElementById("customer360JourneyProgress");
   const statusEl = document.getElementById("customer360JourneyStatus");
   const feedbackEl = document.getElementById("customer360JourneyFeedback");
-  if (!stagesEl || !actionsEl || !nextEl || !statusEl || !feedbackEl) return;
+  if (!stagesEl || !actionsEl || !nextEl || !progressEl || !statusEl || !feedbackEl) return;
 
-  const { stages, activeStage, overallStatus } = buildServiceJourneyState(tasks, notes, appointments);
+  const { stages, activeStage, overallStatus, completedCount, liveCount, queuedCount, progressPercent } = buildServiceJourneyState(tasks, notes, appointments);
   currentJourneyArtifacts = {};
   statusEl.textContent = overallStatus;
   statusEl.className = `customer360-status-pill ${overallStatus === "Waiting" ? "info" : overallStatus.includes("technician") || overallStatus.includes("Lane") ? "warn" : "good"}`;
+  progressEl.innerHTML = `
+    <div class="customer360-journey-progress-top">
+      <strong>${escapeHtml(progressPercent)}% journey progress</strong>
+      <span>${escapeHtml(completedCount)} done • ${escapeHtml(liveCount)} live • ${escapeHtml(queuedCount)} queued</span>
+    </div>
+    <div class="customer360-journey-progress-bar">
+      <div class="customer360-journey-progress-fill" style="width:${Math.max(8, Math.min(progressPercent, 100))}%"></div>
+    </div>
+    <div class="customer360-journey-progress-meta">
+      <span class="customer360-journey-progress-chip">Current: ${escapeHtml(activeStage?.label || "Service Advisor")}</span>
+      <span class="customer360-journey-progress-chip">Owner: ${escapeHtml(getJourneyStageOwner(activeStage?.key || "service", activeStage?.status || "active"))}</span>
+    </div>
+  `;
 
   stagesEl.innerHTML = stages.map((stage) => {
     const isFeedback = currentJourneyFeedbackStage === stage.key;
