@@ -1506,6 +1506,12 @@ function getJourneyArtifactSla(value) {
   return { label: "On Track", tone: "good" };
 }
 
+function getRecentJourneyAssignments(limit = 3) {
+  return (currentCustomerTimeline || [])
+    .filter((event) => String(event.eventType || "").toLowerCase() === "journey_assignment")
+    .slice(0, limit);
+}
+
 function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appointments = []) {
   const taskMatchesStage = (task, key) => {
     const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
@@ -1845,9 +1851,10 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
   const actionsEl = document.getElementById("customer360JourneyActions");
   const nextEl = document.getElementById("customer360JourneyNext");
   const progressEl = document.getElementById("customer360JourneyProgress");
+  const historyEl = document.getElementById("customer360JourneyHistory");
   const statusEl = document.getElementById("customer360JourneyStatus");
   const feedbackEl = document.getElementById("customer360JourneyFeedback");
-  if (!stagesEl || !actionsEl || !nextEl || !progressEl || !statusEl || !feedbackEl) return;
+  if (!stagesEl || !actionsEl || !nextEl || !progressEl || !historyEl || !statusEl || !feedbackEl) return;
 
   const { stages, activeStage, overallStatus, completedCount, liveCount, queuedCount, progressPercent } = buildServiceJourneyState(tasks, notes, appointments);
   currentJourneyArtifacts = {};
@@ -1866,6 +1873,19 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
       <span class="customer360-journey-progress-chip">Owner: ${escapeHtml(getJourneyAssignedOwner(activeStage?.key || "service", activeStage?.status || "active"))}</span>
     </div>
   `;
+
+  const recentAssignments = getRecentJourneyAssignments(3);
+  historyEl.innerHTML = recentAssignments.length
+    ? recentAssignments.map((event) => `
+      <div class="customer360-journey-history-row">
+        <div>
+          <strong>${escapeHtml(titleCase(event.department || "journey"))} reassigned</strong>
+          <span>${escapeHtml(event.body || "Owner updated.")}</span>
+        </div>
+        <div class="customer360-journey-history-time">${escapeHtml(formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc))}</div>
+      </div>
+    `).join("")
+    : `<div class="customer360-empty">Recent ownership changes will appear here.</div>`;
 
   stagesEl.innerHTML = stages.map((stage) => {
     const isFeedback = currentJourneyFeedbackStage === stage.key;

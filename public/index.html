@@ -280,6 +280,11 @@
     .customer360-journey-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#4f8cff 0%,#72d1ff 100%);box-shadow:0 0 18px rgba(79,140,255,.35)}
     .customer360-journey-progress-meta{display:flex;gap:8px;flex-wrap:wrap}
     .customer360-journey-progress-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#1a2942;color:#d8e4f6;font-size:11px;font-weight:700}
+    .customer360-journey-history{display:grid;gap:8px;margin:0 0 14px}
+    .customer360-journey-history-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:linear-gradient(180deg,#152238 0%,#101b2e 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-journey-history-row strong{display:block;color:#f2f6ff;font-size:12px}
+    .customer360-journey-history-row span{display:block;color:#93a9cb;font-size:11px;line-height:1.4}
+    .customer360-journey-history-time{color:#7f98be;font-size:11px;white-space:nowrap}
     .customer360-journey-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     .customer360-journey-stage{padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06);display:grid;gap:8px;transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease}
     .customer360-journey-stage.complete{border-color:rgba(92,198,138,.2);background:linear-gradient(180deg,#182a3d 0%,#132233 100%)}
@@ -873,6 +878,7 @@
                 <span id="customer360JourneyStatus" class="customer360-status-pill info">Waiting</span>
               </div>
               <div id="customer360JourneyProgress" class="customer360-journey-progress"></div>
+              <div id="customer360JourneyHistory" class="customer360-journey-history"></div>
               <div id="customer360JourneyStages" class="customer360-journey-grid"></div>
               <div id="customer360JourneyActions" class="customer360-journey-actions"></div>
               <div id="customer360JourneyNext" class="customer360-journey-next" style="display:none;"></div>
