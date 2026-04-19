@@ -1688,6 +1688,52 @@ function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks,
   const customerName = customerDisplayName(customer);
   const vehicleName = vehicleDisplayName(vehicle);
   const callDetail = latestCall?.notes || latestCall?.transcript || "recent communication activity";
+  const openTasks = (tasks || []).filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const findTask = (...keywords) => openTasks.find((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
+  });
+  const bdcTask = findTask("[bdc]", "callback", "follow-up", "reconnect");
+  const salesTask = findTask("[sales]", "quote", "deal", "trade", "test drive", "test-drive");
+  const serviceTask = findTask("[service]", "advisor", "loaner", "transport", "repair");
+  const accountingTask = findTask("[accounting]", "invoice", "statement", "ledger", "payment");
+
+  if (currentDepartmentLens === "service") {
+    return nextAppointment
+      ? `${customerName} is attached to ${vehicleName} with ${nextAppointment.service || "a service visit"} on the books. Latest context: ${callDetail}. Advisor focus should stay on write-up, promised time, and transportation follow-through.`
+      : `${customerName} has active service context on ${vehicleName}. Latest signal: ${callDetail}. Advisor focus should be booking the visit, capturing the concern, and locking the next lane step.`;
+  }
+
+  if (currentDepartmentLens === "bdc") {
+    return bdcTask
+      ? `${customerName} remains live in the BDC queue for ${vehicleName}. Latest contact context: ${callDetail}. Next move is to rescue the callback thread and convert it into a firm appointment commitment.`
+      : `${customerName} is still warm for BDC follow-up around ${vehicleName}. Latest contact context: ${callDetail}. Next move is to send a fast reply and pin down the next commitment.`;
+  }
+
+  if (currentDepartmentLens === "sales") {
+    return salesTask
+      ? `${customerName} is active in the sales lane on ${vehicleName}. Latest deal context: ${salesTask.title || "deal step in motion"}. Sales focus should stay on showroom commitment, quote pressure, and clean F&I handoff.`
+      : `${customerName} is attached to ${vehicleName} with sales momentum building. Latest context: ${callDetail}. Sales focus should be setting the visit, starting the deal, and moving toward quote review.`;
+  }
+
+  if (currentDepartmentLens === "accounting") {
+    return accountingTask
+      ? `${customerName} has open accounting work tied to ${vehicleName}. Latest back-office context: ${accountingTask.title || "invoice review in motion"}. Accounting focus should stay on review, statement posture, and payment follow-through.`
+      : `${customerName} has no active accounting blockers tied to ${vehicleName} right now. Latest context: ${callDetail}. Accounting can stay ready for invoice, statement, or payment activity once the service or sales lane advances.`;
+  }
+
+  if (currentDepartmentLens === "technicians") {
+    return `${customerName} is attached to ${vehicleName} in the technician lane. Latest shop context: ${callDetail}. Technician focus should stay on findings, media, and clean parts handoff.`;
+  }
+
+  if (currentDepartmentLens === "parts") {
+    return `${customerName} is attached to ${vehicleName} in the parts lane. Latest operational context: ${callDetail}. Parts focus should stay on sourcing, ETA, and dispatch back to the bay.`;
+  }
+
+  if (currentDepartmentLens === "fi") {
+    return `${customerName} is attached to ${vehicleName} in the F&I lane. Latest deal context: ${callDetail}. F&I focus should stay on funding readiness, product review, and delivery prep.`;
+  }
+
   const followUp = nextAppointment
     ? `${nextAppointment.service || "service"} appointment recommended`
     : nextTask
