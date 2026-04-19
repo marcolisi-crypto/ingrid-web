@@ -20,6 +20,7 @@ let isLoadingCustomer360 = false;
 let currentDepartmentLens = "home";
 let currentCustomer360TimelineCards = [];
 let currentCustomer360TimelineFilter = "all";
+let currentCustomer360VinFilter = "all";
 let currentCustomer360ComposerMode = "note";
 let currentCustomer360Focus = null;
 let currentJourneyArtifacts = {};
@@ -644,6 +645,15 @@ function openVehicleJourneyStage(stageKey = "health") {
     }, "task");
     setCustomer360ComposerStatus("VIN journey archive stage opened.", "success");
   }
+}
+
+function openVinTimelineSubtype(subtype = "all") {
+  currentCustomer360TimelineFilter = "vin";
+  currentCustomer360VinFilter = ["health", "movement", "archive"].includes(subtype) ? subtype : "all";
+  document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+    item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+  });
+  renderCustomer360Timeline();
 }
 
 function getVehicleJourneyNextAction(state) {
@@ -1355,6 +1365,14 @@ function getTimelineVisualTone(item) {
   if (type.includes("vehicle movement")) return "vin-movement";
   if (type.includes("vin archive")) return "vin-archive";
   return "";
+}
+
+function getVinTimelineSubtype(item) {
+  const type = String(item?.type || "").toLowerCase();
+  if (type.includes("vehicle health")) return "health";
+  if (type.includes("vehicle movement")) return "movement";
+  if (type.includes("vin archive")) return "archive";
+  return "all";
 }
 
 function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks, appointments) {
@@ -3186,20 +3204,24 @@ function renderCustomer360Timeline() {
 
   if (vinSummaryEl) {
     vinSummaryEl.innerHTML = `
-      <span class="customer360-vin-summary-chip health"><strong>${vinHealthCount}</strong> Health</span>
-      <span class="customer360-vin-summary-chip movement"><strong>${vinMovementCount}</strong> Movement</span>
-      <span class="customer360-vin-summary-chip archive"><strong>${vinArchiveCount}</strong> Archive</span>
+      <button type="button" class="customer360-vin-summary-chip health ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "health" ? "active" : ""}" onclick="openVinTimelineSubtype('health')"><strong>${vinHealthCount}</strong> Health</button>
+      <button type="button" class="customer360-vin-summary-chip movement ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "movement" ? "active" : ""}" onclick="openVinTimelineSubtype('movement')"><strong>${vinMovementCount}</strong> Movement</button>
+      <button type="button" class="customer360-vin-summary-chip archive ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "archive" ? "active" : ""}" onclick="openVinTimelineSubtype('archive')"><strong>${vinArchiveCount}</strong> Archive</button>
     `;
   }
 
   const filter = normalizeCustomer360TimelineFilter(currentCustomer360TimelineFilter);
   const items = currentCustomer360TimelineCards.filter((item) => {
     if (filter === "all") return true;
+    if (filter === "vin") {
+      return categorizeCustomer360TimelineItem(item) === "vin"
+        && (currentCustomer360VinFilter === "all" || getVinTimelineSubtype(item) === currentCustomer360VinFilter);
+    }
     return categorizeCustomer360TimelineItem(item) === filter;
   });
 
   if (!items.length) {
-    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter === "vin" ? "VIN events" : filter)} on this timeline yet.</div>`;
+    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter === "vin" ? `${currentCustomer360VinFilter === "all" ? "VIN" : currentCustomer360VinFilter} events` : filter)} on this timeline yet.</div>`;
     return;
   }
 
@@ -3232,6 +3254,9 @@ function initCustomer360TimelineFilters() {
   document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((chip) => {
     chip.addEventListener("click", () => {
       currentCustomer360TimelineFilter = normalizeCustomer360TimelineFilter(chip.dataset.filter || "all");
+      if (currentCustomer360TimelineFilter !== "vin") {
+        currentCustomer360VinFilter = "all";
+      }
       document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
         item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
       });
