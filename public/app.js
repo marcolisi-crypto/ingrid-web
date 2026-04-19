@@ -829,6 +829,17 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const latestNote = notes[0];
   const contactPhone = customer?.phones?.[0] || "Not set";
   const vehicleName = vehicleDisplayName(vehicle);
+  const loanerTask = tasks.find((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("loaner") || haystack.includes("transport");
+  });
+  const latestMovementNote = getLatestTaggedArtifact("[vehicle]", notes, currentCustomerTimeline || []);
+  const movementPresentation = latestMovementNote
+    ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence")
+    : null;
+  const activeMovementCopy = movementPresentation?.type === "Vehicle Movement"
+    ? movementPresentation.body.split("\n")[0]
+    : "";
 
   if (currentDepartmentLens === "service") {
     return `
@@ -841,19 +852,19 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-grid">
           <div class="customer360-lens-stat">
             <small>Lane Check-In</small>
-            <strong>${nextAppointment ? "Customer expected" : "Needs arrival slot"}</strong>
-            <span>${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} queued for advisor write-up.` : "Use Schedule Service to set the arrival window and advisor ownership."}</span>
+            <strong>${nextAppointment ? "Customer expected" : activeMovementCopy ? "Vehicle moving" : "Needs arrival slot"}</strong>
+            <span>${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} queued for advisor write-up.` : activeMovementCopy ? `${escapeHtml(activeMovementCopy)}.` : "Use Schedule Service to set the arrival window and advisor ownership."}</span>
           </div>
           <div class="customer360-lens-stat">
             <small>Loaner Board</small>
-            <strong>${appointments.length ? "Review eligibility" : "Standby"}</strong>
-            <span>${appointments.length ? "Transportation should be confirmed before diagnostics turn into all-day work." : "No transportation request has been captured yet."}</span>
+            <strong>${loanerTask ? "In progress" : appointments.length ? "Review eligibility" : "Standby"}</strong>
+            <span>${loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Transportation should be confirmed before diagnostics turn into all-day work." : "No transportation request has been captured yet."}</span>
           </div>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
-          <div class="customer360-lens-value">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Awaiting booking"}</div>
-          <div class="customer360-lens-copy">Use this area to evolve into lane check-in, write-up, and promised-time control.</div>
+          <div class="customer360-lens-value">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : loanerTask ? "Transport review active" : "Awaiting booking"}</div>
+          <div class="customer360-lens-copy">${nextAppointment ? "Use this area to evolve into lane check-in, write-up, and promised-time control." : loanerTask ? "Transportation workflow is active before promised-time control is locked." : "Use this area to evolve into lane check-in, write-up, and promised-time control."}</div>
         </div>
         <div class="customer360-lens-checklist">
           <div class="customer360-lens-check">
@@ -862,14 +873,15 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
           <div class="customer360-lens-check">
             <span class="customer360-lens-check-mark">2</span>
-            <div><b>Confirm transportation</b><span>${appointments.length ? "Offer shuttle or loaner before write-up closes." : "Transportation need has not been answered yet."}</span></div>
+            <div><b>Confirm transportation</b><span>${loanerTask ? "Loaner or shuttle workflow is already open and needs advisor follow-through." : appointments.length ? "Offer shuttle or loaner before write-up closes." : "Transportation need has not been answered yet."}</span></div>
           </div>
           <div class="customer360-lens-check">
             <span class="customer360-lens-check-mark">3</span>
-            <div><b>Set promised time</b><span>${nextAppointment ? "Promised-time placeholder is present and ready for advisor control." : "No promised time until service visit is booked."}</span></div>
+            <div><b>Set promised time</b><span>${nextAppointment ? "Promised-time placeholder is present and ready for advisor control." : activeMovementCopy ? "Vehicle movement should settle before promised-time control is finalized." : "No promised time until service visit is booked."}</span></div>
           </div>
         </div>
         <div class="customer360-lens-actions">
+          ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Workflow</button>` : ""}
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="startServiceWriteUp()">Write Service Visit</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="startAdvisorJourneyNote()">Add Advisor Note</button>
         </div>
