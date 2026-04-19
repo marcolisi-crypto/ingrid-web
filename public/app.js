@@ -556,6 +556,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   if (currentDepartmentLens === "bdc") {
     return `
       <div class="customer360-service-card">
+        ${buildLaneOwnerMarkup("bdc")}
         <div class="customer360-service-row">
           <div>
             <div class="customer360-service-label">Queue Status</div>
@@ -583,6 +584,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   if (currentDepartmentLens === "sales") {
     return `
       <div class="customer360-service-card">
+        ${buildLaneOwnerMarkup("sales")}
         <div class="customer360-service-row">
           <div>
             <div class="customer360-service-label">Opportunity</div>
@@ -602,6 +604,34 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         <div class="customer360-service-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Visit</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "fi") {
+    return `
+      <div class="customer360-service-card">
+        ${buildLaneOwnerMarkup("fi")}
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Funding Status</div>
+            <div class="customer360-service-value">${topTask ? "Package in review" : "Awaiting handoff"}</div>
+            <div class="customer360-service-copy">F&I should keep menu products, funding steps, and delivery-readiness on the same customer and vehicle record.</div>
+          </div>
+          <span class="customer360-status-pill ${topTask ? "warn" : "info"}">${topTask ? "Active" : "Pending"}</span>
+        </div>
+        <div class="customer360-service-row">
+          <div>
+            <div class="customer360-service-label">Delivery Readiness</div>
+            <div class="customer360-service-value">${topTask ? "Pre-close checklist" : "Not started"}</div>
+            <div class="customer360-service-copy">${topTask ? escapeHtml(topTask.title || "Finance package review") : "Use this lane for warranty, funding, and delivery-prep actions."}</div>
+          </div>
+          <span class="customer360-status-pill info">F&I</span>
+        </div>
+        <div class="customer360-service-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startFiReviewNote()">Open F&I Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startDeliveryHandoffAppointment()">Prep Delivery</button>
         </div>
       </div>
     `;
