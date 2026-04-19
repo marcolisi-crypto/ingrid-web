@@ -23,16 +23,16 @@ let currentCustomer360TimelineFilter = "all";
 let currentCustomer360ComposerMode = "note";
 
 const DEPARTMENT_LENSES = {
-  home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
-  sales: { name: "Sales", copy: "Lead, quote, trade, and deal actions stay anchored to the same customer and vehicle timeline.", summaryTitle: "Sales Summary", timelineLabel: "Sales lens", actions: ["Start Deal", "Log Test Drive", "Send Quote"], dashboardTitle: "Sales 360°", primaryPanelTitle: "Opportunity Tasks", secondaryPanelTitle: "Deal Notes", railTitle: "Sales Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
-  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"], dashboardTitle: "Service Advisor 360°", primaryPanelTitle: "Lane Tasks", secondaryPanelTitle: "Advisor Notes", railTitle: "Service Lane", archiveTitle: "VIN Archive", defaultFilter: "appointments", composerMode: "appointment" },
-  bdc: { name: "BDC", copy: "Inbound calls, SMS, queues, and campaign follow-ups work from the same contact record.", summaryTitle: "BDC Summary", timelineLabel: "BDC lens", actions: ["Open Call Queue", "Send Follow-up", "Start Campaign"], dashboardTitle: "BDC 360°", primaryPanelTitle: "Follow-Ups", secondaryPanelTitle: "Conversation Notes", railTitle: "Communications Queue", archiveTitle: "Customer Files", defaultFilter: "calls", composerMode: "task" },
-  technicians: { name: "Technicians", copy: "Open jobs, inspection updates, and technician notes remain linked to the customer and VIN timeline.", summaryTitle: "Tech Summary", timelineLabel: "Technician lens", actions: ["Start Job", "Complete Job", "Add Internal Note"], dashboardTitle: "Technician 360°", primaryPanelTitle: "Job Tasks", secondaryPanelTitle: "Inspection Notes", railTitle: "Work Bay", archiveTitle: "VIN Archive", defaultFilter: "tasks", composerMode: "note" },
-  fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"], dashboardTitle: "F&I 360°", primaryPanelTitle: "Closing Tasks", secondaryPanelTitle: "Funding Notes", railTitle: "Delivery Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
-  parts: { name: "Parts", copy: "Parts demand, special orders, and vehicle-linked parts history remain connected to service work.", summaryTitle: "Parts Summary", timelineLabel: "Parts lens", actions: ["Order Part", "Assign to RO", "Check Availability"], dashboardTitle: "Parts 360°", primaryPanelTitle: "Parts Tasks", secondaryPanelTitle: "Order Notes", railTitle: "Parts Runner", archiveTitle: "VIN Archive", defaultFilter: "activity", composerMode: "task" },
-  accounting: { name: "Accounting", copy: "Invoices, payouts, and payment events will surface against the same customer and vehicle timeline.", summaryTitle: "Accounting Summary", timelineLabel: "Accounting lens", actions: ["Post Payment", "Review Invoice", "Export Statement"], dashboardTitle: "Accounting 360°", primaryPanelTitle: "Accounting Tasks", secondaryPanelTitle: "Ledger Notes", railTitle: "Payment Desk", archiveTitle: "Financial File", defaultFilter: "activity", composerMode: "note" },
-  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"], dashboardTitle: "Executive 360°", primaryPanelTitle: "Strategic Tasks", secondaryPanelTitle: "Leadership Notes", railTitle: "Performance Snapshot", archiveTitle: "Executive File", defaultFilter: "all", composerMode: "note" },
-  settings: { name: "Settings", copy: "Role-based menus, permissions, defaults, and store-level configuration will lock this shell down later.", summaryTitle: "Settings Summary", timelineLabel: "Settings lens", actions: ["Manage Roles", "Update Defaults", "Review Access"], dashboardTitle: "Settings 360°", primaryPanelTitle: "Role Tasks", secondaryPanelTitle: "Config Notes", railTitle: "Access Control", archiveTitle: "Platform Archive", defaultFilter: "activity", composerMode: "note" }
+  home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", lensPanelTitle: "Work Queue", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
+  sales: { name: "Sales", copy: "Lead, quote, trade, and deal actions stay anchored to the same customer and vehicle timeline.", summaryTitle: "Sales Summary", timelineLabel: "Sales lens", actions: ["Start Deal", "Log Test Drive", "Send Quote"], dashboardTitle: "Sales 360°", lensPanelTitle: "Opportunity", primaryPanelTitle: "Opportunity Tasks", secondaryPanelTitle: "Deal Notes", railTitle: "Sales Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
+  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"], dashboardTitle: "Service Advisor 360°", lensPanelTitle: "RO-Lite", primaryPanelTitle: "Lane Tasks", secondaryPanelTitle: "Advisor Notes", railTitle: "Service Lane", archiveTitle: "VIN Archive", defaultFilter: "appointments", composerMode: "appointment" },
+  bdc: { name: "BDC", copy: "Inbound calls, SMS, queues, and campaign follow-ups work from the same contact record.", summaryTitle: "BDC Summary", timelineLabel: "BDC lens", actions: ["Open Call Queue", "Send Follow-up", "Start Campaign"], dashboardTitle: "BDC 360°", lensPanelTitle: "Queue", primaryPanelTitle: "Follow-Ups", secondaryPanelTitle: "Conversation Notes", railTitle: "Communications Queue", archiveTitle: "Customer Files", defaultFilter: "calls", composerMode: "task" },
+  technicians: { name: "Technicians", copy: "Open jobs, inspection updates, and technician notes remain linked to the customer and VIN timeline.", summaryTitle: "Tech Summary", timelineLabel: "Technician lens", actions: ["Start Job", "Complete Job", "Add Internal Note"], dashboardTitle: "Technician 360°", lensPanelTitle: "Work Order", primaryPanelTitle: "Job Tasks", secondaryPanelTitle: "Inspection Notes", railTitle: "Work Bay", archiveTitle: "VIN Archive", defaultFilter: "tasks", composerMode: "note" },
+  fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"], dashboardTitle: "F&I 360°", lensPanelTitle: "Funding", primaryPanelTitle: "Closing Tasks", secondaryPanelTitle: "Funding Notes", railTitle: "Delivery Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
+  parts: { name: "Parts", copy: "Parts demand, special orders, and vehicle-linked parts history remain connected to service work.", summaryTitle: "Parts Summary", timelineLabel: "Parts lens", actions: ["Order Part", "Assign to RO", "Check Availability"], dashboardTitle: "Parts 360°", lensPanelTitle: "Parts Request", primaryPanelTitle: "Parts Tasks", secondaryPanelTitle: "Order Notes", railTitle: "Parts Runner", archiveTitle: "VIN Archive", defaultFilter: "activity", composerMode: "task" },
+  accounting: { name: "Accounting", copy: "Invoices, payouts, and payment events will surface against the same customer and vehicle timeline.", summaryTitle: "Accounting Summary", timelineLabel: "Accounting lens", actions: ["Post Payment", "Review Invoice", "Export Statement"], dashboardTitle: "Accounting 360°", lensPanelTitle: "Ledger", primaryPanelTitle: "Accounting Tasks", secondaryPanelTitle: "Ledger Notes", railTitle: "Payment Desk", archiveTitle: "Financial File", defaultFilter: "activity", composerMode: "note" },
+  executive: { name: "Executive", copy: "Executives can review performance while still drilling back into the underlying customer and vehicle record.", summaryTitle: "Executive Summary", timelineLabel: "Executive lens", actions: ["View KPIs", "Open Forecast", "Review Pipeline"], dashboardTitle: "Executive 360°", lensPanelTitle: "Scorecard", primaryPanelTitle: "Strategic Tasks", secondaryPanelTitle: "Leadership Notes", railTitle: "Performance Snapshot", archiveTitle: "Executive File", defaultFilter: "all", composerMode: "note" },
+  settings: { name: "Settings", copy: "Role-based menus, permissions, defaults, and store-level configuration will lock this shell down later.", summaryTitle: "Settings Summary", timelineLabel: "Settings lens", actions: ["Manage Roles", "Update Defaults", "Review Access"], dashboardTitle: "Settings 360°", lensPanelTitle: "Policy", primaryPanelTitle: "Role Tasks", secondaryPanelTitle: "Config Notes", railTitle: "Access Control", archiveTitle: "Platform Archive", defaultFilter: "activity", composerMode: "note" }
 };
 
 const COMM_SCRIPT_LIBRARY = [
@@ -594,6 +594,90 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   `;
 }
 
+function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appointments = [], calls = []) {
+  const topTask = tasks[0];
+  const nextAppointment = appointments[0];
+  const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
+
+  if (currentDepartmentLens === "service") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Repair Order</div>
+          <div class="customer360-lens-value">${vehicle?.vin ? `RO-lite • ${escapeHtml(vehicle.vin.slice(-6))}` : "RO-lite pending"}</div>
+          <div class="customer360-lens-copy">Primary concern: ${escapeHtml(topTask?.description || nextAppointment?.service || "Customer concern not written yet.")}</div>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Promised Time</div>
+          <div class="customer360-lens-value">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Awaiting booking"}</div>
+          <div class="customer360-lens-copy">Use this area to evolve into lane check-in, write-up, and promised-time control.</div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Write Service Visit</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Advisor Note</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "bdc") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Queue State</div>
+          <div class="customer360-lens-value">${missedCalls ? `${missedCalls} missed contact${missedCalls === 1 ? "" : "s"}` : "Hot lead / active thread"}</div>
+          <div class="customer360-lens-copy">Missed calls, SMS threads, and callbacks stay attached to this same customer record.</div>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Next Play</div>
+          <div class="customer360-lens-value">${escapeHtml(topTask?.title || "Send follow-up + confirm visit")}</div>
+          <div class="customer360-lens-copy">${escapeHtml(topTask?.description || "BDC should drive toward appointment confirmation or handoff.")}</div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())">Open SMS Follow-Up</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Callback Task</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (currentDepartmentLens === "sales") {
+    return `
+      <div class="customer360-lens-card">
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Opportunity Stage</div>
+          <div class="customer360-lens-value">${nextAppointment ? "Showroom visit booked" : "Working lead"}</div>
+          <div class="customer360-lens-copy">${vehicle ? `${escapeHtml(vehicleDisplayName(vehicle))} remains the active opportunity anchor.` : "Opportunity will attach to the selected vehicle or deal record."}</div>
+        </div>
+        <div class="customer360-lens-row">
+          <div class="customer360-lens-label">Trade / Quote</div>
+          <div class="customer360-lens-value">${notes.length ? "Quote package in progress" : "Trade + quote not started"}</div>
+          <div class="customer360-lens-copy">This area can grow into quote, trade, menu pricing, and delivery checklist views.</div>
+        </div>
+        <div class="customer360-lens-actions">
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Test Drive</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="customer360-lens-card">
+      <div class="customer360-lens-row">
+        <div class="customer360-lens-label">Core Spine</div>
+        <div class="customer360-lens-value">${escapeHtml(customerDisplayName(customer))}</div>
+        <div class="customer360-lens-copy">Everything continues to hang off customer, vehicle, and timeline.</div>
+      </div>
+      <div class="customer360-lens-row">
+        <div class="customer360-lens-label">Vehicle Context</div>
+        <div class="customer360-lens-value">${escapeHtml(vehicleDisplayName(vehicle))}</div>
+        <div class="customer360-lens-copy">${tasks.length} tasks, ${appointments.length} appointments, ${notes.length} notes, ${calls.length} communications.</div>
+      </div>
+    </div>
+  `;
+}
+
 function inferVehicleBatteryHealth(vehicle, appointments = []) {
   if (!vehicle) return "Unknown";
   if (typeof vehicle.batteryHealth === "number") return `${vehicle.batteryHealth}%`;
@@ -812,6 +896,7 @@ function syncCustomer360LensUi() {
   const summaryTitle = document.getElementById("customer360SummaryTitle");
   const timelineLens = document.getElementById("customer360TimelineLens");
   const mainTitle = document.getElementById("customer360MainTitle");
+  const lensPanelTitle = document.getElementById("customer360LensPanelTitle");
   const primaryPanelTitle = document.getElementById("customer360PrimaryPanelTitle");
   const secondaryPanelTitle = document.getElementById("customer360SecondaryPanelTitle");
   const railTitle = document.getElementById("customer360RailTitle");
@@ -828,6 +913,7 @@ function syncCustomer360LensUi() {
   if (summaryTitle) summaryTitle.textContent = config.summaryTitle;
   if (timelineLens) timelineLens.textContent = config.timelineLabel;
   if (mainTitle) mainTitle.textContent = config.dashboardTitle || "Customer 360° Dashboard";
+  if (lensPanelTitle) lensPanelTitle.textContent = config.lensPanelTitle || "Work Queue";
   if (primaryPanelTitle) primaryPanelTitle.textContent = config.primaryPanelTitle || "Tasks";
   if (secondaryPanelTitle) secondaryPanelTitle.textContent = config.secondaryPanelTitle || "Notes";
   if (railTitle) railTitle.textContent = config.railTitle || "Service + Loaner";
@@ -1213,6 +1299,7 @@ function renderCustomer360Detail() {
   const vehicleTitleEl = document.getElementById("customer360VehicleTitle");
   const vehicleRailEl = document.getElementById("customer360VehicleRail");
   const archiveCountEl = document.getElementById("customer360ArchiveCount");
+  const lensPanelEl = document.getElementById("customer360LensPanel");
   const tasksBoardEl = document.getElementById("customer360TasksBoard");
   const notesBoardEl = document.getElementById("customer360NotesBoard");
   const serviceLaneEl = document.getElementById("customer360ServiceLane");
@@ -1227,6 +1314,7 @@ function renderCustomer360Detail() {
     if (vehicleTitleEl) vehicleTitleEl.textContent = "No linked vehicle";
     if (vehicleRailEl) vehicleRailEl.innerHTML = `<div class="customer360-empty">Choose a customer to load vehicle intelligence.</div>`;
     if (archiveCountEl) archiveCountEl.textContent = "0 Items";
+    if (lensPanelEl) lensPanelEl.innerHTML = `<div class="customer360-empty">Department work queue will appear here.</div>`;
     if (tasksBoardEl) tasksBoardEl.innerHTML = `<div class="customer360-empty">No tasks yet.</div>`;
     if (notesBoardEl) notesBoardEl.innerHTML = `<div class="customer360-empty">No notes yet.</div>`;
     if (serviceLaneEl) serviceLaneEl.innerHTML = `<div class="customer360-empty">Service lane, appointment, and loaner signals will appear here.</div>`;
@@ -1309,6 +1397,10 @@ function renderCustomer360Detail() {
 
   if (archiveCountEl) {
     archiveCountEl.textContent = `${archiveCount} Items`;
+  }
+
+  if (lensPanelEl) {
+    lensPanelEl.innerHTML = buildLensPanelMarkup(customer, vehicle, openTasks, currentCustomerNotes, appointments, calls);
   }
 
   if (tasksBoardEl) {

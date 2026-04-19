@@ -275,6 +275,12 @@
     .customer360-panel-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);color:#d8e2f0}
     .customer360-panel-item:first-child{border-top:none;padding-top:0}
     .customer360-panel-action{background:#22304b;border:none;color:#dfe8f7;border-radius:999px;padding:5px 8px}
+    .customer360-lens-card{display:grid;gap:12px}
+    .customer360-lens-row{padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-lens-label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;font-weight:700;margin-bottom:6px}
+    .customer360-lens-value{color:#f4f8ff;font-size:16px;font-weight:800}
+    .customer360-lens-copy{margin-top:6px;color:#9eb2d2;font-size:12px;line-height:1.45}
+    .customer360-lens-actions{display:grid;grid-template-columns:1fr;gap:8px}
     .customer360-quick-actions{display:grid;grid-template-columns:1fr;gap:8px}
     .customer360-quick-action{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#1b2740 0%,#152238 100%);color:#f1f6ff;font-weight:700;cursor:pointer}
     .customer360-quick-action span{display:flex;align-items:center;gap:12px}
@@ -797,6 +803,10 @@
 
             <div class="customer360-lower-grid">
               <div class="customer360-stack">
+                <section class="customer360-panel">
+                  <h3 id="customer360LensPanelTitle">Work Queue</h3>
+                  <div id="customer360LensPanel"></div>
+                </section>
                 <section class="customer360-panel">
                   <h3 id="customer360PrimaryPanelTitle">Tasks</h3>
                   <div id="customer360TasksBoard"></div>
