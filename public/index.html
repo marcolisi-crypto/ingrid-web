@@ -268,6 +268,18 @@
     .customer360-summary-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:#eaf1fb;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.08)}
     .customer360-summary-icon{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#2b5ecb;color:#fff;font-size:14px}
     .customer360-summary-body{font-size:20px;line-height:1.5;color:#f2f5fa}
+    .customer360-journey-card{padding:16px 18px;border-radius:14px;background:radial-gradient(circle at top right, rgba(40,96,215,.18), transparent 40%),linear-gradient(180deg,#162133 0%,#121a2a 100%);border:1px solid rgba(255,255,255,.06);box-shadow:0 12px 24px rgba(0,0,0,.16)}
+    .customer360-journey-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+    .customer360-journey-head h3{margin:0;color:#f3f7ff;font-size:18px}
+    .customer360-journey-copy{margin-top:4px;color:#9fb3d2;font-size:13px;line-height:1.45}
+    .customer360-journey-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .customer360-journey-stage{padding:12px;border-radius:12px;background:linear-gradient(180deg,#18243b 0%,#142036 100%);border:1px solid rgba(255,255,255,.06);display:grid;gap:8px}
+    .customer360-journey-stage-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .customer360-journey-stage b{display:block;color:#f4f8ff;font-size:14px}
+    .customer360-journey-stage span{display:block;color:#9eb2d2;font-size:12px;line-height:1.4}
+    .customer360-journey-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .customer360-journey-btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#1b2a45;color:#e4ecfa;font-weight:700;font-size:12px;cursor:pointer}
+    .customer360-journey-btn.active{background:linear-gradient(180deg,#2b5ecb 0%,#214ca8 100%);color:#fff}
     .customer360-lower-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px}
     .customer360-stack{display:flex;flex-direction:column;gap:12px}
     .customer360-panel{padding:14px}
@@ -381,6 +393,7 @@
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
       .customer360-layout,.customer360-main-grid,.customer360-lower-grid{grid-template-columns:1fr}
+      .customer360-journey-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width: 960px){
       .grid,.split,.cards4,.form-grid,.form-grid-3{grid-template-columns:1fr}
@@ -393,6 +406,7 @@
       .customer360-action-dock{grid-template-columns:1fr}
       .customer360-composer-grid,.customer360-composer-grid.two{grid-template-columns:1fr}
       .customer360-lens-grid{grid-template-columns:1fr}
+      .customer360-journey-grid{grid-template-columns:1fr}
       body.customer360-landing .tabs{padding:10px 12px;border-radius:0}
       body.customer360-landing #customer360Tab{padding:0 12px}
     }
@@ -811,6 +825,18 @@
                 <div id="customer360AiSummary" class="customer360-summary-body">Select a customer to generate a timeline-aware summary.</div>
               </section>
             </div>
+
+            <section id="customer360JourneyCard" class="customer360-journey-card">
+              <div class="customer360-journey-head">
+                <div>
+                  <h3>Service Journey</h3>
+                  <div class="customer360-journey-copy">Track one live service path across advisor, technician, parts, and accounting.</div>
+                </div>
+                <span id="customer360JourneyStatus" class="customer360-status-pill info">Waiting</span>
+              </div>
+              <div id="customer360JourneyStages" class="customer360-journey-grid"></div>
+              <div id="customer360JourneyActions" class="customer360-journey-actions"></div>
+            </section>
 
             <div class="customer360-lower-grid">
               <div class="customer360-stack">

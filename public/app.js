@@ -1320,6 +1320,90 @@ function buildAccountingNotesMarkup(notes = []) {
   `).join("");
 }
 
+function hasKeywordMatch(items = [], keywords = []) {
+  return items.some((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""} ${item.body || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(keyword));
+  });
+}
+
+function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
+  const serviceReady = appointments.length > 0;
+  const techReady = notes.length > 0 || hasKeywordMatch(tasks, ["diagn", "inspect", "tech", "repair"]);
+  const partsReady = hasKeywordMatch(tasks, ["part", "stock", "sku", "runner"]) || hasKeywordMatch(notes, ["eta", "part", "stock", "runner"]);
+  const accountingReady = hasKeywordMatch(tasks, ["invoice", "payment", "statement", "ledger"]) || hasKeywordMatch(notes, ["statement", "ledger", "payment", "refund"]);
+
+  const stages = [
+    {
+      key: "service",
+      label: "Service Advisor",
+      detail: serviceReady ? "Visit booked and ready for write-up." : "Book visit and set promised time.",
+      status: serviceReady ? (techReady ? "complete" : "active") : "active"
+    },
+    {
+      key: "technicians",
+      label: "Technician",
+      detail: techReady ? "Inspection / findings are in motion." : "Capture findings and diagnosis.",
+      status: techReady ? (partsReady || accountingReady ? "complete" : "active") : (serviceReady ? "active" : "upcoming")
+    },
+    {
+      key: "parts",
+      label: "Parts",
+      detail: partsReady ? "Pick, source, or runner dispatch is underway." : "Source parts and prepare delivery route.",
+      status: partsReady ? (accountingReady ? "complete" : "active") : (techReady ? "active" : "upcoming")
+    },
+    {
+      key: "accounting",
+      label: "Accounting",
+      detail: accountingReady ? "Invoice / payment workflow has started." : "Prepare statement, payment, and reconciliation.",
+      status: accountingReady ? "active" : ((partsReady || techReady) ? "active" : "upcoming")
+    }
+  ];
+
+  const activeStage = stages.find((stage) => stage.status === "active") || stages[0];
+  const overallStatus = accountingReady
+    ? "Back office in motion"
+    : partsReady
+      ? "Parts engaged"
+      : techReady
+        ? "In technician flow"
+        : serviceReady
+          ? "Lane ready"
+          : "Waiting";
+
+  return { stages, activeStage, overallStatus };
+}
+
+function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
+  const stagesEl = document.getElementById("customer360JourneyStages");
+  const actionsEl = document.getElementById("customer360JourneyActions");
+  const statusEl = document.getElementById("customer360JourneyStatus");
+  if (!stagesEl || !actionsEl || !statusEl) return;
+
+  const { stages, activeStage, overallStatus } = buildServiceJourneyState(tasks, notes, appointments);
+  statusEl.textContent = overallStatus;
+  statusEl.className = `customer360-status-pill ${overallStatus === "Waiting" ? "info" : overallStatus.includes("technician") || overallStatus.includes("Lane") ? "warn" : "good"}`;
+
+  stagesEl.innerHTML = stages.map((stage) => `
+    <div class="customer360-journey-stage">
+      <div class="customer360-journey-stage-top">
+        <b>${escapeHtml(stage.label)}</b>
+        <span class="customer360-status-pill ${stage.status === "complete" ? "good" : stage.status === "active" ? "warn" : "info"}">${stage.status === "complete" ? "Done" : stage.status === "active" ? "Now" : "Next"}</span>
+      </div>
+      <span>${escapeHtml(stage.detail)}</span>
+    </div>
+  `).join("");
+
+  actionsEl.innerHTML = stages.map((stage) => `
+    <button type="button" class="customer360-journey-btn ${currentDepartmentLens === stage.key ? "active" : ""}" onclick="setDepartmentLens('${escapeHtml(stage.key)}')">${escapeHtml(stage.label)}</button>
+  `).join("");
+
+  if (activeStage && currentDepartmentLens === "home") {
+    const preferredMode = activeStage.key === "service" ? "appointment" : activeStage.key === "accounting" ? "note" : "task";
+    setCustomer360ComposerMode(preferredMode);
+  }
+}
+
 function getCustomerPrimaryVehicle(customer) {
   if (!customer) return null;
   const vehicleIds = Array.isArray(customer.vehicleIds) ? customer.vehicleIds : [];
@@ -1884,6 +1968,9 @@ function renderCustomer360Detail() {
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
   const customerCardEl = document.getElementById("customer360CustomerCard");
   const aiSummaryEl = document.getElementById("customer360AiSummary");
+  const journeyStagesEl = document.getElementById("customer360JourneyStages");
+  const journeyActionsEl = document.getElementById("customer360JourneyActions");
+  const journeyStatusEl = document.getElementById("customer360JourneyStatus");
   const vehicleTitleEl = document.getElementById("customer360VehicleTitle");
   const vehicleRailEl = document.getElementById("customer360VehicleRail");
   const archiveCountEl = document.getElementById("customer360ArchiveCount");
@@ -1899,6 +1986,12 @@ function renderCustomer360Detail() {
     if (summaryTitleEl) summaryTitleEl.textContent = getDepartmentLensConfig().summaryTitle || "AI Summary";
     if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
+    if (journeyStagesEl) journeyStagesEl.innerHTML = `<div class="customer360-empty">Choose a customer to activate the cross-department service journey.</div>`;
+    if (journeyActionsEl) journeyActionsEl.innerHTML = "";
+    if (journeyStatusEl) {
+      journeyStatusEl.textContent = "Waiting";
+      journeyStatusEl.className = "customer360-status-pill info";
+    }
     if (vehicleTitleEl) vehicleTitleEl.textContent = "No linked vehicle";
     if (vehicleRailEl) vehicleRailEl.innerHTML = `<div class="customer360-empty">Choose a customer to load vehicle intelligence.</div>`;
     if (archiveCountEl) archiveCountEl.textContent = "0 Items";
@@ -1948,6 +2041,8 @@ function renderCustomer360Detail() {
     const lens = getDepartmentLensConfig();
     aiSummaryEl.textContent = `${lens.name}: ${aiSummary}`;
   }
+
+  renderCustomer360Journey(openTasks, currentCustomerNotes, appointments);
 
   if (vehicleTitleEl) {
     vehicleTitleEl.textContent = vehicle ? vehicleDisplayName(vehicle) : "No linked vehicle";
