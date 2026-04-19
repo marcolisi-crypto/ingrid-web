@@ -18,6 +18,9 @@ let configCache = null;
 let isLoadingCalls = false;
 let isLoadingCustomer360 = false;
 let currentDepartmentLens = "home";
+let currentCustomer360TimelineCards = [];
+let currentCustomer360TimelineFilter = "all";
+let currentCustomer360ComposerMode = "note";
 
 const DEPARTMENT_LENSES = {
   home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"] },
@@ -366,6 +369,12 @@ function formatCountLabel(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 function titleCase(value) {
   return String(value || "")
     .split(/[\s_-]+/)
@@ -374,10 +383,64 @@ function titleCase(value) {
     .join(" ");
 }
 
+function toLocalDateInputValue(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const tzOffset = parsed.getTimezoneOffset();
+  const local = new Date(parsed.getTime() - tzOffset * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function toDateInputValue(date) {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getCustomerVehicleMatches(customer) {
   if (!customer) return [];
   const vehicleIds = Array.isArray(customer.vehicleIds) ? customer.vehicleIds : [];
   return currentVehicles.filter((vehicle) => vehicleIds.includes(vehicle.id));
+}
+
+function getSelectedCustomerRecord() {
+  return currentCustomers.find((item) => item.id === selectedCustomerId) || null;
+}
+
+function getSelectedVehicleRecord() {
+  return getCustomerPrimaryVehicle(getSelectedCustomerRecord());
+}
+
+function normalizeCustomer360TimelineFilter(value = "") {
+  return String(value || "all").toLowerCase().trim();
+}
+
+function categorizeCustomer360TimelineItem(item) {
+  const type = String(item.type || "").toLowerCase();
+  const eventType = String(item.eventType || "").toLowerCase();
+
+  if (type.includes("phone") || type.includes("call") || eventType.includes("call")) return "calls";
+  if (type.includes("sms") || eventType.includes("sms") || eventType.includes("message")) return "sms";
+  if (type.includes("note") || type.includes("transcript") || eventType.includes("note")) return "notes";
+  if (type.includes("task") || eventType.includes("task")) return "tasks";
+  if (type.includes("appointment") || type.includes("service event") || eventType.includes("appointment")) return "appointments";
+  return "activity";
+}
+
+function getCustomer360ComposerButtonLabel(mode = "note") {
+  if (mode === "task") return "Create Task";
+  if (mode === "appointment") return "Schedule Service";
+  return "Save Note";
+}
+
+function getCustomer360ComposerCopy(mode = "note") {
+  if (mode === "task") return "Create a follow-up task tied directly to this customer, vehicle, and timeline.";
+  if (mode === "appointment") return "Book the next service touchpoint from the operating screen without losing customer context.";
+  return "Capture a customer or advisor note directly into the VIN-linked record.";
 }
 
 function inferVehicleBatteryHealth(vehicle, appointments = []) {
@@ -661,6 +724,299 @@ function wireCustomer360Dock() {
   document.getElementById('customer360PrimarySmsBtn')?.addEventListener('click', smsPhone);
 }
 
+function hydrateCustomer360AppointmentFields() {
+  const scheduler = schedulerConfigCache || DEFAULT_CONFIG.scheduler;
+  const serviceSelect = document.getElementById("customer360AppointmentService");
+  const advisorSelect = document.getElementById("customer360AppointmentAdvisor");
+  const transportSelect = document.getElementById("customer360AppointmentTransport");
+
+  if (serviceSelect) {
+    const previous = serviceSelect.value;
+    serviceSelect.innerHTML = "";
+    (scheduler.serviceTypes || []).forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item;
+      option.textContent = item;
+      serviceSelect.appendChild(option);
+    });
+    if (previous) serviceSelect.value = previous;
+  }
+
+  if (advisorSelect) {
+    const previous = advisorSelect.value;
+    advisorSelect.innerHTML = "";
+    const advisors = (configCache?.advisors || DEFAULT_CONFIG.advisors).filter((item) => item.active);
+    advisors.forEach((advisor) => {
+      const option = document.createElement("option");
+      option.value = advisor.name;
+      option.textContent = advisor.name;
+      advisorSelect.appendChild(option);
+    });
+    if (previous) advisorSelect.value = previous;
+  }
+
+  if (transportSelect) {
+    const previous = transportSelect.value;
+    transportSelect.innerHTML = "";
+    (scheduler.transportOptions || []).forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item;
+      option.textContent = item;
+      transportSelect.appendChild(option);
+    });
+    if (previous) transportSelect.value = previous;
+  }
+}
+
+function seedCustomer360ComposerDefaults() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  const dateInput = document.getElementById("customer360AppointmentDate");
+  const timeInput = document.getElementById("customer360AppointmentTime");
+  const serviceSelect = document.getElementById("customer360AppointmentService");
+  const taskTitle = document.getElementById("customer360TaskTitle");
+  const taskDue = document.getElementById("customer360TaskDueAt");
+
+  hydrateCustomer360AppointmentFields();
+
+  if (dateInput && !dateInput.value) {
+    dateInput.value = toDateInputValue(addDays(new Date(), 1));
+  }
+
+  if (timeInput && !timeInput.value) {
+    timeInput.value = "10:00 AM";
+  }
+
+  if (serviceSelect && !serviceSelect.value && serviceSelect.options.length) {
+    serviceSelect.value = serviceSelect.options[0].value;
+  }
+
+  if (taskTitle && !taskTitle.value) {
+    taskTitle.value = vehicle ? `${vehicleDisplayName(vehicle)} follow-up` : `${customerDisplayName(customer)} follow-up`;
+  }
+
+  if (taskDue && !taskDue.value) {
+    taskDue.value = toLocalDateInputValue(addDays(new Date(), 1));
+  }
+}
+
+function setCustomer360ComposerStatus(message = "", tone = "default") {
+  const status = document.getElementById("customer360ComposerStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.style.color = tone === "success" ? "#86efac" : tone === "error" ? "#fca5a5" : "#97abc8";
+}
+
+function setCustomer360ComposerMode(mode = "note") {
+  currentCustomer360ComposerMode = ["note", "task", "appointment"].includes(mode) ? mode : "note";
+  const copy = document.getElementById("customer360ComposerCopy");
+  const submit = document.getElementById("customer360ComposerSubmit");
+  const taskFields = document.getElementById("customer360TaskFields");
+  const appointmentFields = document.getElementById("customer360AppointmentFields");
+
+  document.querySelectorAll("[data-composer-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.composerMode === currentCustomer360ComposerMode);
+  });
+
+  if (copy) copy.textContent = getCustomer360ComposerCopy(currentCustomer360ComposerMode);
+  if (submit) submit.textContent = getCustomer360ComposerButtonLabel(currentCustomer360ComposerMode);
+  if (taskFields) taskFields.classList.toggle("active", currentCustomer360ComposerMode === "task");
+  if (appointmentFields) appointmentFields.classList.toggle("active", currentCustomer360ComposerMode === "appointment");
+  if (currentCustomer360ComposerMode === "appointment") hydrateCustomer360AppointmentFields();
+  seedCustomer360ComposerDefaults();
+}
+
+function inferComposerModeFromActionLabel(label = "") {
+  const normalized = String(label).toLowerCase();
+  if (normalized.includes("appoint") || normalized.includes("service")) return "appointment";
+  if (normalized.includes("note")) return "note";
+  return "task";
+}
+
+function initCustomer360Composer() {
+  hydrateCustomer360AppointmentFields();
+  setCustomer360ComposerMode(currentCustomer360ComposerMode);
+
+  document.querySelectorAll("[data-composer-mode]").forEach((button) => {
+    button.addEventListener("click", () => setCustomer360ComposerMode(button.dataset.composerMode || "note"));
+  });
+
+  ["customer360ActionOne", "customer360ActionTwo", "customer360ActionThree"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("click", () => {
+      const label = document.getElementById(id)?.textContent || "";
+      setCustomer360ComposerMode(inferComposerModeFromActionLabel(label));
+      document.getElementById("customer360ComposerBody")?.focus();
+    });
+  });
+
+  document.getElementById("customer360ComposerSubmit")?.addEventListener("click", submitCustomer360Composer);
+}
+
+function renderCustomer360Timeline() {
+  const timelineEl = document.getElementById("customer360Timeline");
+  if (!timelineEl) return;
+
+  const filter = normalizeCustomer360TimelineFilter(currentCustomer360TimelineFilter);
+  const items = currentCustomer360TimelineCards.filter((item) => {
+    if (filter === "all") return true;
+    return categorizeCustomer360TimelineItem(item) === filter;
+  });
+
+  if (!items.length) {
+    timelineEl.innerHTML = `<div class="customer360-empty">No ${escapeHtml(filter === "activity" ? "additional activity" : filter)} on this timeline yet.</div>`;
+    return;
+  }
+
+  timelineEl.innerHTML = items.map((item) => `
+    <div class="customer360-timeline-item">
+      <div class="customer360-timeline-inner">
+        <div class="customer360-timeline-item-head">
+          <div class="customer360-timeline-kind">
+            <span class="customer360-timeline-kind-icon">${getTimelineEventIcon(item.type)}</span>
+            <span>${escapeHtml(item.type)}</span>
+          </div>
+          <div class="customer360-timeline-time">${escapeHtml(item.time)}</div>
+        </div>
+        <div class="customer360-timeline-copy">${escapeHtml(item.body)}</div>
+        ${item.subcopy ? `<div class="customer360-timeline-subcopy">${escapeHtml(item.subcopy)}</div>` : ""}
+        ${item.actions?.length ? `
+          <div class="customer360-timeline-actions">
+            ${item.actions.map((action) => `
+              <span class="customer360-chip-callout ${action.light ? "light" : ""}">${escapeHtml(action.label)}</span>
+            `).join("")}
+          </div>
+        ` : ""}
+      </div>
+    </div>
+  `).join("");
+}
+
+function initCustomer360TimelineFilters() {
+  document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      currentCustomer360TimelineFilter = normalizeCustomer360TimelineFilter(chip.dataset.filter || "all");
+      document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+        item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+      });
+      renderCustomer360Timeline();
+    });
+  });
+}
+
+async function createCustomer360Note() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  const body = getValue("customer360ComposerBody").trim();
+  if (!customer || !body) throw new Error("Select a customer and enter a note first.");
+
+  const res = await fetch("/.netlify/functions/notes-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      body,
+      noteType: "internal"
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to create note");
+}
+
+async function createCustomer360Task() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  const body = getValue("customer360ComposerBody").trim();
+  const title = getValue("customer360TaskTitle").trim();
+  if (!customer) throw new Error("Select a customer before creating a task.");
+
+  const res = await fetch("/.netlify/functions/tasks-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      title: title || "Customer follow-up",
+      description: body,
+      priority: "normal",
+      dueAtUtc: getValue("customer360TaskDueAt") ? new Date(getValue("customer360TaskDueAt")).toISOString() : null
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to create task");
+}
+
+async function createCustomer360Appointment() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer) throw new Error("Select a customer before scheduling service.");
+
+  const [firstName = "", ...rest] = customerDisplayName(customer).split(" ");
+  const lastName = rest.join(" ");
+
+  const res = await fetch("/.netlify/functions/book-appointment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      firstName,
+      lastName,
+      phone: customer.phones?.[0] || "",
+      email: customer.email || "",
+      make: vehicle?.make || "",
+      model: vehicle?.model || "",
+      year: vehicle?.year ? String(vehicle.year) : "",
+      vin: vehicle?.vin || "",
+      service: getValue("customer360AppointmentService"),
+      advisor: getValue("customer360AppointmentAdvisor"),
+      date: getValue("customer360AppointmentDate"),
+      time: getValue("customer360AppointmentTime"),
+      transport: getValue("customer360AppointmentTransport"),
+      notes: getValue("customer360ComposerBody").trim(),
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to schedule service");
+}
+
+async function submitCustomer360Composer() {
+  try {
+    setCustomer360ComposerStatus("Saving...");
+    if (currentCustomer360ComposerMode === "task") {
+      await createCustomer360Task();
+    } else if (currentCustomer360ComposerMode === "appointment") {
+      await createCustomer360Appointment();
+    } else {
+      await createCustomer360Note();
+    }
+
+    const composerBody = document.getElementById("customer360ComposerBody");
+    if (composerBody) composerBody.value = "";
+    if (currentCustomer360ComposerMode !== "appointment") {
+      const taskTitle = document.getElementById("customer360TaskTitle");
+      if (taskTitle) taskTitle.value = "";
+    }
+
+    setCustomer360ComposerStatus(
+      currentCustomer360ComposerMode === "appointment" ? "Service scheduled." :
+      currentCustomer360ComposerMode === "task" ? "Task created." : "Note saved.",
+      "success"
+    );
+
+    await loadTasks();
+    await loadAppointments();
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    seedCustomer360ComposerDefaults();
+  } catch (err) {
+    setCustomer360ComposerStatus(err.message || "Unable to save.", "error");
+  }
+}
+
 
 function renderCustomer360Detail() {
   const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
@@ -691,6 +1047,7 @@ function renderCustomer360Detail() {
   const timelineEl = document.getElementById("customer360Timeline");
 
   if (!customer) {
+    currentCustomer360TimelineCards = [];
     if (summaryTitleEl) summaryTitleEl.textContent = "AI Summary";
     if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
@@ -749,11 +1106,22 @@ function renderCustomer360Detail() {
 
   if (vehicleRailEl) {
     vehicleRailEl.innerHTML = vehicle ? `
+      <div class="customer360-vehicle-kpis">
+        <div class="customer360-vehicle-kpi">
+          <small>Mileage</small>
+          <strong>${escapeHtml(vehicle.mileage ?? "-")} mi</strong>
+        </div>
+        <div class="customer360-vehicle-kpi">
+          <small>Archive</small>
+          <strong>${archiveCount} items</strong>
+        </div>
+      </div>
       <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
-      <div class="customer360-vehicle-line"><span>Mileage:</span><strong>${escapeHtml(vehicle.mileage ?? "-")} miles</strong></div>
+      <div class="customer360-vehicle-line"><span>Geo:</span><strong>${escapeHtml(vehicle.status || "Inventory Live")}</strong></div>
       <div class="customer360-vehicle-line"><span>Battery Health:</span><strong class="customer360-vehicle-good">${escapeHtml(batteryState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Recalls:</span><strong>${escapeHtml(recallState)}</strong></div>
       <div class="customer360-vehicle-line"><span>Maintenance:</span><strong class="customer360-vehicle-warn">${escapeHtml(maintenanceState === "Scheduled" ? "Due Soon" : maintenanceState)}</strong></div>
+      <div class="customer360-vehicle-line"><span>Loaner:</span><strong>${appointments.length ? "Potentially needed" : "Not requested"}</strong></div>
     ` : `<div class="customer360-empty">Vehicle status will appear here.</div>`;
   }
 
@@ -788,7 +1156,7 @@ function renderCustomer360Detail() {
           <div class="customer360-meta">${escapeHtml(topTask.description || "Follow up with the customer.")}</div>
         </div>
       </div>
-      <button class="customer360-toolbar-btn" style="width:100%;margin-top:10px;">Mark Complete</button>
+      <button class="customer360-toolbar-btn" style="width:100%;margin-top:10px;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Complete</button>
     ` : `<div class="customer360-empty">No open task assigned.</div>`;
   }
 
@@ -807,6 +1175,7 @@ function renderCustomer360Detail() {
   if (calls[0]) {
     timelineCards.push({
       type: "Phone Call",
+      eventType: "calls",
       time: formatDisplayDateTime(calls[0].startedAt || calls[0].updatedAt),
       body: calls[0].notes || calls[0].transcript || "Spoke with the customer about a recent vehicle concern.",
       subcopy: `${titleCase(calls[0].status || "completed")} • ${titleCase(calls[0].routedDepartment || "communications")}`
@@ -815,6 +1184,7 @@ function renderCustomer360Detail() {
 
   const latestTimeline = currentCustomerTimeline.slice(0, 4).map((event) => ({
     type: titleCase(event.title || event.eventType || "Timeline Event"),
+    eventType: event.eventType || "activity",
     time: formatDisplayDateTime(event.occurredAtUtc || event.createdAtUtc),
     body: event.body || "Timeline detail captured.",
     subcopy: `${titleCase(event.department || event.sourceSystem || "ingrid")}`
@@ -825,6 +1195,7 @@ function renderCustomer360Detail() {
   if (appointments[0]) {
     timelineCards.push({
       type: "Service Event",
+      eventType: "appointments",
       time: `${appointments[0].date || ""} ${appointments[0].time || ""}`.trim() || "Upcoming",
       body: `${appointments[0].service || "Service appointment"}${appointments[0].advisor ? ` with ${appointments[0].advisor}` : ""}`,
       actions: [
@@ -837,6 +1208,7 @@ function renderCustomer360Detail() {
   if (openTasks[0]) {
     timelineCards.push({
       type: "Task",
+      eventType: "tasks",
       time: formatDisplayDateTime(openTasks[0].updatedAtUtc || openTasks[0].createdAtUtc || new Date().toISOString()),
       body: openTasks[0].description || openTasks[0].title || "Follow up with the customer.",
       subcopy: `Follow Up: ${openTasks[0].title || "Customer confirmation"}`
@@ -845,7 +1217,8 @@ function renderCustomer360Detail() {
 
   if (currentCustomerNotes[0]) {
     timelineCards.push({
-      type: "AI Generated Transcript",
+      type: "Note",
+      eventType: "notes",
       time: formatDisplayDateTime(currentCustomerNotes[0].updatedAtUtc || currentCustomerNotes[0].createdAtUtc),
       body: currentCustomerNotes[0].body || "Recent note captured in the customer record.",
       subcopy: titleCase(currentCustomerNotes[0].noteType || "internal")
@@ -855,36 +1228,17 @@ function renderCustomer360Detail() {
   if (!timelineCards.length) {
     timelineCards.push({
       type: "Timeline Event",
+      eventType: "activity",
       time: "Now",
       body: "Live calls, SMS, voicemails, AI summaries, tasks, notes, appointments, and service events will appear here as they are captured.",
       subcopy: "INGRID timeline spine"
     });
   }
 
-  if (timelineEl) {
-    timelineEl.innerHTML = timelineCards.map((item) => `
-      <div class="customer360-timeline-item">
-        <div class="customer360-timeline-inner">
-          <div class="customer360-timeline-item-head">
-            <div class="customer360-timeline-kind">
-              <span class="customer360-timeline-kind-icon">${getTimelineEventIcon(item.type)}</span>
-              <span>${escapeHtml(item.type)}</span>
-            </div>
-            <div class="customer360-timeline-time">${escapeHtml(item.time)}</div>
-          </div>
-          <div class="customer360-timeline-copy">${escapeHtml(item.body)}</div>
-          ${item.subcopy ? `<div class="customer360-timeline-subcopy">${escapeHtml(item.subcopy)}</div>` : ""}
-          ${item.actions?.length ? `
-            <div class="customer360-timeline-actions">
-              ${item.actions.map((action) => `
-                <span class="customer360-chip-callout ${action.light ? "light" : ""}">${escapeHtml(action.label)}</span>
-              `).join("")}
-            </div>
-          ` : ""}
-        </div>
-      </div>
-    `).join("");
-  }
+  currentCustomer360TimelineCards = timelineCards;
+  renderCustomer360Timeline();
+  if (timelineEl) timelineEl.dataset.customerId = customer.id;
+  seedCustomer360ComposerDefaults();
 }
 
 function escapeHtml(value) {
@@ -2493,11 +2847,13 @@ async function loadConfig() {
     fillConfigForm(data.config || DEFAULT_CONFIG);
     schedulerConfigCache = data.config?.scheduler || DEFAULT_CONFIG.scheduler;
     await hydrateSchedulerFromConfig();
+    hydrateCustomer360AppointmentFields();
   } catch (err) {
     console.error("loadConfig error:", err);
     fillConfigForm(DEFAULT_CONFIG);
     schedulerConfigCache = DEFAULT_CONFIG.scheduler;
     await hydrateSchedulerFromConfig();
+    hydrateCustomer360AppointmentFields();
   }
 }
 
@@ -2729,6 +3085,7 @@ async function loadTasks() {
 
     if (!currentTasks.length) {
       body.innerHTML = `<tr><td colspan="5" class="muted">No tasks yet.</td></tr>`;
+      if (selectedCustomerId) renderCustomer360();
       return;
     }
 
@@ -2800,6 +3157,8 @@ async function completeTask(taskId) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to update task");
     await loadTasks();
+    await refreshSelectedCustomer360();
+    renderCustomer360();
   } catch (err) {
     console.error("completeTask error:", err);
   }
@@ -3658,6 +4017,8 @@ document.getElementById("inboxSearchBox")?.addEventListener("input", loadInbox);
 document.getElementById("sendReplyBtn")?.addEventListener("click", sendInboxReply);
 document.getElementById("refreshCustomer360Btn")?.addEventListener("click", loadCustomer360);
 document.getElementById("customer360SearchBox")?.addEventListener("input", renderCustomer360List);
+  initCustomer360TimelineFilters();
+  initCustomer360Composer();
 
 // 👇 ADD YOUR COMPOSE LISTENERS HERE
 document.getElementById("composeSmsBtn")?.addEventListener("click", openComposeSmsModal);

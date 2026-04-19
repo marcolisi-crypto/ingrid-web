@@ -283,10 +283,26 @@
     .customer360-composer-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(180deg,#d9b79a,#6f5649)}
     .customer360-composer-actions{margin-left:auto;display:flex;gap:8px}
     .customer360-composer-btn{padding:6px 10px;border-radius:8px;background:#22304b;color:#dfe8f7;border:none}
+    .customer360-composer-btn.active{background:linear-gradient(180deg,#2b5ecb 0%,#214ca8 100%);color:#fff}
+    .customer360-composer-main{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
+    .customer360-composer-copy{font-size:13px;color:#9db1cf}
+    .customer360-composer-shell{display:grid;gap:10px}
+    .customer360-composer-shell textarea,
+    .customer360-composer-shell input,
+    .customer360-composer-shell select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#1b2840;color:#eef4ff}
+    .customer360-composer-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .customer360-composer-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .customer360-composer-grid label,
+    .customer360-composer-shell label{display:flex;flex-direction:column;gap:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#89a4cb;font-weight:700}
+    .customer360-composer-aux{display:none}
+    .customer360-composer-aux.active{display:grid}
+    .customer360-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .customer360-composer-status{font-size:12px;color:#97abc8}
+    .customer360-composer-submit{padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#2b5ecb 0%,#214ca8 100%);color:#fff;font-weight:700}
     .customer360-timeline{display:flex;flex-direction:column;gap:10px;position:relative;padding-left:18px}
     .customer360-timeline::before{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#3766d6,#6aa2ff)}
     .customer360-timeline-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px}
-    .customer360-filter-chip{padding:6px 10px;border-radius:999px;background:#1d2940;color:#dce6f7;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.06)}
+    .customer360-filter-chip{padding:6px 10px;border-radius:999px;background:#1d2940;color:#dce6f7;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.06);cursor:pointer}
     .customer360-filter-chip.active{background:#2f59c7;color:#fff}
     .customer360-timeline-item{position:relative;margin-left:14px;padding:0;background:linear-gradient(180deg,#171f30 0%,#121a29 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#f6f6f4;overflow:hidden}
     .customer360-timeline-item::before{content:"";position:absolute;left:-19px;top:22px;width:10px;height:10px;border-radius:50%;background:#8bc1ff;box-shadow:0 0 0 4px rgba(55,102,214,.18)}
@@ -307,6 +323,10 @@
     .customer360-vehicle-line:first-of-type{border-top:none;padding-top:0}
     .customer360-vehicle-good{color:#7ed77e;font-weight:800}
     .customer360-vehicle-warn{color:#f2bb63;font-weight:800}
+    .customer360-vehicle-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:8px}
+    .customer360-vehicle-kpi{padding:12px;border-radius:12px;background:linear-gradient(180deg,#1a2640 0%,#152238 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-vehicle-kpi small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#88a4cb;margin-bottom:6px}
+    .customer360-vehicle-kpi strong{display:block;font-size:18px;color:#f4f8ff}
     .customer360-map{margin-top:14px;height:132px;border-radius:10px;background:radial-gradient(circle at 62% 42%, #c85d40 0 8px, transparent 9px),linear-gradient(45deg, rgba(245,190,110,.85) 0 6px, transparent 6px),linear-gradient(-22deg, rgba(236,167,70,.75) 0 8px, transparent 8px),linear-gradient(180deg,#efe2ca 0%,#dccdb2 100%);position:relative;overflow:hidden}
     .customer360-contact-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;background:#22304b;color:#dce3eb;font-size:12px}
     .customer360-map::after{content:"Current Location";position:absolute;left:12px;bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(42,50,60,.86);color:#f7f7f4;font-size:12px}
@@ -335,6 +355,7 @@
       .customer360-timeline::before,.customer360-timeline-item::before{display:none}
       .customer360-timeline-item{margin-left:0}
       .customer360-action-dock{grid-template-columns:1fr}
+      .customer360-composer-grid,.customer360-composer-grid.two{grid-template-columns:1fr}
       body.customer360-landing .tabs{padding:10px 12px;border-radius:0}
       body.customer360-landing #customer360Tab{padding:0 12px}
     }
@@ -768,21 +789,56 @@
 
                 <section>
                 <div class="customer360-timeline-toolbar">
-                  <span id="customer360TimelineLens" class="customer360-filter-chip active">All departments</span>
-                  <span class="customer360-filter-chip">Calls</span>
-                  <span class="customer360-filter-chip">SMS</span>
-                  <span class="customer360-filter-chip">Notes</span>
-                  <span class="customer360-filter-chip">Tasks</span>
-                  <span class="customer360-filter-chip">Appointments</span>
-                  <span class="customer360-filter-chip">More ▾</span>
+                  <span id="customer360TimelineLens" class="customer360-filter-chip active" data-filter="all">All departments</span>
+                  <span class="customer360-filter-chip" data-filter="calls">Calls</span>
+                  <span class="customer360-filter-chip" data-filter="sms">SMS</span>
+                  <span class="customer360-filter-chip" data-filter="notes">Notes</span>
+                  <span class="customer360-filter-chip" data-filter="tasks">Tasks</span>
+                  <span class="customer360-filter-chip" data-filter="appointments">Appointments</span>
+                  <span class="customer360-filter-chip" data-filter="activity">More ▾</span>
                 </div>
                 <div id="customer360Timeline" class="customer360-timeline"></div>
                 <div class="customer360-composer">
                   <div class="customer360-composer-avatar"></div>
-                  <div>Write a note, create a task, or send a message...</div>
-                  <div class="customer360-composer-actions">
-                    <button class="customer360-composer-btn">Note</button>
-                    <button class="customer360-composer-btn">Task ▾</button>
+                  <div class="customer360-composer-main">
+                    <div class="customer360-composer-copy" id="customer360ComposerCopy">Write a note, create a task, or schedule service without leaving the operating screen.</div>
+                    <div class="customer360-composer-shell">
+                      <div class="customer360-composer-actions">
+                        <button class="customer360-composer-btn" type="button" data-composer-mode="note">Note</button>
+                        <button class="customer360-composer-btn" type="button" data-composer-mode="task">Task</button>
+                        <button class="customer360-composer-btn" type="button" data-composer-mode="appointment">Appointment</button>
+                      </div>
+                      <textarea id="customer360ComposerBody" placeholder="Add customer context, a follow-up, or advisor notes..."></textarea>
+                      <div id="customer360TaskFields" class="customer360-composer-aux customer360-composer-grid two">
+                        <label>Task Title
+                          <input id="customer360TaskTitle" type="text" placeholder="Warranty Inquiry" />
+                        </label>
+                        <label>Due
+                          <input id="customer360TaskDueAt" type="datetime-local" />
+                        </label>
+                      </div>
+                      <div id="customer360AppointmentFields" class="customer360-composer-aux customer360-composer-grid">
+                        <label>Service
+                          <select id="customer360AppointmentService"></select>
+                        </label>
+                        <label>Advisor
+                          <select id="customer360AppointmentAdvisor"></select>
+                        </label>
+                        <label>Transport
+                          <select id="customer360AppointmentTransport"></select>
+                        </label>
+                        <label>Date
+                          <input id="customer360AppointmentDate" type="date" />
+                        </label>
+                        <label>Time
+                          <input id="customer360AppointmentTime" type="text" placeholder="10:00 AM" />
+                        </label>
+                      </div>
+                      <div class="customer360-composer-footer">
+                        <div id="customer360ComposerStatus" class="customer360-composer-status"></div>
+                        <button id="customer360ComposerSubmit" class="customer360-composer-submit" type="button">Save Note</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </section>
