@@ -2646,6 +2646,18 @@ function inferAutomaticJourneyHandoff({ mode = "note", lens = "home", body = "",
     return "technicians";
   }
 
+  if (lens === "bdc" && (mode === "note" || mode === "task") && (haystack.includes("lead") || haystack.includes("callback") || haystack.includes("quote") || haystack.includes("appointment"))) {
+    return "sales";
+  }
+
+  if (lens === "sales" && (mode === "note" || mode === "task" || mode === "appointment") && (haystack.includes("deal") || haystack.includes("quote") || haystack.includes("trade") || haystack.includes("test drive"))) {
+    return "fi";
+  }
+
+  if (lens === "fi" && (mode === "note" || mode === "task") && (haystack.includes("finance") || haystack.includes("funding") || haystack.includes("warranty") || haystack.includes("[fi]"))) {
+    return "delivery";
+  }
+
   if (lens === "technicians" && (mode === "note" || mode === "task") && haystack.includes("[technician]")) {
     return "parts";
   }
@@ -2667,6 +2679,30 @@ function buildAutomaticJourneyTaskPayload(target = "", customer, vehicle, contex
     return {
       title: `[TECHNICIAN] ${vehicleName} diagnostic review`,
       description: `[TECHNICIAN] ${customerName} • ${vehicleName}\nAuto-created from service write-up.\nConcern: ${concern}\nNext step:\n- Verify concern\n- Capture findings\n- Return recommendations to advisor`,
+      dueAtUtc
+    };
+  }
+
+  if (target === "sales") {
+    return {
+      title: `[SALES] ${vehicleName} opportunity review`,
+      description: `[SALES] ${customerName} • ${vehicleName}\nAuto-created from BDC engagement.\nContext:\n${context.body || context.title || "Lead reconnected and ready for desk follow-up."}\nNext step:\n- Quote or trade review\n- Confirm test drive / showroom visit\n- Advance deal task`,
+      dueAtUtc
+    };
+  }
+
+  if (target === "fi") {
+    return {
+      title: `[FI] ${vehicleName} finance review`,
+      description: `[FI] ${customerName} • ${vehicleName}\nAuto-created from sales workflow.\nSales context:\n${context.body || context.title || "Deal moved forward from sales."}\nNext step:\n- Funding checklist\n- Warranty / menu review\n- Prepare delivery readiness`,
+      dueAtUtc
+    };
+  }
+
+  if (target === "delivery") {
+    return {
+      title: `[DELIVERY] ${vehicleName} final handoff`,
+      description: `[DELIVERY] ${customerName} • ${vehicleName}\nAuto-created from F&I workflow.\nFinance context:\n${context.body || context.title || "Funding step completed."}\nNext step:\n- Confirm paperwork complete\n- Prepare pickup handoff\n- Mark delivery ready`,
       dueAtUtc
     };
   }
@@ -2766,8 +2802,8 @@ async function submitCustomer360Composer() {
     seedCustomer360ComposerDefaults();
 
     const nextLens = automaticTarget || handoffTarget;
-    if (nextLens && (currentDepartmentLens === "service" || currentDepartmentLens === "home" || currentDepartmentLens === "technicians" || currentDepartmentLens === "parts")) {
-      setDepartmentLens(nextLens);
+    if (nextLens && (currentDepartmentLens === "service" || currentDepartmentLens === "home" || currentDepartmentLens === "technicians" || currentDepartmentLens === "parts" || currentDepartmentLens === "bdc" || currentDepartmentLens === "sales" || currentDepartmentLens === "fi")) {
+      setDepartmentLens(getJourneyStageLens(nextLens));
       setCustomer360ComposerStatus(`${titleCase(nextLens)} handoff created and ready.`, "success");
     }
   } catch (err) {
