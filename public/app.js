@@ -610,6 +610,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   if (currentDepartmentLens === "technicians") {
     return `
       <div class="customer360-service-card">
+        ${buildLaneOwnerMarkup("technicians")}
         <div class="customer360-service-row">
           <div>
             <div class="customer360-service-label">Bay Assignment</div>
@@ -637,6 +638,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   if (currentDepartmentLens === "parts") {
     return `
       <div class="customer360-service-card">
+        ${buildLaneOwnerMarkup("parts")}
         <div class="customer360-service-row">
           <div>
             <div class="customer360-service-label">Counter Status</div>
@@ -664,6 +666,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   if (currentDepartmentLens === "accounting") {
     return `
       <div class="customer360-service-card">
+        ${buildLaneOwnerMarkup("accounting")}
         <div class="customer360-service-row">
           <div>
             <div class="customer360-service-label">Ledger Status</div>
@@ -1538,6 +1541,21 @@ async function setJourneyAssignee(stageKey = "", owner = "") {
     renderCustomer360Detail();
     setCustomer360ComposerStatus(err.message || "Unable to save assignee.", "error");
   }
+}
+
+function buildLaneOwnerMarkup(stageKey = "", status = "active") {
+  const assignment = getTimelineJourneyAssignment(stageKey);
+  const owner = getJourneyAssignedOwner(stageKey, status);
+  const changedAt = assignment?.occurredAtUtc || assignment?.createdAtUtc || "";
+  return `
+    <div class="customer360-service-owner">
+      <div>
+        <strong>${escapeHtml(owner)}</strong>
+        <span>${escapeHtml(changedAt ? `Latest change ${formatDisplayDateTime(changedAt)}` : "No reassignment yet")}</span>
+      </div>
+      <span class="customer360-status-pill info">${escapeHtml(titleCase(stageKey))}</span>
+    </div>
+  `;
 }
 
 function getJourneyArtifactMovedAtLabel(value) {
