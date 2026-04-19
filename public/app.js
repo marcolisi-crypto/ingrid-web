@@ -26,6 +26,14 @@ let currentJourneyArtifacts = {};
 let currentJourneyFeedbackMessage = "";
 let currentJourneyFeedbackStage = "";
 let currentJourneyFeedbackTimer = null;
+let customer360AssigneeMap = JSON.parse(localStorage.getItem("customer360Assignees") || "{}");
+
+const JOURNEY_ASSIGNEE_DIRECTORY = {
+  service: ["Rachel Smith", "Nicole Adams", "Front Desk"],
+  technicians: ["Miguel Santos", "Avery Chen", "Shop Foreman"],
+  parts: ["Marcus Reed", "Inventory Desk", "Runner Dispatch"],
+  accounting: ["Priya Shah", "Back Office", "Finance Desk"]
+};
 
 const DEPARTMENT_LENSES = {
   home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", lensPanelTitle: "Work Queue", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
@@ -102,6 +110,11 @@ function getInboxReadMap() {
 function saveInboxReadMap(map) {
   readMap = map || {};
   localStorage.setItem("readConversations", JSON.stringify(readMap));
+}
+
+function saveJourneyAssigneeMap(map) {
+  customer360AssigneeMap = map || {};
+  localStorage.setItem("customer360Assignees", JSON.stringify(customer360AssigneeMap));
 }
 
 function markConversationRead(phone, timestamp = new Date().toISOString()) {
@@ -1389,6 +1402,31 @@ function getJourneyStageOwner(stageKey = "", status = "") {
   return "INGRID";
 }
 
+function getJourneyAssigneeKey(stageKey = "") {
+  return `${selectedCustomerId || "global"}:${stageKey}`;
+}
+
+function getJourneyAssignedOwner(stageKey = "", status = "") {
+  const assigned = customer360AssigneeMap[getJourneyAssigneeKey(stageKey)];
+  return assigned || getJourneyStageOwner(stageKey, status);
+}
+
+function renderJourneyAssigneeOptions(stageKey = "", selectedOwner = "") {
+  const options = JOURNEY_ASSIGNEE_DIRECTORY[stageKey] || [];
+  const current = selectedOwner || getJourneyAssignedOwner(stageKey, "active");
+  return options.map((name) => `
+    <option value="${escapeHtml(name)}" ${name === current ? "selected" : ""}>${escapeHtml(name)}</option>
+  `).join("");
+}
+
+function setJourneyAssignee(stageKey = "", owner = "") {
+  if (!stageKey || !selectedCustomerId) return;
+  const nextMap = { ...customer360AssigneeMap, [getJourneyAssigneeKey(stageKey)]: owner || getJourneyStageOwner(stageKey, "active") };
+  saveJourneyAssigneeMap(nextMap);
+  setCustomer360ComposerStatus(`${titleCase(stageKey)} assigned to ${owner || "default owner"}.`, "success");
+  renderCustomer360Detail();
+}
+
 function getJourneyArtifactMovedAtLabel(value) {
   if (!value) return "Awaiting update";
   try {
@@ -1464,7 +1502,7 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
       interactive: true,
       kind: "tasks",
       sourceId: latestStageTask.id || latestStageTask.taskId || latestStageTask.createdAtUtc || latestStageTask.title,
-      owner: getJourneyStageOwner(stageKey, "active"),
+      owner: getJourneyAssignedOwner(stageKey, "active"),
       movedAt: latestStageTask.updatedAtUtc || latestStageTask.createdAtUtc || latestStageTask.dueAtUtc,
       slaAt: latestStageTask.dueAtUtc || latestStageTask.updatedAtUtc || latestStageTask.createdAtUtc
     };
@@ -1487,7 +1525,7 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         interactive: true,
         kind: "notes",
         sourceId: note.id || note.noteId || note.createdAtUtc || note.body,
-        owner: getJourneyStageOwner(stageKey, "active"),
+        owner: getJourneyAssignedOwner(stageKey, "active"),
         movedAt: note.updatedAtUtc || note.createdAtUtc,
         slaAt: note.updatedAtUtc || note.createdAtUtc
       };
@@ -1500,7 +1538,7 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
     interactive: false,
     kind: "all",
     sourceId: "",
-    owner: getJourneyStageOwner(stageKey, "upcoming"),
+    owner: getJourneyAssignedOwner(stageKey, "upcoming"),
     movedAt: "",
     slaAt: ""
   };
@@ -1771,7 +1809,7 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
     </div>
     <div class="customer360-journey-progress-meta">
       <span class="customer360-journey-progress-chip">Current: ${escapeHtml(activeStage?.label || "Service Advisor")}</span>
-      <span class="customer360-journey-progress-chip">Owner: ${escapeHtml(getJourneyStageOwner(activeStage?.key || "service", activeStage?.status || "active"))}</span>
+      <span class="customer360-journey-progress-chip">Owner: ${escapeHtml(getJourneyAssignedOwner(activeStage?.key || "service", activeStage?.status || "active"))}</span>
     </div>
   `;
 
@@ -1785,14 +1823,17 @@ function renderCustomer360Journey(tasks = [], notes = [], appointments = []) {
       </div>
       <span>${escapeHtml(stage.detail)}</span>
       <div class="customer360-journey-stage-meta">
-        <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyStageOwner(stage.key, stage.status))}</div>
+        <div class="customer360-journey-owner">Owner: ${escapeHtml(getJourneyAssignedOwner(stage.key, stage.status))}</div>
+        <select class="customer360-journey-assignee" onchange="setJourneyAssignee('${escapeHtml(stage.key)}', this.value)">
+          ${renderJourneyAssigneeOptions(stage.key, getJourneyAssignedOwner(stage.key, stage.status))}
+        </select>
         <small>${escapeHtml(getJourneyStageSubcopy(stage, isFeedback))}</small>
       </div>
       ${(() => {
         const artifact = getLatestJourneyArtifact(stage.key, tasks, notes, appointments);
         const sla = getJourneyArtifactSla(artifact.slaAt || artifact.movedAt);
         currentJourneyArtifacts[stage.key] = artifact;
-        return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span><div class="customer360-journey-artifact-meta"><div class="customer360-journey-artifact-meta-group"><small>${escapeHtml(artifact.owner || getJourneyStageOwner(stage.key, stage.status))}</small><span class="customer360-journey-sla ${escapeHtml(sla.tone)}">${escapeHtml(sla.label)}</span></div><small>${escapeHtml(getJourneyArtifactMovedAtLabel(artifact.movedAt))}</small></div></div>`;
+        return `<div class="customer360-journey-artifact ${artifact.interactive ? "clickable" : ""}" ${artifact.interactive ? `onclick="openJourneyArtifact('${escapeHtml(stage.key)}')"` : ""}><strong>${escapeHtml(artifact.label)}</strong><span>${escapeHtml(artifact.detail)}</span><div class="customer360-journey-artifact-meta"><div class="customer360-journey-artifact-meta-group"><small>${escapeHtml(artifact.owner || getJourneyAssignedOwner(stage.key, stage.status))}</small><span class="customer360-journey-sla ${escapeHtml(sla.tone)}">${escapeHtml(sla.label)}</span></div><small>${escapeHtml(getJourneyArtifactMovedAtLabel(artifact.movedAt))}</small></div></div>`;
       })()}
     </div>
   `;
