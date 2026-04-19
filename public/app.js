@@ -1876,6 +1876,58 @@ function openCustomer360FocusedArtifact(kind = "notes", sourceId = "", lens = cu
   renderCustomer360Timeline();
 }
 
+function openVehicleOpsContext(mode = "signals") {
+  const tasks = (currentTasks || []).filter((task) => task.customerId === selectedCustomerId);
+  const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const latestVehicleArtifact = getLatestTaggedArtifact("[vehicle]", currentCustomerNotes, currentCustomerTimeline || []);
+  const latestArchiveArtifact = getLatestTaggedArtifact("[archive]", currentCustomerNotes, currentCustomerTimeline || []);
+  const archiveFollowUpTask = openTasks.find((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return haystack.includes("[archive]") || haystack.includes("archive");
+  });
+
+  if (mode === "signals" && latestVehicleArtifact) {
+    openCustomer360FocusedArtifact(
+      "notes",
+      latestVehicleArtifact.id || latestVehicleArtifact.noteId || latestVehicleArtifact.timelineEventId || latestVehicleArtifact.createdAtUtc || latestVehicleArtifact.body,
+      "home"
+    );
+    return;
+  }
+
+  if (mode === "archive" && latestArchiveArtifact) {
+    openCustomer360FocusedArtifact(
+      "notes",
+      latestArchiveArtifact.id || latestArchiveArtifact.noteId || latestArchiveArtifact.timelineEventId || latestArchiveArtifact.createdAtUtc || latestArchiveArtifact.body,
+      "home"
+    );
+    return;
+  }
+
+  if (mode === "evidence-tasks" && archiveFollowUpTask) {
+    openCustomer360FocusedArtifact(
+      "tasks",
+      archiveFollowUpTask.id || archiveFollowUpTask.taskId || archiveFollowUpTask.createdAtUtc || archiveFollowUpTask.title,
+      "service"
+    );
+    return;
+  }
+
+  currentCustomer360TimelineFilter = mode === "evidence-tasks" ? "tasks" : "notes";
+  document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+    item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+  });
+  currentCustomer360Focus = null;
+  if (mode === "evidence-tasks") {
+    setDepartmentLens("service");
+    setCustomer360ComposerMode("task");
+  } else {
+    setDepartmentLens("home");
+    setCustomer360ComposerMode("note");
+  }
+  renderCustomer360Timeline();
+}
+
 function triggerJourneyFeedback(stageKey = "", message = "") {
   currentJourneyFeedbackStage = stageKey;
   currentJourneyFeedbackMessage = message;
@@ -3311,15 +3363,15 @@ function renderCustomer360Detail() {
         <span class="customer360-status-pill info">${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</span>
       </div>
       <div class="customer360-vehicle-kpis" style="margin-top:12px;">
-        <div class="customer360-vehicle-kpi">
+        <div class="customer360-vehicle-kpi" style="cursor:pointer;" onclick="openVehicleOpsContext('signals')">
           <small>Recent Signals</small>
           <strong>${vehicleSignalCount}</strong>
         </div>
-        <div class="customer360-vehicle-kpi">
+        <div class="customer360-vehicle-kpi" style="cursor:pointer;" onclick="openVehicleOpsContext('archive')">
           <small>Archive Updates</small>
           <strong>${archiveSignalCount}</strong>
         </div>
-        <div class="customer360-vehicle-kpi">
+        <div class="customer360-vehicle-kpi" style="cursor:pointer;" onclick="openVehicleOpsContext('evidence-tasks')">
           <small>Open Evidence Tasks</small>
           <strong>${archiveFollowUpCount}</strong>
         </div>
