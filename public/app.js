@@ -658,8 +658,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <span class="customer360-status-pill info">Accounting</span>
         </div>
         <div class="customer360-service-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Ledger Note</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Invoice Task</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startLedgerNote()">Add Ledger Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="queueAccountingInvoiceReview()">Queue Invoice Task</button>
         </div>
       </div>
     `;
@@ -985,8 +985,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Queue Invoice Review</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Add Ledger Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="queueAccountingInvoiceReview()">Queue Invoice Review</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startLedgerNote()">Add Ledger Note</button>
         </div>
       </div>
     `;
@@ -1129,6 +1129,26 @@ function startPartsEtaNote() {
   });
 }
 
+function queueAccountingInvoiceReview() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: vehicle ? `${vehicleDisplayName(vehicle)} invoice review` : `${customerDisplayName(customer)} invoice review`,
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInvoice review:\n- Charges validated:\n- Payment request:\n- Statement status:\n- Reconciliation notes:`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Invoice review task template loaded."
+  });
+}
+
+function startLedgerNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLedger note:\n- Payment status:\n- Statement update:\n- Refund / credit notes:\n- Reconciliation comment:`,
+    status: "Ledger note template loaded."
+  });
+}
+
 function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
   const inspectionStages = [
     {
@@ -1233,6 +1253,63 @@ function buildPartsNotesMarkup(notes = [], appointments = []) {
   ];
 
   return dispatchRows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.label)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <button class="customer360-panel-action">•</button>
+    </div>
+  `).join("");
+}
+
+function buildAccountingTasksMarkup(openTasks = [], vehicle) {
+  const ledgerRows = [
+    {
+      title: "Invoice review",
+      detail: openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`,
+      tone: openTasks.length ? "warn" : "info"
+    },
+    {
+      title: "Payment request",
+      detail: openTasks.length ? "Stripe collection or statement follow-up is active" : "No active collection workflow yet",
+      tone: openTasks.length ? "info" : "good"
+    },
+    {
+      title: "Reconciliation",
+      detail: "Close ledger loop against service, parts, and delivery activity",
+      tone: "info"
+    }
+  ];
+
+  return ledgerRows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.title)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <span class="customer360-status-pill ${row.tone}">${row.tone === "warn" ? "Watch" : row.tone === "good" ? "Ready" : "Live"}</span>
+    </div>
+  `).join("");
+}
+
+function buildAccountingNotesMarkup(notes = []) {
+  const statementRows = [
+    {
+      label: "Statement status",
+      detail: notes.length ? `${notes.length} accounting notes available for customer statement context` : "No statement notes captured yet"
+    },
+    {
+      label: "Payment rail",
+      detail: "Stripe-backed payment, refund, and collection posture should sit here"
+    },
+    {
+      label: "Reconciliation trail",
+      detail: "Keep QuickBooks-style ledger comments tied to the same customer + VIN record"
+    }
+  ];
+
+  return statementRows.map((row) => `
     <div class="customer360-panel-item">
       <div>
         <strong>${escapeHtml(row.label)}</strong>
@@ -1919,6 +1996,8 @@ function renderCustomer360Detail() {
       tasksBoardEl.innerHTML = buildTechnicianTasksMarkup(openTasks, vehicle);
     } else if (currentDepartmentLens === "parts") {
       tasksBoardEl.innerHTML = buildPartsTasksMarkup(openTasks, appointments, vehicle);
+    } else if (currentDepartmentLens === "accounting") {
+      tasksBoardEl.innerHTML = buildAccountingTasksMarkup(openTasks, vehicle);
     } else {
     const lensTasks = currentDepartmentLens === "sales"
       ? [...openTasks, ...tasks.filter((task) => String(task.status || "").toLowerCase() === "completed")].slice(0, 3)
@@ -1942,6 +2021,8 @@ function renderCustomer360Detail() {
       notesBoardEl.innerHTML = buildTechnicianNotesMarkup(currentCustomerNotes, calls);
     } else if (currentDepartmentLens === "parts") {
       notesBoardEl.innerHTML = buildPartsNotesMarkup(currentCustomerNotes, appointments);
+    } else if (currentDepartmentLens === "accounting") {
+      notesBoardEl.innerHTML = buildAccountingNotesMarkup(currentCustomerNotes);
     } else {
     const noteEmptyCopy = currentDepartmentLens === "sales"
       ? "No deal notes captured yet."
