@@ -1477,6 +1477,76 @@ function openJourneyArtifact(stageKey = "service") {
   document.getElementById("customer360ComposerBody")?.focus();
 }
 
+function preloadFocusedTaskFollowUp(item) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: item?.subcopy?.replace(/^Follow Up:\s*/i, "").trim() || `${vehicleDisplayName(vehicle)} next step`,
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFollow-up from focused artifact:\n${item?.body || ""}\n\nNext action:\n- `,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Follow-up task loaded from focused artifact."
+  });
+}
+
+function advanceFocusedJourneyItem(kind = "tasks", sourceId = "") {
+  const normalizedKind = normalizeCustomer360TimelineFilter(kind);
+  const id = String(sourceId || "");
+  if (!id) return;
+
+  if (normalizedKind === "tasks") {
+    completeTask(id);
+    return;
+  }
+
+  if (normalizedKind === "appointments") {
+    setDepartmentLens("technicians");
+    setCustomer360ComposerStatus("Technician flow opened from the focused appointment.", "success");
+    return;
+  }
+
+  if (normalizedKind === "notes") {
+    const item = currentCustomer360TimelineCards.find((entry) =>
+      normalizeCustomer360TimelineFilter(categorizeCustomer360TimelineItem(entry)) === normalizedKind &&
+      String(entry.sourceId || "") === id
+    );
+    preloadFocusedTaskFollowUp(item);
+    return;
+  }
+}
+
+function buildFocusedTimelineAdvanceActions(item) {
+  if (!currentCustomer360Focus) return "";
+  const isFocused = currentCustomer360Focus.kind === categorizeCustomer360TimelineItem(item) && String(currentCustomer360Focus.sourceId) === String(item.sourceId || "");
+  if (!isFocused) return "";
+
+  const kind = normalizeCustomer360TimelineFilter(categorizeCustomer360TimelineItem(item));
+  if (kind === "tasks") {
+    return `
+      <div class="customer360-timeline-actions">
+        <button type="button" class="customer360-mini-btn" onclick="advanceFocusedJourneyItem('tasks','${escapeHtml(String(item.sourceId || ""))}')">Complete Task</button>
+      </div>
+    `;
+  }
+
+  if (kind === "appointments") {
+    return `
+      <div class="customer360-timeline-actions">
+        <button type="button" class="customer360-mini-btn" onclick="advanceFocusedJourneyItem('appointments','${escapeHtml(String(item.sourceId || ""))}')">Start Technician Flow</button>
+      </div>
+    `;
+  }
+
+  if (kind === "notes") {
+    return `
+      <div class="customer360-timeline-actions">
+        <button type="button" class="customer360-mini-btn" onclick="advanceFocusedJourneyItem('notes','${escapeHtml(String(item.sourceId || ""))}')">Create Follow-Up Task</button>
+      </div>
+    `;
+  }
+
+  return "";
+}
+
 function buildServiceJourneyState(tasks = [], notes = [], appointments = []) {
   const serviceReady = appointments.length > 0;
   const techReady = hasKeywordMatch(tasks, ["[technician]", "diagn", "inspect", "tech", "repair"]) || hasKeywordMatch(notes, ["[technician]", "inspection", "finding", "diagn"]);
@@ -2001,6 +2071,7 @@ function renderCustomer360Timeline() {
             `).join("")}
           </div>
         ` : ""}
+        ${buildFocusedTimelineAdvanceActions(item)}
       </div>
     </div>
   `).join("");
