@@ -4074,9 +4074,18 @@ function renderCustomer360Detail() {
   }
 
   if (opsStripEl) {
+    const serviceTasks = openTasks.filter((task) => {
+      const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+      return haystack.includes("[service]") || haystack.includes("advisor") || haystack.includes("loaner") || haystack.includes("transport");
+    });
     const bdcTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[bdc]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("callback"));
     const salesTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[sales]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("quote") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("deal"));
     const accountingTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[accounting]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("invoice") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("ledger"));
+    const loanerTask = openTasks.find((task) => {
+      const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+      return haystack.includes("loaner") || haystack.includes("transport");
+    });
+    const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss"));
     const activeAppointment = appointments[0] || null;
     const pressureTone = overdueTasks.length ? "danger" : urgentTasks.length ? "warn" : "good";
     const pressureLabel = overdueTasks.length ? "Overdue risk" : urgentTasks.length ? "Attention" : "On track";
@@ -4091,53 +4100,91 @@ function renderCustomer360Detail() {
     let pressureChipValue = pressureLabel;
     let workChipTone = openTasks.length ? "warn" : "good";
     let visitChipTone = activeAppointment ? "info" : "good";
+    let workChipAction = firstTaskId ? `openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `setCustomer360ComposerMode('task')`;
+    let visitChipAction = firstAppointmentId ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `setCustomer360ComposerMode('appointment')`;
+    let pressureChipAction = firstTaskId ? `openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `setCustomer360ComposerMode('${escapeHtml(String(getDepartmentLensConfig().composerMode || "task"))}')`;
 
     if (currentDepartmentLens === "service") {
       workChipLabel = "Lane Tasks";
-      workChipValue = openTasks.length ? `${openTasks.length} active steps` : "Service queue clear";
+      workChipValue = serviceTasks.length ? `${serviceTasks.length} active steps` : "Service queue clear";
       visitChipLabel = "Arrival";
       visitChipValue = activeAppointment ? `${activeAppointment.service || "Service visit"}` : "No booked arrival";
       pressureChipLabel = "Promised Time";
-      pressureChipValue = activeAppointment ? pressureLabel : "Needs booking";
+      pressureChipValue = overdueTasks.length ? "At risk" : activeAppointment ? "Locked" : "Needs booking";
+      workChipTone = serviceTasks.length ? "warn" : "good";
       visitChipTone = activeAppointment ? "info" : "warn";
+      workChipAction = serviceTasks[0]
+        ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(serviceTasks[0].id || serviceTasks[0].taskId || serviceTasks[0].createdAtUtc || serviceTasks[0].title || ""))}','service')`
+        : `setDepartmentLens('service')`;
+      visitChipAction = activeAppointment
+        ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','service')`
+        : "startServiceWriteUp()";
+      pressureChipAction = loanerTask
+        ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title || ""))}','service')`
+        : activeAppointment
+          ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','service')`
+          : "startServiceWriteUp()";
     } else if (currentDepartmentLens === "bdc") {
       workChipLabel = "Callback Queue";
       workChipValue = bdcTasks.length ? `${bdcTasks.length} callbacks live` : "Queue clear";
       visitChipLabel = "Visit Intent";
       visitChipValue = activeAppointment ? "Commitment captured" : "No commitment yet";
       pressureChipLabel = "Reply SLA";
-      pressureChipValue = pressureLabel;
+      pressureChipValue = missedCall ? "Rescue now" : pressureLabel;
       workChipTone = bdcTasks.length ? "warn" : "good";
-      visitChipTone = activeAppointment ? "good" : "warn";
+      visitChipTone = activeAppointment ? "good" : "info";
+      workChipAction = bdcTasks[0]
+        ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTasks[0].id || bdcTasks[0].taskId || bdcTasks[0].createdAtUtc || bdcTasks[0].title || ""))}','bdc')`
+        : "startBdcCallbackTask()";
+      visitChipAction = activeAppointment
+        ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','bdc')`
+        : "setCustomer360ComposerMode('appointment')";
+      pressureChipAction = missedCall
+        ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCall.id || missedCall.callId || missedCall.createdAtUtc || missedCall.from || ""))}','bdc')`
+        : workChipAction;
     } else if (currentDepartmentLens === "sales") {
       workChipLabel = "Deal Queue";
       workChipValue = salesTasks.length ? `${salesTasks.length} deal steps live` : "No open deal";
       visitChipLabel = "Showroom";
       visitChipValue = activeAppointment ? "Visit scheduled" : "No drive booked";
       pressureChipLabel = "Desk Pressure";
-      pressureChipValue = pressureLabel;
+      pressureChipValue = overdueTasks.length ? "Desk risk" : activeAppointment ? "Moving" : pressureLabel;
       workChipTone = salesTasks.length ? "warn" : "good";
       visitChipTone = activeAppointment ? "info" : "warn";
+      workChipAction = salesTasks[0]
+        ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTasks[0].id || salesTasks[0].taskId || salesTasks[0].createdAtUtc || salesTasks[0].title || ""))}','sales')`
+        : "startSalesDealTask()";
+      visitChipAction = activeAppointment
+        ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','sales')`
+        : `setCustomer360ComposerMode('appointment')`;
+      pressureChipAction = workChipAction;
     } else if (currentDepartmentLens === "accounting") {
       workChipLabel = "Invoice Queue";
       workChipValue = accountingTasks.length ? `${accountingTasks.length} reviews open` : "No pending review";
       visitChipLabel = "Payment Rail";
       visitChipValue = accountingTasks.length ? "Collection / statement active" : "Clear";
       pressureChipLabel = "Back Office";
-      pressureChipValue = pressureLabel;
+      pressureChipValue = overdueTasks.length ? "Aging risk" : accountingTasks.length ? "Review active" : pressureLabel;
       workChipTone = accountingTasks.length ? "warn" : "good";
       visitChipTone = accountingTasks.length ? "info" : "good";
+      workChipAction = accountingTasks[0]
+        ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTasks[0].id || accountingTasks[0].taskId || accountingTasks[0].createdAtUtc || accountingTasks[0].title || ""))}','accounting')`
+        : "queueAccountingInvoiceReview()";
+      visitChipAction = accountingTasks[0]
+        ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTasks[0].id || accountingTasks[0].taskId || accountingTasks[0].createdAtUtc || accountingTasks[0].title || ""))}','accounting')`
+        : "startLedgerNote()";
+      pressureChipAction = workChipAction;
     }
     opsStripEl.innerHTML = `
-      <button class="customer360-ops-chip ${workChipTone}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('task')"`}>
+      <button class="customer360-ops-chip ${workChipTone}" onclick="${workChipAction}">
         <small>${escapeHtml(workChipLabel)}</small>
         <strong>${escapeHtml(workChipValue)}</strong>
       </button>
-      <button class="customer360-ops-chip ${visitChipTone}" ${firstAppointmentId ? `onclick="openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('appointment')"`}>
+      <button class="customer360-ops-chip ${visitChipTone}" onclick="${visitChipAction}">
         <small>${escapeHtml(visitChipLabel)}</small>
         <strong>${escapeHtml(visitChipValue)}</strong>
       </button>
-      <button class="customer360-ops-chip ${pressureTone}" ${firstTaskId ? `onclick="openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')"` : `onclick="setCustomer360ComposerMode('${escapeHtml(String(getDepartmentLensConfig().composerMode || "task"))}')"`}>
+      <button class="customer360-ops-chip ${pressureTone}" onclick="${pressureChipAction}">
         <small>${escapeHtml(pressureChipLabel)}</small>
         <strong>${escapeHtml(pressureChipValue)}</strong>
       </button>
