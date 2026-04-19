@@ -476,10 +476,12 @@ function inferVehicleGeoLabel(vehicle, customer) {
 function getTaggedTimelinePresentation(body = "", fallbackType = "Note", fallbackSubcopy = "Internal") {
   const normalized = String(body || "").toLowerCase();
   if (normalized.startsWith("[vehicle]")) {
+    const cleanedBody = String(body || "").replace(/\[vehicle\]\s*/i, "").trim();
+    const isMovement = cleanedBody.toLowerCase().includes("geo / movement update") || cleanedBody.toLowerCase().includes("current zone");
     return {
-      type: "Vehicle Health",
-      body: String(body || "").replace(/\[vehicle\]\s*/i, "").trim(),
-      subcopy: "Vehicle intelligence"
+      type: isMovement ? "Vehicle Movement" : "Vehicle Health",
+      body: cleanedBody,
+      subcopy: isMovement ? "Vehicle location flow" : "Vehicle intelligence"
     };
   }
   if (normalized.startsWith("[archive]")) {
@@ -1717,6 +1719,10 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
   };
 
   if (stageKey === "service") {
+    const loanerTask = tasks.find((item) => {
+      const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+      return haystack.includes("loaner") || haystack.includes("transport");
+    });
     const appointment = appointments[0];
     if (appointment) {
       return {
@@ -1728,6 +1734,18 @@ function getLatestJourneyArtifact(stageKey = "", tasks = [], notes = [], appoint
         owner: "Advisor",
         movedAt: appointment.updatedAtUtc || appointment.createdAtUtc || appointment.date,
         slaAt: appointment.updatedAtUtc || appointment.createdAtUtc || appointment.date
+      };
+    }
+    if (loanerTask) {
+      return {
+        label: "Loaner coordination",
+        detail: `${String(loanerTask.title || "Loaner / transport workflow").replace(/\[service\]\s*/i, "").trim()}`,
+        interactive: true,
+        kind: "tasks",
+        sourceId: loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title,
+        owner: "Advisor",
+        movedAt: loanerTask.updatedAtUtc || loanerTask.createdAtUtc || loanerTask.dueAtUtc,
+        slaAt: loanerTask.dueAtUtc || loanerTask.updatedAtUtc || loanerTask.createdAtUtc
       };
     }
     const note = notes.find((item) => String(item.body || "").toLowerCase().includes("[service]"));
@@ -2064,6 +2082,19 @@ function getJourneyNextAction(stageKey = "") {
 
   if (stageKey === "service") {
     const serviceArtifact = currentJourneyArtifacts.service || null;
+    if (serviceArtifact?.label === "Loaner coordination") {
+      return {
+        eyebrow: "Next Best Action",
+        title: "Confirm transportation plan",
+        detail: "Keep the advisor-owned loaner or shuttle workflow moving before the visit expands.",
+        label: "Open Loaner Task",
+        run: () => {
+          setDepartmentLens("service");
+          startLoanerTask();
+        }
+      };
+    }
+
     if (serviceArtifact?.label === "Vehicle health signal") {
       return {
         eyebrow: "Next Best Action",
@@ -2300,7 +2331,9 @@ function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls =
   const hasServiceNote = hasKeywordMatch(notes, ["[service]"]);
   const hasVehicleSignal = hasKeywordMatch(notes, ["[vehicle]"]);
   const hasArchiveSignal = hasKeywordMatch(notes, ["[archive]"]);
-  const serviceReady = appointments.length > 0 || hasServiceNote || hasVehicleSignal || hasArchiveSignal;
+  const hasLoanerSignal = hasKeywordMatch(tasks, ["loaner", "transport", "shuttle"]) || hasKeywordMatch(notes, ["loaner", "transport", "shuttle"]);
+  const hasGeoSignal = hasKeywordMatch(notes, ["geo / movement update", "current zone", "next destination", "dispatch or lane note"]);
+  const serviceReady = appointments.length > 0 || hasServiceNote || hasVehicleSignal || hasArchiveSignal || hasLoanerSignal || hasGeoSignal;
   const techReady = hasKeywordMatch(tasks, ["[technician]", "diagn", "inspect", "tech", "repair"]) || hasKeywordMatch(notes, ["[technician]", "inspection", "finding", "diagn"]);
   const partsReady = hasKeywordMatch(tasks, ["[parts]", "part", "stock", "sku", "runner"]) || hasKeywordMatch(notes, ["[parts]", "eta", "part", "stock", "runner"]);
   const accountingReady = hasKeywordMatch(tasks, ["[accounting]", "invoice", "payment", "statement", "ledger"]) || hasKeywordMatch(notes, ["[accounting]", "statement", "ledger", "payment", "refund"]);
@@ -2356,13 +2389,17 @@ function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls =
       label: "Service Advisor",
       detail: appointments.length
         ? "Visit booked and ready for write-up."
-        : hasVehicleSignal
-          ? "Vehicle health signal captured and waiting for advisor review."
-          : hasArchiveSignal
-            ? "VIN evidence added and ready for advisor follow-up."
-            : serviceReady
-              ? "Advisor context is active and ready for the next lane step."
-              : "Book visit and set promised time.",
+        : hasLoanerSignal
+          ? "Transportation coordination is active and needs advisor ownership."
+          : hasGeoSignal
+            ? "Vehicle movement has changed and should be reviewed in the lane."
+            : hasVehicleSignal
+              ? "Vehicle health signal captured and waiting for advisor review."
+              : hasArchiveSignal
+                ? "VIN evidence added and ready for advisor follow-up."
+                : serviceReady
+                  ? "Advisor context is active and ready for the next lane step."
+                  : "Book visit and set promised time.",
       status: serviceReady ? (techReady ? "complete" : "active") : "active"
     },
     {
@@ -2392,13 +2429,17 @@ function getJourneyDefinition(tasks = [], notes = [], appointments = [], calls =
           ? "In technician flow"
           : appointments.length
             ? "Lane ready"
-            : hasVehicleSignal
-              ? "Vehicle signal captured"
-              : hasArchiveSignal
-                ? "VIN evidence added"
-                : serviceReady
-                  ? "Advisor engaged"
-            : "Waiting"
+            : hasLoanerSignal
+              ? "Transport coordination active"
+              : hasGeoSignal
+                ? "Vehicle movement active"
+                : hasVehicleSignal
+                  ? "Vehicle signal captured"
+                  : hasArchiveSignal
+                    ? "VIN evidence added"
+                    : serviceReady
+                      ? "Advisor engaged"
+                      : "Waiting"
   };
 }
 
@@ -3606,13 +3647,15 @@ function renderCustomer360Detail() {
   }
 
   if (openTasks[0]) {
+    const taskHaystack = `${openTasks[0].title || ""} ${openTasks[0].description || ""}`.toLowerCase();
+    const isLoanerTask = taskHaystack.includes("loaner") || taskHaystack.includes("transport");
     timelineCards.push({
-      type: "Task",
+      type: isLoanerTask ? "Loaner Coordination" : "Task",
       eventType: "tasks",
       sourceId: openTasks[0].id || openTasks[0].taskId || openTasks[0].createdAtUtc || openTasks[0].title || "task",
       time: formatDisplayDateTime(openTasks[0].updatedAtUtc || openTasks[0].createdAtUtc || new Date().toISOString()),
       body: openTasks[0].description || openTasks[0].title || "Follow up with the customer.",
-      subcopy: `Follow Up: ${openTasks[0].title || "Customer confirmation"}`
+      subcopy: isLoanerTask ? "Service transport" : `Follow Up: ${openTasks[0].title || "Customer confirmation"}`
     });
   }
 
