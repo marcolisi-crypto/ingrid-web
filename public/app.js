@@ -891,8 +891,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('note')">Log Technician Finding</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Request Parts</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startTechnicianInspectionNote()">Log Technician Finding</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="createTechnicianPartsRequest()">Request Parts</button>
         </div>
       </div>
     `;
@@ -1072,6 +1072,98 @@ function buildCustomerAiSummary(customer, vehicle, calls, timelineEvents, tasks,
       ? `${nextTask.title || "follow-up task"} recommended`
       : "follow-up recommended";
   return `${customerName} contacted the dealership regarding ${vehicleName}. Latest context: ${callDetail}. ${followUp}.`;
+}
+
+function presetCustomer360Composer(mode = "note", options = {}) {
+  setCustomer360ComposerMode(mode);
+
+  const bodyEl = document.getElementById("customer360ComposerBody");
+  const titleEl = document.getElementById("customer360TaskTitle");
+  const dueEl = document.getElementById("customer360TaskDueAt");
+
+  if (bodyEl && options.body) bodyEl.value = options.body;
+  if (titleEl && typeof options.title === "string") titleEl.value = options.title;
+  if (dueEl && options.dueAt) dueEl.value = options.dueAt;
+
+  setCustomer360ComposerStatus(options.status || "");
+  bodyEl?.focus();
+}
+
+function startTechnicianInspectionNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInspection finding:\n- \nRecommended action:\n- \nMedia captured:\n- `,
+    status: "Inspection note template loaded."
+  });
+}
+
+function createTechnicianPartsRequest() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: vehicle ? `${vehicleDisplayName(vehicle)} parts request` : `${customerDisplayName(customer)} parts request`,
+    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nPart needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Parts request task template loaded."
+  });
+}
+
+function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
+  const inspectionStages = [
+    {
+      title: "Digital inspection",
+      detail: openTasks[0]?.title || `Open findings for ${vehicleDisplayName(vehicle)}`,
+      tone: openTasks.length ? "info" : "warn"
+    },
+    {
+      title: "Parts handoff",
+      detail: openTasks.length ? "Queue robot runner or parts counter request" : "No active parts request yet",
+      tone: openTasks.length ? "warn" : "good"
+    },
+    {
+      title: "Advisor approval",
+      detail: "Return recommendation and media to the advisor timeline",
+      tone: "info"
+    }
+  ];
+
+  return inspectionStages.map((stage) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(stage.title)}</strong>
+        <div class="customer360-meta">${escapeHtml(stage.detail)}</div>
+      </div>
+      <span class="customer360-status-pill ${stage.tone}">${stage.tone === "warn" ? "Watch" : stage.tone === "good" ? "Ready" : "Live"}</span>
+    </div>
+  `).join("");
+}
+
+function buildTechnicianNotesMarkup(notes = [], calls = []) {
+  const mediaRows = [
+    {
+      label: "Photo set",
+      detail: notes.length ? `${notes.length} findings ready for advisor review` : "Start with under-vehicle or concern-area photos"
+    },
+    {
+      label: "Video walkthrough",
+      detail: calls.length ? "Customer communication exists for context handoff" : "No customer-facing walkthrough recorded yet"
+    },
+    {
+      label: "Approval return",
+      detail: "Push technician findings back into the advisor/customer timeline"
+    }
+  ];
+
+  return mediaRows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.label)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <button class="customer360-panel-action">•</button>
+    </div>
+  `).join("");
 }
 
 function getCustomerPrimaryVehicle(customer) {
@@ -1746,6 +1838,9 @@ function renderCustomer360Detail() {
   }
 
   if (tasksBoardEl) {
+    if (currentDepartmentLens === "technicians") {
+      tasksBoardEl.innerHTML = buildTechnicianTasksMarkup(openTasks, vehicle);
+    } else {
     const lensTasks = currentDepartmentLens === "sales"
       ? [...openTasks, ...tasks.filter((task) => String(task.status || "").toLowerCase() === "completed")].slice(0, 3)
       : openTasks.slice(0, 3);
@@ -1760,9 +1855,13 @@ function renderCustomer360Detail() {
         <button class="customer360-panel-action">•</button>
       </div>
     `).join("") : `<div class="customer360-empty">${emptyTaskCopy}</div>`;
+    }
   }
 
   if (notesBoardEl) {
+    if (currentDepartmentLens === "technicians") {
+      notesBoardEl.innerHTML = buildTechnicianNotesMarkup(currentCustomerNotes, calls);
+    } else {
     const noteEmptyCopy = currentDepartmentLens === "sales"
       ? "No deal notes captured yet."
       : currentDepartmentLens === "bdc"
@@ -1774,6 +1873,7 @@ function renderCustomer360Detail() {
         <button class="customer360-panel-action">•</button>
       </div>
     `).join("") : `<div class="customer360-empty">${noteEmptyCopy}</div>`;
+    }
   }
 
   if (serviceLaneEl) {
