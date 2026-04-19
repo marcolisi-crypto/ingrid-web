@@ -790,6 +790,11 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
   const laneTasks = (currentTasks || []).filter((item) => item.customerId === customer?.id && String(item.status || "").toLowerCase() !== "completed");
   const laneNotes = (currentCustomerNotes || []).filter((item) => item.customerId === customer?.id);
+  const overdueLaneTasks = laneTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+  const urgentLaneTasks = laneTasks.filter((task) => {
+    const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
+    return tone === "warn" || tone === "danger";
+  });
   const pickLaneTask = (...keywords) => laneTasks.find((item) => {
     const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
     return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
@@ -838,7 +843,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <div>
             <div class="customer360-service-label">Next Outreach</div>
             <div class="customer360-service-value">${escapeHtml(topTask?.title || "Send follow-up" )}</div>
-            <div class="customer360-service-copy">${escapeHtml(topTask?.description || "Use SMS or voice to move the customer into a confirmed next step.")}</div>
+            <div class="customer360-service-copy">${missedCalls ? "Missed contact is driving queue priority right now." : bdcTask ? `${urgentLaneTasks.length ? `${urgentLaneTasks.length} callback step${urgentLaneTasks.length === 1 ? "" : "s"} need attention.` : "Live callback queue is moving inside target."}` : escapeHtml(topTask?.description || "Use SMS or voice to move the customer into a confirmed next step.")}</div>
           </div>
           <span class="customer360-status-pill info">BDC</span>
         </div>
@@ -866,7 +871,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <div>
             <div class="customer360-service-label">Next Step</div>
             <div class="customer360-service-value">${nextAppointment ? "Confirmed visit" : "Schedule test drive"}</div>
-            <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Move this lead toward an in-store appointment or quote review."}</div>
+            <div class="customer360-service-copy">${salesTask ? `${overdueLaneTasks.length ? `${overdueLaneTasks.length} sales item${overdueLaneTasks.length === 1 ? "" : "s"} overdue.` : nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Deal queue is active and ready for the next desk action."}` : nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : "Move this lead toward an in-store appointment or quote review."}</div>
           </div>
           <span class="customer360-status-pill info">Sales</span>
         </div>
@@ -894,7 +899,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <div>
             <div class="customer360-service-label">Delivery Readiness</div>
             <div class="customer360-service-value">${topTask ? "Pre-close checklist" : "Not started"}</div>
-            <div class="customer360-service-copy">${topTask ? escapeHtml(topTask.title || "Finance package review") : "Use this lane for warranty, funding, and delivery-prep actions."}</div>
+            <div class="customer360-service-copy">${fiTask ? `${overdueLaneTasks.length ? `${overdueLaneTasks.length} funding item${overdueLaneTasks.length === 1 ? "" : "s"} overdue.` : escapeHtml(fiTask.title || "Finance package review")}` : topTask ? escapeHtml(topTask.title || "Finance package review") : "Use this lane for warranty, funding, and delivery-prep actions."}</div>
           </div>
           <span class="customer360-status-pill info">F&I</span>
         </div>
@@ -978,7 +983,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
           <div>
             <div class="customer360-service-label">Payment Rail</div>
             <div class="customer360-service-value">Stripe + Statement</div>
-            <div class="customer360-service-copy">${topTask ? "Open accounting work suggests a statement, invoice, or collection follow-up is active." : "Use this rail for invoice, payment, refund, and statement workflows."}</div>
+            <div class="customer360-service-copy">${accountingTask ? `${overdueLaneTasks.length ? `${overdueLaneTasks.length} invoice review${overdueLaneTasks.length === 1 ? "" : "s"} overdue.` : urgentLaneTasks.length ? `${urgentLaneTasks.length} accounting step${urgentLaneTasks.length === 1 ? "" : "s"} need attention.` : "Open accounting work suggests a statement, invoice, or collection follow-up is active."}` : "Use this rail for invoice, payment, refund, and statement workflows."}</div>
           </div>
           <span class="customer360-status-pill info">Accounting</span>
         </div>
@@ -1022,7 +1027,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         <div>
           <div class="customer360-service-label">Open Follow-Up</div>
           <div class="customer360-service-value">${escapeHtml(topTask?.title || "No active task")}</div>
-          <div class="customer360-service-copy">${escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
+          <div class="customer360-service-copy">${overdueLaneTasks.length ? `${overdueLaneTasks.length} service item${overdueLaneTasks.length === 1 ? "" : "s"} overdue and needs intervention.` : escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
         </div>
         ${topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
       </div>
@@ -1043,6 +1048,11 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const contactPhone = customer?.phones?.[0] || "Not set";
   const vehicleName = vehicleDisplayName(vehicle);
   const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
+  const urgentTasks = openTasks.filter((task) => {
+    const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
+    return tone === "warn" || tone === "danger";
+  });
   const pickOpenTask = (...keywords) => openTasks.find((item) => {
     const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
     return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
@@ -1063,9 +1073,12 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
     return haystack.includes("loaner") || haystack.includes("transport");
   });
   const bdcTask = pickOpenTask("[bdc]", "callback", "follow-up", "reconnect");
+  const bdcTasks = openTasks.filter((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[bdc]") || `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("callback"));
   const salesTask = pickOpenTask("[sales]", "opportunity", "quote", "deal", "test-drive", "test drive");
+  const salesTasks = openTasks.filter((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[sales]") || `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("quote") || `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("deal"));
   const fiTask = pickOpenTask("[fi]", "finance", "funding", "delivery", "menu", "warranty");
   const accountingTask = pickOpenTask("[accounting]", "invoice", "ledger", "statement", "reconciliation", "payment");
+  const accountingTasks = openTasks.filter((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[accounting]") || `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("invoice") || `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("ledger"));
   const technicianTask = pickOpenTask("[technician]", "inspection", "diagnostic", "diagnosis", "repair", "tech");
   const partsTask = pickOpenTask("[parts]", "parts request", "stock pull", "sourcing", "eta", "runner", "special order", "pick task");
   const partsEtaNote = [...notes].find((item) => `${item.body || ""}`.toLowerCase().includes("[parts]") || `${item.body || ""}`.toLowerCase().includes("parts eta"));
@@ -1106,7 +1119,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
           <div class="customer360-lens-value">${nextAppointment ? `${escapeHtml(nextAppointment.date || "")} ${escapeHtml(nextAppointment.time || "")}` : loanerTask ? "Transport review active" : "Awaiting booking"}</div>
-          <div class="customer360-lens-copy">${nextAppointment ? "Use this area to evolve into lane check-in, write-up, and promised-time control." : loanerTask ? "Transportation workflow is active before promised-time control is locked." : "Use this area to evolve into lane check-in, write-up, and promised-time control."}</div>
+          <div class="customer360-lens-copy">${nextAppointment ? `${overdueTasks.length ? `${overdueTasks.length} service item${overdueTasks.length === 1 ? "" : "s"} overdue.` : urgentTasks.length ? `${urgentTasks.length} service step${urgentTasks.length === 1 ? "" : "s"} needs attention.` : "Use this area to evolve into lane check-in, write-up, and promised-time control."}` : loanerTask ? "Transportation workflow is active before promised-time control is locked." : "Use this area to evolve into lane check-in, write-up, and promised-time control."}</div>
         </div>
         <div class="customer360-lens-checklist">
           <div class="customer360-lens-check">
@@ -1142,8 +1155,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-grid">
           <div class="customer360-lens-stat">
             <small>Callback SLA</small>
-            <strong>${missedCalls ? "Due in 15 min" : "Within target"}</strong>
-            <span>${missedCalls ? "Missed contacts should move to the top of the callback queue." : "Current thread is warm and does not need rescue cadence yet."}</span>
+            <strong>${missedCalls ? "Due in 15 min" : bdcTasks.length ? `${bdcTasks.length} live callbacks` : "Within target"}</strong>
+            <span>${missedCalls ? "Missed contacts should move to the top of the callback queue." : bdcTasks.length ? `${urgentTasks.length ? `${urgentTasks.length} callback step${urgentTasks.length === 1 ? "" : "s"} need attention.` : "Callback queue is active but still inside target."}` : "Current thread is warm and does not need rescue cadence yet."}</span>
           </div>
           <div class="customer360-lens-stat">
             <small>Campaign Source</small>
@@ -1199,8 +1212,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
           <div class="customer360-lens-stat">
             <small>Quote Status</small>
-            <strong>${notes.length ? "Worksheet in progress" : "Not issued"}</strong>
-            <span>${notes.length ? "Recent notes imply the customer is already in pricing discussion." : "This area can evolve into live quote, payment, and F&I menu surfaces."}</span>
+            <strong>${salesTasks.length ? `${salesTasks.length} deal step${salesTasks.length === 1 ? "" : "s"} live` : notes.length ? "Worksheet in progress" : "Not issued"}</strong>
+            <span>${salesTasks.length ? `${overdueTasks.length ? `${overdueTasks.length} sales item${overdueTasks.length === 1 ? "" : "s"} overdue.` : nextAppointment ? "Showroom commitment exists and can move into quote review." : "Sales queue is active and ready for the next desk action."}` : notes.length ? "Recent notes imply the customer is already in pricing discussion." : "This area can evolve into live quote, payment, and F&I menu surfaces."}</span>
           </div>
         </div>
         <div class="customer360-lens-quickbar">
@@ -1402,8 +1415,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-grid">
           <div class="customer360-lens-stat">
             <small>Invoice State</small>
-            <strong>${topTask ? "Needs review" : "Draft-ready"}</strong>
-            <span>${topTask ? "An open accounting task suggests invoice posting or statement follow-up is still pending." : "Use this block for modern QuickBooks-style invoice and statement flow."}</span>
+            <strong>${accountingTasks.length ? `${accountingTasks.length} review${accountingTasks.length === 1 ? "" : "s"} open` : topTask ? "Needs review" : "Draft-ready"}</strong>
+            <span>${accountingTasks.length ? `${overdueTasks.length ? `${overdueTasks.length} invoice item${overdueTasks.length === 1 ? "" : "s"} overdue.` : "Accounting review is active across invoice, statement, or collection work."}` : topTask ? "An open accounting task suggests invoice posting or statement follow-up is still pending." : "Use this block for modern QuickBooks-style invoice and statement flow."}</span>
           </div>
           <div class="customer360-lens-stat">
             <small>Payment Rail</small>
