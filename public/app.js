@@ -1470,6 +1470,35 @@ function startDeliveryHandoffAppointment() {
   });
 }
 
+function startVehicleHealthEventNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nVehicle health event:\n- Battery state:\n- Mileage update:\n- Recall / maintenance signal:\n- Recommended next step:`,
+    status: "Vehicle health event template loaded."
+  });
+}
+
+function startVinArchiveEntryNote() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("note", {
+    body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nVIN archive entry:\n- File / media type:\n- Source:\n- Notes:\n- Linked department:`,
+    status: "VIN archive entry template loaded."
+  });
+}
+
+function startLoanerTask() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  presetCustomer360Composer("task", {
+    title: `[SERVICE] ${vehicleDisplayName(vehicle)} loaner coordination`,
+    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLoaner / transport workflow:\n- Transportation need:\n- Loaner approved:\n- Pickup / return notes:\n- Advisor follow-up:`,
+    dueAt: toLocalDateInputValue(new Date()),
+    status: "Loaner coordination task template loaded."
+  });
+}
+
 function hasKeywordMatch(items = [], keywords = []) {
   return items.some((item) => {
     const haystack = `${item.title || ""} ${item.description || ""} ${item.body || ""}`.toLowerCase();
@@ -3052,6 +3081,11 @@ function renderCustomer360Detail() {
         <strong>${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</strong>
         <span>Geo-enabled inventory anchor for ${escapeHtml(vehicleDisplayName(vehicle))} tied to the VIN archive, service lane, and technician dispatch flow.</span>
       </div>
+      <div class="customer360-vehicle-actions">
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="startVehicleHealthEventNote()">Log Health Event</button>
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="startLoanerTask()">Create Loaner Task</button>
+        <button class="customer360-toolbar-btn secondary" style="width:100%;" onclick="startVinArchiveEntryNote()">Add VIN Archive Entry</button>
+      </div>
     ` : `<div class="customer360-empty">Vehicle status will appear here.</div>`;
   }
 
@@ -3121,6 +3155,10 @@ function renderCustomer360Detail() {
       <div class="customer360-panel-item" style="border-top:none;padding-top:0;">
         <span>${escapeHtml(vehicle?.vin || "VIN pending")}</span>
         <span class="customer360-contact-pill">${archiveCount} files</span>
+      </div>
+      <div class="customer360-archive-actions">
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="startVinArchiveEntryNote()">Add Archive Entry</button>
+        <button class="customer360-toolbar-btn secondary" style="width:100%;" onclick="startVehicleHealthEventNote()">Log Vehicle Evidence</button>
       </div>
       <div class="customer360-archive-list">
         ${archiveItems.map((item) => `
