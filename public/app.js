@@ -3184,12 +3184,30 @@ function renderCustomer360Detail() {
   const archiveCount = currentCustomerNotes.length + currentCustomerTimeline.length + calls.length;
   const latestVehicleArtifact = getLatestTaggedArtifact("[vehicle]", currentCustomerNotes, currentCustomerTimeline);
   const latestArchiveArtifact = getLatestTaggedArtifact("[archive]", currentCustomerNotes, currentCustomerTimeline);
+  const vehicleSignalCount = [...currentCustomerNotes, ...currentCustomerTimeline]
+    .filter((item) => String(item.body || "").toLowerCase().startsWith("[vehicle]")).length;
+  const archiveSignalCount = [...currentCustomerNotes, ...currentCustomerTimeline]
+    .filter((item) => String(item.body || "").toLowerCase().startsWith("[archive]")).length;
+  const archiveFollowUpCount = openTasks.filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return haystack.includes("[archive]") || haystack.includes("archive");
+  }).length;
   const latestVehiclePresentation = latestVehicleArtifact
     ? getTaggedTimelinePresentation(latestVehicleArtifact.body || "", "Vehicle Health", "Vehicle intelligence")
     : null;
   const latestArchivePresentation = latestArchiveArtifact
     ? getTaggedTimelinePresentation(latestArchiveArtifact.body || "", "VIN Archive", "VIN-specific record")
     : null;
+  const lastVehicleOpsAt = latestVehicleArtifact?.occurredAtUtc
+    || latestVehicleArtifact?.updatedAtUtc
+    || latestArchiveArtifact?.occurredAtUtc
+    || latestArchiveArtifact?.updatedAtUtc
+    || latestVehicleArtifact?.createdAtUtc
+    || latestArchiveArtifact?.createdAtUtc
+    || "";
+  const vehicleOpsFreshness = lastVehicleOpsAt
+    ? formatDisplayDateTime(lastVehicleOpsAt).replace(/^Today at\s*/i, "")
+    : "Now";
   const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
@@ -3291,6 +3309,24 @@ function renderCustomer360Detail() {
         <span class="customer360-status-pill good">Battery ${escapeHtml(batteryState)}</span>
         <span class="customer360-status-pill ${String(recallState).toLowerCase().includes("0") ? "good" : "warn"}">${escapeHtml(recallState)}</span>
         <span class="customer360-status-pill info">${escapeHtml(inferVehicleGeoLabel(vehicle, customer))}</span>
+      </div>
+      <div class="customer360-vehicle-kpis" style="margin-top:12px;">
+        <div class="customer360-vehicle-kpi">
+          <small>Recent Signals</small>
+          <strong>${vehicleSignalCount}</strong>
+        </div>
+        <div class="customer360-vehicle-kpi">
+          <small>Archive Updates</small>
+          <strong>${archiveSignalCount}</strong>
+        </div>
+        <div class="customer360-vehicle-kpi">
+          <small>Open Evidence Tasks</small>
+          <strong>${archiveFollowUpCount}</strong>
+        </div>
+        <div class="customer360-vehicle-kpi">
+          <small>Last Updated</small>
+          <strong>${escapeHtml(vehicleOpsFreshness)}</strong>
+        </div>
       </div>
       <div class="customer360-vehicle-line"><span>VIN:</span><strong>${escapeHtml(vehicle.vin || "Unknown")}</strong></div>
       <div class="customer360-vehicle-line"><span>Geo:</span><strong>${escapeHtml(vehicle.status || "Inventory Live")}</strong></div>
