@@ -1892,6 +1892,10 @@ function openVehicleOpsContext(mode = "signals") {
       latestVehicleArtifact.id || latestVehicleArtifact.noteId || latestVehicleArtifact.timelineEventId || latestVehicleArtifact.createdAtUtc || latestVehicleArtifact.body,
       "home"
     );
+    preloadFocusedVehicleServiceFollowUp({
+      body: String(latestVehicleArtifact.body || "").replace(/\[vehicle\]\s*/i, "").trim()
+    });
+    setCustomer360ComposerStatus("Vehicle signal opened with a service follow-up ready.", "success");
     return;
   }
 
@@ -1901,6 +1905,10 @@ function openVehicleOpsContext(mode = "signals") {
       latestArchiveArtifact.id || latestArchiveArtifact.noteId || latestArchiveArtifact.timelineEventId || latestArchiveArtifact.createdAtUtc || latestArchiveArtifact.body,
       "home"
     );
+    preloadFocusedArchiveAction({
+      body: String(latestArchiveArtifact.body || "").replace(/\[archive\]\s*/i, "").trim()
+    }, "task");
+    setCustomer360ComposerStatus("VIN archive evidence opened with a linked task ready.", "success");
     return;
   }
 
@@ -1910,6 +1918,9 @@ function openVehicleOpsContext(mode = "signals") {
       archiveFollowUpTask.id || archiveFollowUpTask.taskId || archiveFollowUpTask.createdAtUtc || archiveFollowUpTask.title,
       "service"
     );
+    setDepartmentLens("service");
+    setCustomer360ComposerMode("task");
+    setCustomer360ComposerStatus("Evidence task opened and ready for the next service action.", "success");
     return;
   }
 
