@@ -1102,8 +1102,8 @@ function createTechnicianPartsRequest() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   presetCustomer360Composer("task", {
-    title: vehicle ? `${vehicleDisplayName(vehicle)} parts request` : `${customerDisplayName(customer)} parts request`,
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nPart needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner`,
+    title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} parts request` : `[PARTS] ${customerDisplayName(customer)} parts request`,
+    body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nPart needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner`,
     dueAt: toLocalDateInputValue(new Date()),
     status: "Parts request task template loaded."
   });
@@ -1341,6 +1341,13 @@ function stampJourneyArtifact(text = "") {
   const tag = getJourneyArtifactTag();
   if (!tag) return trimmed;
   return trimmed.startsWith(tag) ? trimmed : `${tag} ${trimmed}`.trim();
+}
+
+function inferJourneyHandoffTarget(...values) {
+  const haystack = values.join(" ").toLowerCase();
+  if (haystack.includes("[parts]")) return "parts";
+  if (haystack.includes("[accounting]")) return "accounting";
+  return "";
 }
 
 function startServiceWriteUp() {
@@ -1640,6 +1647,32 @@ function syncCustomer360LensUi() {
   });
 }
 
+function updateDepartmentMenuIndicators() {
+  const openTasks = (currentTasks || []).filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const partsCount = openTasks.filter((task) => inferJourneyHandoffTarget(task.title || "", task.description || "") === "parts").length;
+  const accountingCount = openTasks.filter((task) => inferJourneyHandoffTarget(task.title || "", task.description || "") === "accounting").length;
+
+  document.querySelectorAll(".department-menu-btn").forEach((btn) => {
+    const department = btn.dataset.department || "";
+    const small = btn.querySelector("small");
+    if (!small) return;
+    const base = department === "parts"
+      ? "Inventory"
+      : department === "accounting"
+        ? "Financials"
+        : small.dataset.baseLabel || small.textContent;
+    small.dataset.baseLabel = base;
+
+    if (department === "parts" && partsCount) {
+      small.textContent = `${base} • ${partsCount} new`;
+    } else if (department === "accounting" && accountingCount) {
+      small.textContent = `${base} • ${accountingCount} new`;
+    } else {
+      small.textContent = base;
+    }
+  });
+}
+
 function setDepartmentLens(department = "home") {
   currentDepartmentLens = DEPARTMENT_LENSES[department] ? department : "home";
   const config = getDepartmentLensConfig();
@@ -1648,6 +1681,7 @@ function setDepartmentLens(department = "home") {
     btn.classList.toggle("active", btn.dataset.department === currentDepartmentLens);
   });
   syncCustomer360LensUi();
+  updateDepartmentMenuIndicators();
   currentCustomer360TimelineFilter = normalizeCustomer360TimelineFilter(config.defaultFilter || "all");
   document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
     item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
@@ -1958,6 +1992,11 @@ async function createCustomer360Appointment() {
 async function submitCustomer360Composer() {
   try {
     setCustomer360ComposerStatus("Saving...");
+    const rawBody = getValue("customer360ComposerBody").trim();
+    const rawTitle = getValue("customer360TaskTitle").trim();
+    const handoffTarget = currentCustomer360ComposerMode === "task"
+      ? inferJourneyHandoffTarget(rawTitle, rawBody)
+      : "";
     if (currentCustomer360ComposerMode === "task") {
       await createCustomer360Task();
     } else if (currentCustomer360ComposerMode === "appointment") {
@@ -1984,6 +2023,11 @@ async function submitCustomer360Composer() {
     await refreshSelectedCustomer360();
     renderCustomer360();
     seedCustomer360ComposerDefaults();
+
+    if (handoffTarget && currentDepartmentLens === "technicians") {
+      setDepartmentLens(handoffTarget);
+      setCustomer360ComposerStatus(`${titleCase(handoffTarget)} handoff created and ready.`, "success");
+    }
   } catch (err) {
     setCustomer360ComposerStatus(err.message || "Unable to save.", "error");
   }
