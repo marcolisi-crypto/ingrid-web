@@ -1229,6 +1229,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           <div class="customer360-lens-copy">Primary concern: ${escapeHtml(activeRepairOrder?.complaint || topTask?.description || nextAppointment?.service || "Customer concern not written yet.")}</div>
           <div class="customer360-lens-copy" style="margin-top:8px;">${activeRepairOrder ? `Estimate ${escapeHtml(formatMoney(activeRepairOrder.totalAmount || ((activeRepairOrder.laborTotal || 0) + (activeRepairOrder.partsTotal || 0) + (activeRepairOrder.feesTotal || 0))))} • Balance ${escapeHtml(formatMoney(activeRepairOrder.balanceDue || activeRepairOrder.totalAmount || 0))} • Tech ${escapeHtml(latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "not clocked")}` : "Open the RO here before estimates, technician time, parts, and accounting are posted."}</div>
         </div>
+        ${activeRepairOrder ? buildRepairOrderSnapshotMarkup(customer, vehicle, activeRepairOrder) : ""}
         <div class="customer360-lens-grid">
           <div class="customer360-lens-stat">
             <small>Lane Check-In</small>
@@ -2733,7 +2734,81 @@ function getRepairOrderStatusTone(status = "") {
   return "info";
 }
 
+function getRepairOrderAmounts(repairOrder = {}) {
+  const labor = Number(repairOrder.laborSubtotal ?? repairOrder.laborTotal ?? 0);
+  const parts = Number(repairOrder.partsSubtotal ?? repairOrder.partsTotal ?? 0);
+  const fees = Number(repairOrder.feesSubtotal ?? repairOrder.feesTotal ?? 0);
+  const total = Number(repairOrder.totalEstimate ?? repairOrder.totalAmount ?? (labor + parts + fees));
+  const balance = Number(repairOrder.balanceDue ?? total);
+  const paid = Number(repairOrder.paymentsApplied ?? 0);
+  return { labor, parts, fees, total, balance, paid };
+}
+
+function getRepairOrderPromisedAt(repairOrder = {}) {
+  return repairOrder.promiseAtUtc || repairOrder.promisedAtUtc || repairOrder.promisedTimeUtc || "";
+}
+
+function getRepairOrderAdvisorName(repairOrder = {}) {
+  return repairOrder.advisor || repairOrder.advisorName || repairOrder.assignedAdvisor || "Rachel Smith";
+}
+
+function buildRepairOrderSnapshotMarkup(customer, vehicle, repairOrder = {}) {
+  const { labor, parts, fees, total, balance, paid } = getRepairOrderAmounts(repairOrder);
+  const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
+  const customerNumber = customer?.customerNumber || String(customer?.id || "").slice(0, 6).toUpperCase() || "N/A";
+  const vehicleTag = vehicle?.licensePlate || vehicle?.tag || (vehicle?.vin ? vehicle.vin.slice(-6) : "N/A");
+  const paymentType = paid > 0 ? "Posted Payment" : balance > 0 ? "Customer Pay" : "Warranty / Internal";
+  const snapshotFields = [
+    { label: "Customer No.", value: customerNumber },
+    { label: "RO No.", value: repairOrder.repairOrderNumber || "Pending" },
+    { label: "Advisor", value: getRepairOrderAdvisorName(repairOrder) },
+    { label: "Payment", value: paymentType },
+    { label: "VIN", value: vehicle?.vin || "Unknown" },
+    { label: "Vehicle", value: vehicleDisplayName(vehicle) },
+    { label: "Mileage In", value: repairOrder.odometerIn ?? vehicle?.mileage ?? "-" },
+    { label: "Tag", value: vehicleTag },
+    { label: "Opened", value: formatDisplayDateTime(repairOrder.openedAtUtc || repairOrder.createdAtUtc) },
+    { label: "Promised", value: formatDisplayDateTime(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc || repairOrder.createdAtUtc) },
+    { label: "Closed", value: repairOrder.closedAtUtc ? formatDisplayDateTime(repairOrder.closedAtUtc) : "Still open" },
+    { label: "Tech Time", value: latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "No clock yet" }
+  ];
+
+  return `
+    <div class="customer360-ro-snapshot">
+      <div class="customer360-ro-snapshot-head">
+        <strong>Printed RO Snapshot</strong>
+        <span>${escapeHtml(titleCase(String(repairOrder.status || "open")))}</span>
+      </div>
+      <div class="customer360-ro-snapshot-grid">
+        ${snapshotFields.map((field) => `
+          <div class="customer360-ro-snapshot-field">
+            <small>${escapeHtml(field.label)}</small>
+            <strong>${escapeHtml(String(field.value ?? "-"))}</strong>
+          </div>
+        `).join("")}
+      </div>
+      <div class="customer360-ro-card-complaint"><b>Complaint / Concern:</b> ${escapeHtml(repairOrder.complaint || repairOrder.notes || "Customer concern not written yet.")}</div>
+      <div class="customer360-ro-line-summary">
+        <span class="customer360-ro-line-pill">${escapeHtml(formatCountLabel((repairOrder.estimateLines || []).length, "estimate"))}</span>
+        <span class="customer360-ro-line-pill">${escapeHtml(formatCountLabel((repairOrder.partLines || []).length, "part line"))}</span>
+        <span class="customer360-ro-line-pill">${escapeHtml(formatCountLabel((repairOrder.accountingEntries || []).length, "accounting entry"))}</span>
+        <span class="customer360-ro-line-pill">${escapeHtml(formatCountLabel((repairOrder.technicianClockEvents || []).length, "clock event"))}</span>
+      </div>
+      <div class="customer360-ro-kpis">
+        <div class="customer360-ro-kpi"><small>Labor</small><strong>${escapeHtml(formatMoney(labor))}</strong></div>
+        <div class="customer360-ro-kpi"><small>Parts</small><strong>${escapeHtml(formatMoney(parts))}</strong></div>
+        <div class="customer360-ro-kpi"><small>Fees</small><strong>${escapeHtml(formatMoney(fees))}</strong></div>
+        <div class="customer360-ro-kpi"><small>Paid</small><strong>${escapeHtml(formatMoney(paid))}</strong></div>
+        <div class="customer360-ro-kpi"><small>Total</small><strong>${escapeHtml(formatMoney(total))}</strong></div>
+        <div class="customer360-ro-kpi"><small>Balance</small><strong>${escapeHtml(formatMoney(balance))}</strong></div>
+      </div>
+    </div>
+  `;
+}
+
 function buildRepairOrderBoardMarkup(repairOrders = []) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
   if (!repairOrders.length) {
     return `
       <div class="customer360-ro-board-head">
@@ -2777,29 +2852,26 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
         const sourceId = escapeHtml(getRepairOrderSourceId(repairOrder));
         const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
         const closed = ["closed", "completed"].includes(String(repairOrder.status || "").toLowerCase());
-        const partsTotal = Number(repairOrder.partsTotal || 0);
-        const laborTotal = Number(repairOrder.laborTotal || 0);
-        const feesTotal = Number(repairOrder.feesTotal || 0);
-        const total = Number(repairOrder.totalAmount || (partsTotal + laborTotal + feesTotal));
-        const balance = Number(repairOrder.balanceDue || total);
+        const { labor, parts, fees, total, balance } = getRepairOrderAmounts(repairOrder);
         return `
           <div class="customer360-ro-card">
             <div class="customer360-ro-card-top">
               <div>
                 <strong>${escapeHtml(repairOrder.repairOrderNumber || "RO-lite")}</strong>
-                <span>${escapeHtml(vehicleDisplayName(getSelectedVehicleRecord()))}</span>
+                <span>${escapeHtml(vehicleDisplayName(vehicle))}</span>
               </div>
               <span class="customer360-status-pill ${getRepairOrderStatusTone(repairOrder.status)}">${escapeHtml(titleCase(repairOrder.status || "open"))}</span>
             </div>
             <div class="customer360-ro-card-complaint">${escapeHtml(repairOrder.complaint || "Complaint not written yet.")}</div>
+            ${buildRepairOrderSnapshotMarkup(customer, vehicle, repairOrder)}
             <div class="customer360-ro-kpis">
               <div class="customer360-ro-kpi">
                 <small>Advisor</small>
-                <strong>${escapeHtml(repairOrder.advisorName || repairOrder.assignedAdvisor || "Rachel Smith")}</strong>
+                <strong>${escapeHtml(getRepairOrderAdvisorName(repairOrder))}</strong>
               </div>
               <div class="customer360-ro-kpi">
                 <small>Promised</small>
-                <strong>${escapeHtml(formatDisplayDateTime(repairOrder.promisedAtUtc || repairOrder.promisedTimeUtc || repairOrder.updatedAtUtc || repairOrder.createdAtUtc))}</strong>
+                <strong>${escapeHtml(formatDisplayDateTime(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc || repairOrder.createdAtUtc))}</strong>
               </div>
               <div class="customer360-ro-kpi">
                 <small>Total</small>
@@ -2815,7 +2887,7 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
               </div>
               <div class="customer360-ro-kpi">
                 <small>Write-Up</small>
-                <strong>${escapeHtml(`${formatMoney(laborTotal)} labor • ${formatMoney(partsTotal)} parts`)}</strong>
+                <strong>${escapeHtml(`${formatMoney(labor)} labor • ${formatMoney(parts)} parts • ${formatMoney(fees)} fees`)}</strong>
               </div>
             </div>
             <div class="customer360-ro-actions">
