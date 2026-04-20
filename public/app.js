@@ -707,6 +707,18 @@ function openVinTimelineSubtype(subtype = "all") {
   renderCustomer360Timeline();
 }
 
+function setCustomer360TimelineFilter(kind = "all") {
+  const normalizedKind = normalizeCustomer360TimelineFilter(kind);
+  currentCustomer360TimelineFilter = normalizedKind;
+  if (normalizedKind !== "vin") {
+    currentCustomer360VinFilter = "all";
+  }
+  document.querySelectorAll(".customer360-filter-chip[data-filter]").forEach((item) => {
+    item.classList.toggle("active", normalizeCustomer360TimelineFilter(item.dataset.filter || "all") === currentCustomer360TimelineFilter);
+  });
+  renderCustomer360Timeline();
+}
+
 function getVehicleJourneyNextAction(state) {
   const current = state?.current?.key || "health";
   if (current === "health") {
