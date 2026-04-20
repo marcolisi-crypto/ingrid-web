@@ -2,6 +2,7 @@ import { getStore } from "@netlify/blobs";
 
 const callsStore = getStore("call-dashboard");
 const campaignStore = getStore("campaign-data");
+const mediaStore = getStore("media-assets", { consistency: "strong" });
 
 export function getCallsStore() {
   return callsStore;
@@ -9,6 +10,10 @@ export function getCallsStore() {
 
 export function getCampaignStore() {
   return campaignStore;
+}
+
+export function getMediaStore() {
+  return mediaStore;
 }
 
 export async function getCallsIndex() {
