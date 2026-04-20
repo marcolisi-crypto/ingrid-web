@@ -35,6 +35,7 @@ let currentJourneyArtifacts = {};
 let currentJourneyFeedbackMessage = "";
 let currentJourneyFeedbackStage = "";
 let currentJourneyFeedbackTimer = null;
+let currentDmsActionModalConfig = null;
 let customer360AssigneeMap = JSON.parse(localStorage.getItem("customer360Assignees") || "{}");
 let currentManagerQueueSort = localStorage.getItem("customer360ManagerQueueSort") || "urgent";
 let customer360TaskQueueOwners = JSON.parse(localStorage.getItem("customer360TaskQueueOwners") || "{}");
@@ -2119,6 +2120,176 @@ async function createQuickAppointmentRecord({ service = "", advisor = "", date =
   return data;
 }
 
+function getDefaultAdvisorForLens() {
+  if (currentDepartmentLens === "sales") return "Sales Desk";
+  if (currentDepartmentLens === "fi") return "Finance Desk";
+  return "Rachel Smith";
+}
+
+function getModalContextMarkup() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer && !vehicle) return "";
+  return `
+    <div class="dms-action-modal-context">
+      ${customer ? `<span><strong>Customer</strong>${escapeHtml(customerDisplayName(customer))}</span>` : ""}
+      ${vehicle ? `<span><strong>Vehicle</strong>${escapeHtml(vehicleDisplayName(vehicle))}${vehicle?.vin ? ` • ${escapeHtml(vehicle.vin)}` : ""}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderDmsActionField(field = {}) {
+  if (field.type === "section") {
+    return `<div class="dms-action-modal-section-title">${escapeHtml(field.label || "")}</div>`;
+  }
+
+  const id = `dmsActionField_${escapeHtml(field.name || "")}`;
+  const label = `${escapeHtml(field.label || "")}${field.required ? ' <span class="required">*</span>' : ""}`;
+  const help = field.help ? `<small>${escapeHtml(field.help)}</small>` : "";
+  const value = field.value ?? "";
+  const common = `id="${id}" name="${escapeHtml(field.name || "")}" ${field.required ? "required" : ""} ${field.readonly ? "readonly" : ""} ${field.min !== undefined ? `min="${escapeHtml(String(field.min))}"` : ""} ${field.max !== undefined ? `max="${escapeHtml(String(field.max))}"` : ""} ${field.step !== undefined ? `step="${escapeHtml(String(field.step))}"` : ""} placeholder="${escapeHtml(field.placeholder || "")}"`;
+
+  let control = "";
+  if (field.type === "textarea") {
+    control = `<textarea ${common}>${escapeHtml(String(value))}</textarea>`;
+  } else if (field.type === "select") {
+    const options = (field.options || []).map((option) => {
+      const entry = typeof option === "string" ? { value: option, label: option } : option;
+      const optionValue = String(entry?.value ?? "");
+      const selected = String(value) === optionValue ? "selected" : "";
+      return `<option value="${escapeHtml(optionValue)}" ${selected}>${escapeHtml(entry?.label ?? optionValue)}</option>`;
+    }).join("");
+    control = `<select ${common}>${options}</select>`;
+  } else {
+    control = `<input type="${escapeHtml(field.type || "text")}" value="${escapeHtml(String(value))}" ${common} />`;
+  }
+
+  return `
+    <label class="dms-action-modal-field ${field.full ? "full" : ""}">
+      <span>${label}</span>
+      ${control}
+      ${help}
+    </label>
+  `;
+}
+
+function renderDmsActionModal(config = {}) {
+  const modal = document.getElementById("dmsActionModal");
+  const title = document.getElementById("dmsActionModalTitle");
+  const subtitle = document.getElementById("dmsActionModalSubtitle");
+  const context = document.getElementById("dmsActionModalContext");
+  const body = document.getElementById("dmsActionModalBody");
+  const status = document.getElementById("dmsActionModalStatus");
+  const submit = document.getElementById("dmsActionModalSubmit");
+  if (!modal || !title || !subtitle || !context || !body || !status || !submit) return;
+
+  title.textContent = config.title || "Create Record";
+  subtitle.textContent = config.subtitle || "";
+  context.innerHTML = config.contextHtml || getModalContextMarkup();
+  body.innerHTML = (config.fields || []).map((field) => renderDmsActionField(field)).join("");
+  status.textContent = "";
+  submit.textContent = config.submitLabel || "Save";
+}
+
+function openDmsActionModal(config = {}) {
+  currentDmsActionModalConfig = config;
+  renderDmsActionModal(config);
+  const modal = document.getElementById("dmsActionModal");
+  if (modal) modal.style.display = "flex";
+  window.requestAnimationFrame(() => {
+    document.querySelector("#dmsActionModalBody input, #dmsActionModalBody select, #dmsActionModalBody textarea")?.focus();
+  });
+}
+
+function closeDmsActionModal() {
+  currentDmsActionModalConfig = null;
+  const modal = document.getElementById("dmsActionModal");
+  const status = document.getElementById("dmsActionModalStatus");
+  if (status) status.textContent = "";
+  if (modal) modal.style.display = "none";
+}
+
+function collectDmsActionModalValues() {
+  const body = document.getElementById("dmsActionModalBody");
+  const values = {};
+  if (!body) return values;
+  body.querySelectorAll("[name]").forEach((element) => {
+    values[element.name] = element.value;
+  });
+  return values;
+}
+
+async function submitDmsActionModal() {
+  if (!currentDmsActionModalConfig?.onSubmit) return;
+  const status = document.getElementById("dmsActionModalStatus");
+  const submit = document.getElementById("dmsActionModalSubmit");
+  const values = collectDmsActionModalValues();
+
+  try {
+    if (status) status.textContent = "";
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = currentDmsActionModalConfig.submittingLabel || "Saving...";
+    }
+    await currentDmsActionModalConfig.onSubmit(values);
+    closeDmsActionModal();
+  } catch (err) {
+    console.error("submitDmsActionModal error:", err);
+    if (status) status.textContent = err.message || "Unable to save this record.";
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = currentDmsActionModalConfig?.submitLabel || "Save";
+    }
+  }
+}
+
+function openQuickWorkflowNoteModal({ title = "Add Note", subtitle = "", promptLabel = "Details", defaultBody = "", noteType = "internal", prefix = "", successCopy = "Note added." } = {}) {
+  openDmsActionModal({
+    title,
+    subtitle,
+    submitLabel: "Save Note",
+    fields: [
+      { name: "body", label: promptLabel, type: "textarea", required: true, full: true, value: defaultBody }
+    ],
+    onSubmit: async (values) => {
+      const customer = getSelectedCustomerRecord();
+      const vehicle = getSelectedVehicleRecord();
+      if (!customer) throw new Error("Select a customer first.");
+      await createQuickNoteRecord({
+        noteType,
+        body: `${prefix}${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${String(values.body || "").trim()}`
+      });
+      setCustomer360ComposerStatus(successCopy, "success");
+    }
+  });
+}
+
+function openQuickWorkflowTaskModal({ title = "Create Task", subtitle = "", promptLabel = "Details", defaultBody = "", taskTitle = "Task", assignedDepartment = currentDepartmentLens, dueAt = toLocalDateInputValue(new Date()), successCopy = "Task created." } = {}) {
+  openDmsActionModal({
+    title,
+    subtitle,
+    submitLabel: "Create Task",
+    fields: [
+      { name: "taskTitle", label: "Task title", type: "text", required: true, value: taskTitle },
+      { name: "body", label: promptLabel, type: "textarea", required: true, full: true, value: defaultBody },
+      { name: "dueAt", label: "Due date", type: "date", value: dueAt }
+    ],
+    onSubmit: async (values) => {
+      const customer = getSelectedCustomerRecord();
+      const vehicle = getSelectedVehicleRecord();
+      if (!customer) throw new Error("Select a customer first.");
+      await createQuickTaskRecord({
+        assignedDepartment,
+        title: values.taskTitle,
+        description: String(values.body || "").trim(),
+        dueAt: values.dueAt || dueAt
+      });
+      setCustomer360ComposerStatus(successCopy, "success");
+    }
+  });
+}
+
 async function startTechnicianInspectionNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -2126,21 +2297,14 @@ async function startTechnicianInspectionNote() {
     setCustomer360ComposerStatus("Select a customer before logging a technician finding.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Technician finding",
-    "Inspection finding:\nRecommended action:\nMedia captured:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[TECHNICIAN] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Technician finding recorded."}`
-    });
-    setCustomer360ComposerStatus("Technician finding added.", "success");
-  } catch (err) {
-    console.error("startTechnicianInspectionNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add technician finding.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Technician Finding",
+    subtitle: "Log the inspection result and recommended next step for the advisor.",
+    promptLabel: "Finding details",
+    defaultBody: "Inspection finding:\nRecommended action:\nMedia captured:",
+    prefix: "[TECHNICIAN] ",
+    successCopy: "Technician finding added."
+  });
 }
 
 async function createTechnicianPartsRequest() {
@@ -2150,23 +2314,15 @@ async function createTechnicianPartsRequest() {
     setCustomer360ComposerStatus("Select a customer before creating a parts request.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Parts request",
-    "Part needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "parts",
-      title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} parts request` : `[PARTS] ${customerDisplayName(customer)} parts request`,
-      description: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Parts request queued."}`,
-      dueAt: toLocalDateInputValue(new Date())
-    });
-    setCustomer360ComposerStatus("Parts request task created.", "success");
-  } catch (err) {
-    console.error("createTechnicianPartsRequest error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to create parts request.", "error");
-  }
+  openQuickWorkflowTaskModal({
+    title: "Create Parts Request",
+    subtitle: "Send the required part details to the parts department with a real task record.",
+    promptLabel: "Request details",
+    defaultBody: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nPart needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner`,
+    taskTitle: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} parts request` : `[PARTS] ${customerDisplayName(customer)} parts request`,
+    assignedDepartment: "parts",
+    successCopy: "Parts request task created."
+  });
 }
 
 async function createPartsPickTask() {
@@ -2176,23 +2332,15 @@ async function createPartsPickTask() {
     setCustomer360ComposerStatus("Select a customer before creating a parts task.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Parts pick task",
-    "Requested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "parts",
-      title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} stock pull` : `[PARTS] ${customerDisplayName(customer)} stock pull`,
-      description: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Parts pick task queued."}`,
-      dueAt: toLocalDateInputValue(new Date())
-    });
-    setCustomer360ComposerStatus("Parts task created.", "success");
-  } catch (err) {
-    console.error("createPartsPickTask error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to create parts task.", "error");
-  }
+  openQuickWorkflowTaskModal({
+    title: "Create Parts Task",
+    subtitle: "Create a pick, source, or runner task for parts operations.",
+    promptLabel: "Task details",
+    defaultBody: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nRequested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner`,
+    taskTitle: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} stock pull` : `[PARTS] ${customerDisplayName(customer)} stock pull`,
+    assignedDepartment: "parts",
+    successCopy: "Parts task created."
+  });
 }
 
 async function startPartsEtaNote() {
@@ -2202,21 +2350,14 @@ async function startPartsEtaNote() {
     setCustomer360ComposerStatus("Select a customer before logging parts ETA.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Parts ETA note",
-    "Source:\nETA:\nRunner / delivery notes:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Parts ETA logged."}`
-    });
-    setCustomer360ComposerStatus("Parts ETA note added.", "success");
-  } catch (err) {
-    console.error("startPartsEtaNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to log parts ETA.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Add Parts ETA Note",
+    subtitle: "Document source, ETA, and delivery context for the active job.",
+    promptLabel: "ETA details",
+    defaultBody: "Source:\nETA:\nRunner / delivery notes:",
+    prefix: "[PARTS] ",
+    successCopy: "Parts ETA note added."
+  });
 }
 
 async function queueAccountingInvoiceReview() {
@@ -2226,23 +2367,15 @@ async function queueAccountingInvoiceReview() {
     setCustomer360ComposerStatus("Select a customer before queuing accounting review.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Accounting review",
-    "Charges validated:\nPayment request:\nStatement status:\nReconciliation notes:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "accounting",
-      title: vehicle ? `[ACCOUNTING] ${vehicleDisplayName(vehicle)} invoice review` : `[ACCOUNTING] ${customerDisplayName(customer)} invoice review`,
-      description: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Accounting review queued."}`,
-      dueAt: toLocalDateInputValue(new Date())
-    });
-    setCustomer360ComposerStatus("Accounting review task created.", "success");
-  } catch (err) {
-    console.error("queueAccountingInvoiceReview error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to queue accounting review.", "error");
-  }
+  openQuickWorkflowTaskModal({
+    title: "Queue Accounting Review",
+    subtitle: "Create a back-office review task with the billing and reconciliation details attached.",
+    promptLabel: "Review details",
+    defaultBody: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nCharges validated:\nPayment request:\nStatement status:\nReconciliation notes:`,
+    taskTitle: vehicle ? `[ACCOUNTING] ${vehicleDisplayName(vehicle)} invoice review` : `[ACCOUNTING] ${customerDisplayName(customer)} invoice review`,
+    assignedDepartment: "accounting",
+    successCopy: "Accounting review task created."
+  });
 }
 
 async function startLedgerNote() {
@@ -2252,21 +2385,14 @@ async function startLedgerNote() {
     setCustomer360ComposerStatus("Select a customer before adding a ledger note.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Ledger note",
-    "Payment status:\nStatement update:\nRefund / credit notes:\nReconciliation comment:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Ledger note added."}`
-    });
-    setCustomer360ComposerStatus("Ledger note added.", "success");
-  } catch (err) {
-    console.error("startLedgerNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add ledger note.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Add Ledger Note",
+    subtitle: "Capture the accounting comment directly on the shared customer and vehicle record.",
+    promptLabel: "Ledger details",
+    defaultBody: "Payment status:\nStatement update:\nRefund / credit notes:\nReconciliation comment:",
+    prefix: "[ACCOUNTING] ",
+    successCopy: "Ledger note added."
+  });
 }
 
 function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehicle) {
@@ -3003,7 +3129,7 @@ function startServiceWriteUp() {
   startServiceReceptionCreate();
 }
 
-async function startServiceReceptionCreate() {
+async function startServiceReceptionCreate(payload = null) {
   const customer = getSelectedCustomerRecord();
   if (!customer) {
     setCustomer360ComposerStatus("Select or create a customer before starting a write-up.", "error");
@@ -3013,18 +3139,24 @@ async function startServiceReceptionCreate() {
   const vehicle = getSelectedVehicleRecord();
   const nextAppointment = (currentAppointments || []).find((item) => item.customerId === customer.id && String(item.status || "").toLowerCase() !== "completed") || null;
 
-  try {
-    const concern = readPromptText("Write-up concern", nextAppointment?.service || "Customer concern captured from advisor write-up");
-    if (concern === null) return;
-    const advisor = readPromptText("Advisor", nextAppointment?.advisor || "Rachel Smith");
-    if (advisor === null) return;
-    const odometerValue = readPromptText("Mileage in", vehicle?.mileage ? String(vehicle.mileage) : "");
-    if (odometerValue === null) return;
-    const transportOption = readPromptText("Transport option", nextAppointment?.transport || "");
-    if (transportOption === null) return;
-    const notes = readPromptText("Write-up notes", nextAppointment?.notes || "");
-    if (notes === null) return;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Service Write-Up",
+      subtitle: "Capture the advisor intake details before opening the repair order.",
+      submitLabel: "Create Write-Up",
+      fields: [
+        { name: "concern", label: "Customer concern", type: "textarea", required: true, full: true, value: nextAppointment?.service || "Customer concern captured from advisor write-up" },
+        { name: "advisor", label: "Advisor", type: "text", required: true, value: nextAppointment?.advisor || getDefaultAdvisorForLens() },
+        { name: "odometerIn", label: "Mileage in", type: "number", value: vehicle?.mileage ? String(vehicle.mileage) : "", min: 0 },
+        { name: "transportOption", label: "Transport", type: "select", value: nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
+        { name: "notes", label: "Write-up notes", type: "textarea", full: true, value: nextAppointment?.notes || "" }
+      ],
+      onSubmit: async (values) => startServiceReceptionCreate({ ...values, __submit: true })
+    });
+    return;
+  }
 
+  try {
     const res = await fetch("/.netlify/functions/service-receptions-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3032,11 +3164,11 @@ async function startServiceReceptionCreate() {
         customerId: customer.id,
         vehicleId: vehicle?.id || null,
         appointmentId: nextAppointment?.id || null,
-        advisor,
-        concern,
-        odometerIn: odometerValue ? Number(odometerValue) : null,
-        transportOption,
-        notes,
+        advisor: payload.advisor,
+        concern: payload.concern,
+        odometerIn: payload.odometerIn ? Number(payload.odometerIn) : null,
+        transportOption: payload.transportOption || "",
+        notes: payload.notes || "",
         promiseAtUtc: nextAppointment?.scheduledStartUtc || null
       })
     });
@@ -3053,7 +3185,7 @@ async function startServiceReceptionCreate() {
   }
 }
 
-async function openRepairOrderFrom360() {
+async function openRepairOrderFrom360(payload = null) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   const existing = getActiveRepairOrderRecord();
@@ -3068,6 +3200,25 @@ async function openRepairOrderFrom360() {
   const nextAppointment = (currentAppointments || []).find((item) => item.customerId === customer.id && String(item.status || "").toLowerCase() !== "completed") || null;
   const openTasks = (currentTasks || []).filter((task) => task.customerId === customer.id && String(task.status || "").toLowerCase() !== "completed");
 
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: serviceReception ? "Open Repair Order from Write-Up" : "Open Repair Order",
+      subtitle: "Confirm the advisor, complaint, odometer, and promise before creating the live RO.",
+      submitLabel: "Create RO",
+      fields: [
+        { name: "advisor", label: "Advisor", type: "text", required: true, value: serviceReception?.advisor || nextAppointment?.advisor || getDefaultAdvisorForLens() },
+        { name: "complaint", label: "Complaint / concern", type: "textarea", required: true, full: true, value: serviceReception?.concern || nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from service lane" },
+        { name: "odometerIn", label: "Mileage in", type: "number", value: serviceReception?.odometerIn ?? vehicle?.mileage ?? "", min: 0 },
+        { name: "transportOption", label: "Transport", type: "select", value: serviceReception?.transportOption || nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
+        { name: "promiseAtDate", label: "Promised date", type: "date", value: nextAppointment?.date || "" },
+        { name: "promiseAtTime", label: "Promised time", type: "text", value: nextAppointment?.time || "", placeholder: "4:30 PM" },
+        { name: "notes", label: "Advisor notes", type: "textarea", full: true, value: serviceReception?.notes || nextAppointment?.notes || "" }
+      ],
+      onSubmit: async (values) => openRepairOrderFrom360({ ...values, __submit: true })
+    });
+    return;
+  }
+
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-open", {
       method: "POST",
@@ -3077,12 +3228,14 @@ async function openRepairOrderFrom360() {
         vehicleId: vehicle?.id || null,
         appointmentId: nextAppointment?.id || null,
         serviceReceptionId: serviceReception?.id || null,
-        advisor: serviceReception?.advisor || nextAppointment?.advisor || "Rachel Smith",
-        complaint: serviceReception?.concern || nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from 360 service lane",
-        odometerIn: serviceReception?.odometerIn ?? vehicle?.mileage ?? null,
-        transportOption: serviceReception?.transportOption || nextAppointment?.transport || "",
-        notes: serviceReception?.notes || nextAppointment?.notes || "",
-        promiseAtUtc: serviceReception?.promiseAtUtc || nextAppointment?.scheduledStartUtc || null
+        advisor: payload.advisor,
+        complaint: payload.complaint,
+        odometerIn: payload.odometerIn ? Number(payload.odometerIn) : (serviceReception?.odometerIn ?? vehicle?.mileage ?? null),
+        transportOption: payload.transportOption || "",
+        notes: payload.notes || "",
+        promiseAtUtc: payload.promiseAtDate
+          ? new Date(`${payload.promiseAtDate}T${payload.promiseAtTime || "10:00"}`).toISOString()
+          : serviceReception?.promiseAtUtc || nextAppointment?.scheduledStartUtc || null
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3168,51 +3321,43 @@ function sumRepairOrderPartLines(repairOrder = null) {
   }, 0);
 }
 
-function readPromptText(message = "", defaultValue = "") {
-  const result = window.prompt(message, defaultValue);
-  if (result === null) return null;
-  return result.trim();
-}
-
-function readPromptNumber(message = "", defaultValue = 0) {
-  const raw = window.prompt(message, String(defaultValue));
-  if (raw === null) return null;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error("Enter a valid amount.");
-  }
-  return value;
-}
-
-async function createServiceQuote() {
+async function createServiceQuote(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     setCustomer360ComposerStatus("Open an RO before creating a service quote.", "error");
     return;
   }
 
-  try {
-    const opCode = readPromptText("Service quote op code", "DIAG");
-    if (opCode === null) return;
-    const description = readPromptText("Service quote description", "Diagnostic inspection and advisor estimate");
-    if (description === null) return;
-    const quantity = readPromptNumber("Quoted quantity", 1);
-    if (quantity === null) return;
-    const unitPrice = readPromptNumber("Quoted unit price", 149);
-    if (unitPrice === null) return;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Service Quote",
+      subtitle: "Add labor or diagnostic work to the live repair order.",
+      submitLabel: "Create Quote",
+      fields: [
+        { name: "opCode", label: "Operation code", type: "text", required: true, value: "DIAG" },
+        { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Diagnostic inspection and advisor estimate" },
+        { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 0.1 },
+        { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "149", min: 0, step: 0.01 },
+        { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "pending", "approved", "declined"] }
+      ],
+      onSubmit: async (values) => createServiceQuote({ ...values, __submit: true })
+    });
+    return;
+  }
 
+  try {
     const res = await fetch("/.netlify/functions/service-repair-order-estimate-line", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
         lineType: "labor",
-        opCode,
-        description,
-        quantity,
-        unitPrice,
+        opCode: payload.opCode,
+        description: payload.description,
+        quantity: Number(payload.quantity || 0),
+        unitPrice: Number(payload.unitPrice || 0),
         department: "service",
-        status: "quoted"
+        status: payload.status || "quoted"
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3258,36 +3403,43 @@ async function addRepairOrderPartRequest() {
   }
 }
 
-async function createPartsQuote() {
+async function createPartsQuote(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     setCustomer360ComposerStatus("Open an RO before creating a parts quote.", "error");
     return;
   }
 
-  try {
-    const partNumber = readPromptText("Parts quote part number", "PART-REQ");
-    if (partNumber === null) return;
-    const description = readPromptText("Parts quote description", "Requested service part");
-    if (description === null) return;
-    const quantity = readPromptNumber("Quoted quantity", 1);
-    if (quantity === null) return;
-    const unitPrice = readPromptNumber("Quoted unit price", 89);
-    if (unitPrice === null) return;
-    const source = readPromptText("Parts source (stock, oem, aftermarket)", "stock");
-    if (source === null) return;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Parts Quote",
+      subtitle: "Quote the parts needed against the active repair order.",
+      submitLabel: "Create Parts Quote",
+      fields: [
+        { name: "partNumber", label: "Part number", type: "text", required: true, value: "PART-REQ" },
+        { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Requested service part" },
+        { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 1 },
+        { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "89", min: 0, step: 0.01 },
+        { name: "source", label: "Source", type: "select", value: "stock", options: ["stock", "oem", "aftermarket", "transfer"] },
+        { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "requested", "approved", "declined"] }
+      ],
+      onSubmit: async (values) => createPartsQuote({ ...values, __submit: true })
+    });
+    return;
+  }
 
+  try {
     const res = await fetch("/.netlify/functions/service-repair-order-part-line", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        partNumber,
-        description,
-        quantity,
-        unitPrice,
-        status: "quoted",
-        source: source || "stock"
+        partNumber: payload.partNumber,
+        description: payload.description,
+        quantity: Number(payload.quantity || 0),
+        unitPrice: Number(payload.unitPrice || 0),
+        status: payload.status || "quoted",
+        source: payload.source || "stock"
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3497,22 +3649,40 @@ async function addRepairOrderPaySplit(payType = "customer") {
   }
 }
 
-async function createSpecialPartOrder() {
+async function createSpecialPartOrder(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Special Order",
+      subtitle: "Open an OEM or aftermarket special order tied to the current job.",
+      submitLabel: "Place Order",
+      fields: [
+        { name: "partNumber", label: "Part number", type: "text", required: true, value: "OEM-SO-001" },
+        { name: "vendor", label: "Vendor", type: "text", required: true, value: "OEM" },
+        { name: "orderType", label: "Order type", type: "select", value: "special_order", options: ["special_order", "stock_order", "transfer"] },
+        { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 1, step: 1 },
+        { name: "unitCost", label: "Unit cost", type: "number", required: true, value: "89", min: 0, step: 0.01 },
+        { name: "etaDate", label: "ETA date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 3)) },
+        { name: "status", label: "Status", type: "select", value: "ordered", options: ["ordered", "backorder", "arrived"] }
+      ],
+      onSubmit: async (values) => createSpecialPartOrder({ ...values, __submit: true })
+    });
+    return;
+  }
   try {
     const res = await fetch("/.netlify/functions/parts-order-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder?.id || null,
-        partNumber: "OEM-SO-001",
-        vendor: "OEM",
-        orderType: "special_order",
-        quantity: 1,
-        unitCost: 89,
-        status: "ordered",
+        partNumber: payload.partNumber,
+        vendor: payload.vendor,
+        orderType: payload.orderType || "special_order",
+        quantity: Number(payload.quantity || 1),
+        unitCost: Number(payload.unitCost || 0),
+        status: payload.status || "ordered",
         isSpecialOrder: true,
-        etaAtUtc: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
+        etaAtUtc: payload.etaDate ? new Date(`${payload.etaDate}T12:00:00`).toISOString() : new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3526,19 +3696,35 @@ async function createSpecialPartOrder() {
   }
 }
 
-async function createAccountsPayableBill() {
+async function createAccountsPayableBill(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create AP Bill",
+      subtitle: "Create a vendor payable tied to the current service job.",
+      submitLabel: "Create AP Bill",
+      fields: [
+        { name: "vendorName", label: "Vendor", type: "text", required: true, value: "OEM Parts Vendor" },
+        { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `AP-${Date.now().toString().slice(-6)}` },
+        { name: "amount", label: "Amount", type: "number", required: true, value: "89", min: 0, step: 0.01 },
+        { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 14)) },
+        { name: "status", label: "Status", type: "select", value: "open", options: ["open", "approved", "paid"] }
+      ],
+      onSubmit: async (values) => createAccountsPayableBill({ ...values, __submit: true })
+    });
+    return;
+  }
   try {
     const res = await fetch("/.netlify/functions/accounting-ap-bill-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder?.id || null,
-        vendorName: "OEM Parts Vendor",
-        invoiceNumber: `AP-${Date.now().toString().slice(-6)}`,
-        amount: 89,
-        status: "open",
-        dueAtUtc: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        vendorName: payload.vendorName,
+        invoiceNumber: payload.invoiceNumber,
+        amount: Number(payload.amount || 0),
+        status: payload.status || "open",
+        dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3552,7 +3738,7 @@ async function createAccountsPayableBill() {
   }
 }
 
-async function createAccountsReceivableInvoice() {
+async function createAccountsReceivableInvoice(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   const customer = getSelectedCustomerRecord();
   if (!repairOrder || !customer) {
@@ -3560,19 +3746,35 @@ async function createAccountsReceivableInvoice() {
     return;
   }
 
-  try {
+  if (!payload?.__submit) {
     const total = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
+    openDmsActionModal({
+      title: "Create AR Invoice",
+      subtitle: "Post a customer receivable tied to the active repair order.",
+      submitLabel: "Create AR Invoice",
+      fields: [
+        { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `AR-${Date.now().toString().slice(-6)}` },
+        { name: "amount", label: "Amount", type: "number", required: true, value: String(total), min: 0, step: 0.01 },
+        { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
+        { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
+      ],
+      onSubmit: async (values) => createAccountsReceivableInvoice({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
     const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
         customerId: customer.id,
-        invoiceNumber: `AR-${Date.now().toString().slice(-6)}`,
-        amount: total,
-        balanceDue: total,
-        status: "open",
-        dueAtUtc: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        invoiceNumber: payload.invoiceNumber,
+        amount: Number(payload.amount || 0),
+        balanceDue: Number(payload.amount || 0),
+        status: payload.status || "open",
+        dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3586,7 +3788,7 @@ async function createAccountsReceivableInvoice() {
   }
 }
 
-async function createServiceInvoice() {
+async function createServiceInvoice(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   const customer = getSelectedCustomerRecord();
   if (!repairOrder || !customer) {
@@ -3594,21 +3796,35 @@ async function createServiceInvoice() {
     return;
   }
 
-  try {
+  if (!payload?.__submit) {
     const defaultAmount = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
-    const amount = readPromptNumber("Service invoice amount", defaultAmount);
-    if (amount === null) return;
+    openDmsActionModal({
+      title: "Create Service Invoice",
+      subtitle: "Post the customer-facing service invoice from the live repair order.",
+      submitLabel: "Create Service Invoice",
+      fields: [
+        { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `SVC-${Date.now().toString().slice(-6)}` },
+        { name: "amount", label: "Amount", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
+        { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
+        { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
+      ],
+      onSubmit: async (values) => createServiceInvoice({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
     const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
         customerId: customer.id,
-        invoiceNumber: `SVC-${Date.now().toString().slice(-6)}`,
-        amount,
-        balanceDue: amount,
-        status: "open",
-        dueAtUtc: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        invoiceNumber: payload.invoiceNumber,
+        amount: Number(payload.amount || 0),
+        balanceDue: Number(payload.amount || 0),
+        status: payload.status || "open",
+        dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3622,7 +3838,7 @@ async function createServiceInvoice() {
   }
 }
 
-async function createPartsInvoice() {
+async function createPartsInvoice(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   const customer = getSelectedCustomerRecord();
   if (!repairOrder || !customer) {
@@ -3630,22 +3846,36 @@ async function createPartsInvoice() {
     return;
   }
 
-  try {
+  if (!payload?.__submit) {
     const partsTotal = sumRepairOrderPartLines(repairOrder);
     const fallbackTotal = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
-    const amount = readPromptNumber("Parts invoice amount", partsTotal > 0 ? partsTotal : fallbackTotal);
-    if (amount === null) return;
+    openDmsActionModal({
+      title: "Create Parts Invoice",
+      subtitle: "Post a customer-facing parts invoice from the live repair order.",
+      submitLabel: "Create Parts Invoice",
+      fields: [
+        { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `PART-${Date.now().toString().slice(-6)}` },
+        { name: "amount", label: "Amount", type: "number", required: true, value: String(partsTotal > 0 ? partsTotal : fallbackTotal), min: 0, step: 0.01 },
+        { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
+        { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
+      ],
+      onSubmit: async (values) => createPartsInvoice({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
     const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
         customerId: customer.id,
-        invoiceNumber: `PART-${Date.now().toString().slice(-6)}`,
-        amount,
-        balanceDue: amount,
-        status: "open",
-        dueAtUtc: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        invoiceNumber: payload.invoiceNumber,
+        amount: Number(payload.amount || 0),
+        balanceDue: Number(payload.amount || 0),
+        status: payload.status || "open",
+        dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3760,63 +3990,100 @@ async function markServiceWorkDeclined() {
   }
 }
 
-async function captureTechnicianMedia(contextType = "repair_order", preferredMediaType = "photo") {
+async function captureTechnicianMedia(contextType = "repair_order", preferredMediaType = "photo", payload = null) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   const repairOrder = getActiveRepairOrderRecord();
+
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: preferredMediaType === "video" ? "Record Technician Video" : "Add Technician Media",
+      subtitle: contextType === "repair_order"
+        ? "Attach evidence directly to the active repair order."
+        : "Attach evidence to the VIN archive record.",
+      submitLabel: preferredMediaType === "video" ? "Choose Video" : "Choose Media",
+      submittingLabel: "Opening picker...",
+      fields: [
+        { name: "caption", label: "Caption", type: "text", required: true, value: `${titleCase(contextType.replaceAll("_", " "))} evidence` },
+        {
+          name: "visibility",
+          label: "Visibility",
+          type: "select",
+          value: "internal",
+          options: [
+            { value: "internal", label: "Internal only" },
+            { value: "customer", label: "Customer-facing" }
+          ]
+        }
+      ],
+      onSubmit: async (values) => {
+        await captureTechnicianMedia(contextType, preferredMediaType, {
+          ...values,
+          __submit: true
+        });
+      }
+    });
+    return;
+  }
+
   const input = document.createElement("input");
   input.type = "file";
   input.accept = preferredMediaType === "video" ? "video/*" : "image/*,video/*";
   input.setAttribute("capture", "environment");
 
-  input.onchange = async () => {
-    const file = input.files?.[0];
-    if (!file) return;
+  await new Promise((resolve, reject) => {
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        reject(new Error("Choose a photo or video to continue."));
+        return;
+      }
 
-    const caption = window.prompt("Caption for this media:", `${titleCase(contextType.replaceAll("_", " "))} evidence`) || "";
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await fetch("/.netlify/functions/media-upload", {
+          method: "POST",
+          body: formData
+        });
+        const uploadData = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload media");
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch("/.netlify/functions/media-upload", {
-        method: "POST",
-        body: formData
-      });
-      const uploadData = await uploadRes.json().catch(() => ({}));
-      if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload media");
+        const mediaType = String(file.type || "").toLowerCase().startsWith("video/") ? "video" : "photo";
+        const createRes = await fetch("/.netlify/functions/media-assets-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: customer?.id || null,
+            vehicleId: vehicle?.id || null,
+            repairOrderId: contextType === "repair_order" ? repairOrder?.id || null : null,
+            contextType,
+            mediaType,
+            storageUrl: uploadData.storageUrl,
+            thumbnailUrl: uploadData.thumbnailUrl,
+            fileName: uploadData.fileName || file.name,
+            caption: String(payload.caption || "").trim(),
+            capturedBy: "Miguel Santos",
+            visibility: payload.visibility || "internal",
+            capturedAtUtc: new Date().toISOString()
+          })
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) throw new Error(createData.error || "Failed to create media record");
 
-      const mediaType = String(file.type || "").toLowerCase().startsWith("video/") ? "video" : "photo";
-      const createRes = await fetch("/.netlify/functions/media-assets-create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerId: customer?.id || null,
-          vehicleId: vehicle?.id || null,
-          repairOrderId: contextType === "repair_order" ? repairOrder?.id || null : null,
-          contextType,
-          mediaType,
-          storageUrl: uploadData.storageUrl,
-          thumbnailUrl: uploadData.thumbnailUrl,
-          fileName: uploadData.fileName || file.name,
-          caption,
-          capturedBy: "Miguel Santos",
-          visibility: "internal",
-          capturedAtUtc: new Date().toISOString()
-        })
-      });
-      const createData = await createRes.json().catch(() => ({}));
-      if (!createRes.ok) throw new Error(createData.error || "Failed to create media record");
+        await refreshSelectedCustomer360();
+        renderCustomer360();
+        setCustomer360ComposerStatus(`${titleCase(mediaType)} saved to ${contextType === "repair_order" ? (repairOrder?.repairOrderNumber || "repair order") : "VIN archive"}.`, "success");
+        resolve();
+      } catch (err) {
+        console.error("captureTechnicianMedia error:", err);
+        setCustomer360ComposerStatus(err.message || "Unable to capture technician media.", "error");
+        reject(err);
+      }
+    };
 
-      await refreshSelectedCustomer360();
-      renderCustomer360();
-      setCustomer360ComposerStatus(`${titleCase(mediaType)} saved to ${contextType === "repair_order" ? (repairOrder?.repairOrderNumber || "repair order") : "VIN archive"}.`, "success");
-    } catch (err) {
-      console.error("captureTechnicianMedia error:", err);
-      setCustomer360ComposerStatus(err.message || "Unable to capture technician media.", "error");
-    }
-  };
-
-  input.click();
+    input.click();
+  });
 }
 
 async function startAdvisorJourneyNote() {
@@ -3826,21 +4093,14 @@ async function startAdvisorJourneyNote() {
     setCustomer360ComposerStatus("Select a customer before adding an advisor note.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Advisor follow-up",
-    "Concern verified:\nNext action for technician:\nCustomer expectation:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Advisor follow-up added."}`
-    });
-    setCustomer360ComposerStatus("Advisor note added.", "success");
-  } catch (err) {
-    console.error("startAdvisorJourneyNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add advisor note.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Add Advisor Note",
+    subtitle: "Capture the advisor follow-up directly on the customer service record.",
+    promptLabel: "Advisor follow-up",
+    defaultBody: "Concern verified:\nNext action for technician:\nCustomer expectation:",
+    prefix: "[SERVICE] ",
+    successCopy: "Advisor note added."
+  });
 }
 
 async function startBdcCallbackTask() {
@@ -3851,24 +4111,15 @@ async function startBdcCallbackTask() {
     return;
   }
 
-  const detail = window.prompt(
-    "BDC callback notes",
-    "Last contact result:\nNext outreach step:\nAppointment goal:\nHandoff notes for sales:"
-  );
-  if (detail === null) return;
-
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "bdc",
-      title: `[BDC] ${vehicleDisplayName(vehicle)} callback`,
-      description: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Customer callback queued."}`,
-      dueAt: toLocalDateInputValue(new Date())
-    });
-    setCustomer360ComposerStatus("BDC callback task created.", "success");
-  } catch (err) {
-    console.error("startBdcCallbackTask error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to create BDC callback task.", "error");
-  }
+  openQuickWorkflowTaskModal({
+    title: "Create BDC Callback Task",
+    subtitle: "Queue the callback with the next outreach step and appointment goal.",
+    promptLabel: "Callback notes",
+    defaultBody: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLast contact result:\nNext outreach step:\nAppointment goal:\nHandoff notes for sales:`,
+    taskTitle: `[BDC] ${vehicleDisplayName(vehicle)} callback`,
+    assignedDepartment: "bdc",
+    successCopy: "BDC callback task created."
+  });
 }
 
 async function startSalesDealTask() {
@@ -3879,24 +4130,15 @@ async function startSalesDealTask() {
     return;
   }
 
-  const detail = window.prompt(
-    "Sales deal notes",
-    "Quote status:\nTrade / appraisal notes:\nTest-drive or showroom plan:\nHandoff notes for F&I:"
-  );
-  if (detail === null) return;
-
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "sales",
-      title: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review`,
-      description: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Sales opportunity review queued."}`,
-      dueAt: toLocalDateInputValue(new Date())
-    });
-    setCustomer360ComposerStatus("Sales deal task created.", "success");
-  } catch (err) {
-    console.error("startSalesDealTask error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to create sales deal task.", "error");
-  }
+  openQuickWorkflowTaskModal({
+    title: "Create Sales Deal Task",
+    subtitle: "Queue the sales opportunity with deal desk, trade, and showroom details attached.",
+    promptLabel: "Deal notes",
+    defaultBody: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nQuote status:\nTrade / appraisal notes:\nTest-drive or showroom plan:\nHandoff notes for F&I:`,
+    taskTitle: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review`,
+    assignedDepartment: "sales",
+    successCopy: "Sales deal task created."
+  });
 }
 
 async function startFiReviewNote() {
@@ -3906,24 +4148,17 @@ async function startFiReviewNote() {
     setCustomer360ComposerStatus("Select a customer before adding an F&I note.", "error");
     return;
   }
-  const detail = window.prompt(
-    "F&I review",
-    "Menu products discussed:\nFunding status:\nWarranty notes:\nDelivery readiness:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[FI] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "F&I review added."}`
-    });
-    setCustomer360ComposerStatus("F&I note added.", "success");
-  } catch (err) {
-    console.error("startFiReviewNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add F&I note.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Add F&I Review",
+    subtitle: "Capture funding, menu, warranty, and delivery readiness in one note.",
+    promptLabel: "F&I review",
+    defaultBody: "Menu products discussed:\nFunding status:\nWarranty notes:\nDelivery readiness:",
+    prefix: "[FI] ",
+    successCopy: "F&I note added."
+  });
 }
 
-async function startDeliveryHandoffAppointment() {
+async function startDeliveryHandoffAppointment(payload = null) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   if (!customer) {
@@ -3931,24 +4166,29 @@ async function startDeliveryHandoffAppointment() {
     return;
   }
 
-  const date = window.prompt("Delivery date (YYYY-MM-DD)", getNextBusinessDateValue())?.trim();
-  if (date === null) return;
-  const time = window.prompt("Delivery time (HH:MM)", "15:00")?.trim();
-  if (time === null) return;
-  const notes = window.prompt(
-    "Delivery notes",
-    `Pickup readiness:\nFinal documents confirmed:\nDelivery specialist notes:\nCustomer celebration details:`
-  );
-  if (notes === null) return;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Delivery Appointment",
+      subtitle: "Schedule the delivery handoff with the required final-readiness details.",
+      submitLabel: "Create Delivery",
+      fields: [
+        { name: "date", label: "Delivery date", type: "date", required: true, value: getNextBusinessDateValue() },
+        { name: "time", label: "Delivery time", type: "text", required: true, value: "15:00" },
+        { name: "notes", label: "Delivery notes", type: "textarea", full: true, value: "Pickup readiness:\nFinal documents confirmed:\nDelivery specialist notes:\nCustomer celebration details:" }
+      ],
+      onSubmit: async (values) => startDeliveryHandoffAppointment({ ...values, __submit: true })
+    });
+    return;
+  }
 
   try {
     await createQuickAppointmentRecord({
       service: "Delivery",
       advisor: "Delivery Desk",
-      date,
-      time,
+      date: payload.date,
+      time: payload.time,
       transport: "pickup",
-      notes: `[DELIVERY] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${notes.trim() || "Delivery handoff booked."}`
+      notes: `[DELIVERY] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${String(payload.notes || "").trim() || "Delivery handoff booked."}`
     });
     setCustomer360ComposerStatus("Delivery appointment created.", "success");
   } catch (err) {
@@ -3964,21 +4204,14 @@ async function startVehicleHealthEventNote() {
     setCustomer360ComposerStatus("Select a customer before logging a vehicle event.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Vehicle health event",
-    "Battery state:\nMileage update:\nRecall / maintenance signal:\nRecommended next step:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Vehicle health event logged."}`
-    });
-    setCustomer360ComposerStatus("Vehicle health event added.", "success");
-  } catch (err) {
-    console.error("startVehicleHealthEventNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add vehicle health event.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Log Vehicle Health Event",
+    subtitle: "Capture the latest health signal on the VIN record.",
+    promptLabel: "Vehicle health event",
+    defaultBody: "Battery state:\nMileage update:\nRecall / maintenance signal:\nRecommended next step:",
+    prefix: "[VEHICLE] ",
+    successCopy: "Vehicle health event added."
+  });
 }
 
 async function startVinArchiveEntryNote() {
@@ -3988,21 +4221,14 @@ async function startVinArchiveEntryNote() {
     setCustomer360ComposerStatus("Select a customer before adding VIN archive evidence.", "error");
     return;
   }
-  const detail = window.prompt(
-    "VIN archive entry",
-    "File / media type:\nSource:\nNotes:\nLinked department:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "VIN archive entry added."}`
-    });
-    setCustomer360ComposerStatus("VIN archive note added.", "success");
-  } catch (err) {
-    console.error("startVinArchiveEntryNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add VIN archive note.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Add VIN Archive Entry",
+    subtitle: "Attach VIN evidence and archive context to the customer record.",
+    promptLabel: "VIN archive entry",
+    defaultBody: "File / media type:\nSource:\nNotes:\nLinked department:",
+    prefix: "[ARCHIVE] ",
+    successCopy: "VIN archive note added."
+  });
 }
 
 async function startLoanerTask() {
@@ -4012,23 +4238,15 @@ async function startLoanerTask() {
     setCustomer360ComposerStatus("Select a customer before creating a loaner task.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Loaner / transport workflow",
-    "Transportation need:\nLoaner approved:\nPickup / return notes:\nAdvisor follow-up:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "service",
-      title: `[SERVICE] ${vehicleDisplayName(vehicle)} loaner coordination`,
-      description: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Loaner coordination queued."}`,
-      dueAt: toLocalDateInputValue(new Date())
-    });
-    setCustomer360ComposerStatus("Loaner task created.", "success");
-  } catch (err) {
-    console.error("startLoanerTask error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to create loaner task.", "error");
-  }
+  openQuickWorkflowTaskModal({
+    title: "Create Loaner / Transport Task",
+    subtitle: "Create the transportation workflow with the customer-facing details required by the advisor desk.",
+    promptLabel: "Transportation details",
+    defaultBody: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nTransportation need:\nLoaner approved:\nPickup / return notes:\nAdvisor follow-up:`,
+    taskTitle: `[SERVICE] ${vehicleDisplayName(vehicle)} loaner coordination`,
+    assignedDepartment: "service",
+    successCopy: "Loaner task created."
+  });
 }
 
 async function startVehicleGeoMovementNote() {
@@ -4038,21 +4256,14 @@ async function startVehicleGeoMovementNote() {
     setCustomer360ComposerStatus("Select a customer before logging vehicle movement.", "error");
     return;
   }
-  const detail = window.prompt(
-    "Vehicle movement",
-    "Current zone:\nNext destination:\nDispatch or lane note:\nResponsible team:"
-  );
-  if (detail === null) return;
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Vehicle movement logged."}`
-    });
-    setCustomer360ComposerStatus("Vehicle movement note added.", "success");
-  } catch (err) {
-    console.error("startVehicleGeoMovementNote error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to add vehicle movement note.", "error");
-  }
+  openQuickWorkflowNoteModal({
+    title: "Log Vehicle Movement",
+    subtitle: "Track where the vehicle is moving across lane, shop, transport, or delivery.",
+    promptLabel: "Movement details",
+    defaultBody: "Current zone:\nNext destination:\nDispatch or lane note:\nResponsible team:",
+    prefix: "[VEHICLE] ",
+    successCopy: "Vehicle movement note added."
+  });
 }
 
 function hasKeywordMatch(items = [], keywords = []) {
@@ -4781,26 +4992,35 @@ function getDepartmentCreateActions(lens = "home") {
   return createMap[lens] || createMap.home;
 }
 
-async function startCreateCustomerRecord() {
-  const firstName = window.prompt("Customer first name", "")?.trim();
-  if (firstName === null) return;
-  const lastName = window.prompt("Customer last name", "")?.trim();
-  if (lastName === null) return;
-  const primaryPhone = window.prompt("Primary phone", "")?.trim();
-  if (primaryPhone === null) return;
-  const email = window.prompt("Email", "")?.trim();
-  if (email === null) return;
+async function startCreateCustomerRecord(payload = null) {
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Customer",
+      subtitle: "Add the customer record before scheduling appointments, writing up service, or opening an RO.",
+      submitLabel: "Create Customer",
+      contextHtml: "",
+      fields: [
+        { name: "firstName", label: "First name", type: "text", required: true, value: "" },
+        { name: "lastName", label: "Last name", type: "text", required: true, value: "" },
+        { name: "primaryPhone", label: "Primary phone", type: "text", required: true, value: "" },
+        { name: "email", label: "Email", type: "email", value: "" },
+        { name: "preferredLanguage", label: "Language", type: "select", value: "English", options: ["English", "French"] }
+      ],
+      onSubmit: async (values) => startCreateCustomerRecord({ ...values, __submit: true })
+    });
+    return;
+  }
 
   try {
     const res = await fetch("/.netlify/functions/customers-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        firstName,
-        lastName,
-        primaryPhone,
-        email,
-        preferredLanguage: "English"
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        primaryPhone: payload.primaryPhone,
+        email: payload.email || "",
+        preferredLanguage: payload.preferredLanguage || "English"
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -4814,25 +5034,30 @@ async function startCreateCustomerRecord() {
   }
 }
 
-async function startCreateVehicleRecord() {
+async function startCreateVehicleRecord(payload = null) {
   const customer = getSelectedCustomerRecord();
   if (!customer) {
     setCustomer360ComposerStatus("Select or create a customer before adding a vehicle.", "error");
     return;
   }
 
-  const vin = window.prompt("VIN", "")?.trim();
-  if (vin === null) return;
-  const yearRaw = window.prompt("Year", "")?.trim();
-  if (yearRaw === null) return;
-  const make = window.prompt("Make", "")?.trim();
-  if (make === null) return;
-  const model = window.prompt("Model", "")?.trim();
-  if (model === null) return;
-  const trim = window.prompt("Trim", "")?.trim();
-  if (trim === null) return;
-  const mileageRaw = window.prompt("Mileage", "")?.trim();
-  if (mileageRaw === null) return;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: "Create Vehicle",
+      subtitle: "Attach the vehicle to the selected customer before booking service or opening the RO.",
+      submitLabel: "Create Vehicle",
+      fields: [
+        { name: "vin", label: "VIN", type: "text", required: true, value: "" },
+        { name: "year", label: "Year", type: "number", required: true, value: "" },
+        { name: "make", label: "Make", type: "text", required: true, value: "" },
+        { name: "model", label: "Model", type: "text", required: true, value: "" },
+        { name: "trim", label: "Trim", type: "text", value: "" },
+        { name: "mileage", label: "Mileage", type: "number", value: "", min: 0 }
+      ],
+      onSubmit: async (values) => startCreateVehicleRecord({ ...values, __submit: true })
+    });
+    return;
+  }
 
   try {
     const res = await fetch("/.netlify/functions/vehicles-create", {
@@ -4840,12 +5065,12 @@ async function startCreateVehicleRecord() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         customerId: customer.id,
-        vin,
-        year: yearRaw ? Number(yearRaw) : null,
-        make,
-        model,
-        trim,
-        mileage: mileageRaw ? Number(mileageRaw) : null
+        vin: payload.vin,
+        year: payload.year ? Number(payload.year) : null,
+        make: payload.make,
+        model: payload.model,
+        trim: payload.trim || "",
+        mileage: payload.mileage ? Number(payload.mileage) : null
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -4858,30 +5083,37 @@ async function startCreateVehicleRecord() {
   }
 }
 
-function startDepartmentAppointmentCreate() {
+function startDepartmentAppointmentCreate(payload = null) {
   if (!getSelectedCustomerRecord()) {
     setCustomer360ComposerStatus("Select or create a customer before scheduling an appointment.", "error");
     return;
   }
   const defaultService = getDefaultQuickAppointmentService();
-  const service = window.prompt("Appointment type", defaultService)?.trim();
-  if (service === null) return;
-  const date = window.prompt("Appointment date (YYYY-MM-DD)", getNextBusinessDateValue())?.trim();
-  if (date === null) return;
-  const time = window.prompt("Appointment time (HH:MM)", "10:00")?.trim();
-  if (time === null) return;
-  const advisor = window.prompt("Advisor", currentDepartmentLens === "sales" ? "Sales Desk" : "Rachel Smith")?.trim();
-  if (advisor === null) return;
-  const notes = window.prompt("Notes", "")?.trim();
-  if (notes === null) return;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      title: currentDepartmentLens === "sales" ? "Create Visit" : "Create Appointment",
+      subtitle: "Book the next customer commitment with the advisor and transport details required to submit.",
+      submitLabel: currentDepartmentLens === "sales" ? "Create Visit" : "Book Appointment",
+      fields: [
+        { name: "service", label: currentDepartmentLens === "sales" ? "Visit type" : "Appointment type", type: "text", required: true, value: defaultService },
+        { name: "advisor", label: "Assigned advisor", type: "text", required: true, value: getDefaultAdvisorForLens() },
+        { name: "date", label: "Date", type: "date", required: true, value: getNextBusinessDateValue() },
+        { name: "time", label: "Time", type: "text", required: true, value: "10:00", placeholder: "10:00" },
+        { name: "transport", label: "Transport", type: "select", value: currentDepartmentLens === "sales" ? "dropoff" : "", options: ["", "dropoff", "waiter", "shuttle", "loaner"] },
+        { name: "notes", label: "Notes", type: "textarea", full: true, value: "" }
+      ],
+      onSubmit: async (values) => startDepartmentAppointmentCreate({ ...values, __submit: true })
+    });
+    return;
+  }
 
   createQuickAppointmentRecord({
-    service: service || defaultService,
-    advisor: advisor || (currentDepartmentLens === "sales" ? "Sales Desk" : "Rachel Smith"),
-    date,
-    time,
-    transport: currentDepartmentLens === "sales" ? "dropoff" : "",
-    notes: notes || `${service || defaultService} created from ${titleCase(currentDepartmentLens)} dashboard.`
+    service: payload.service || defaultService,
+    advisor: payload.advisor || getDefaultAdvisorForLens(),
+    date: payload.date,
+    time: payload.time,
+    transport: payload.transport || "",
+    notes: payload.notes || `${payload.service || defaultService} created from ${titleCase(currentDepartmentLens)} dashboard.`
   })
     .then(() => setCustomer360ComposerStatus("Appointment created.", "success"))
     .catch((err) => {
@@ -10152,6 +10384,15 @@ function closeComposeSmsModal() {
   if (modal) modal.style.display = "none";
 }
 
+function initDmsActionModal() {
+  document.getElementById("closeDmsActionModalBtn")?.addEventListener("click", closeDmsActionModal);
+  document.getElementById("cancelDmsActionModalBtn")?.addEventListener("click", closeDmsActionModal);
+  document.getElementById("dmsActionModalSubmit")?.addEventListener("click", submitDmsActionModal);
+  document.getElementById("dmsActionModal")?.addEventListener("click", (event) => {
+    if (event.target?.id === "dmsActionModal") closeDmsActionModal();
+  });
+}
+
 function selectComposeCustomer(phone) {
   const phoneInput = document.getElementById("composePhoneNumber");
   const results = document.getElementById("composeSearchResults");
@@ -11831,6 +12072,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initCommsDock();
   initDepartmentMenu();
   initPhoneLinkRouting();
+  initDmsActionModal();
   wireCustomer360Dock();
   setDepartmentLens("home");
 

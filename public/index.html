@@ -715,12 +715,31 @@
     .customer360-archive-item span{display:block;color:#9eb2d2;font-size:12px;margin-top:4px}
     .customer360-archive-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#22304b;color:#b7d1ff;font-size:16px;flex:0 0 auto}
     .customer360-archive-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .dms-action-modal{display:none;position:fixed;inset:0;background:rgba(8,12,20,.58);z-index:10001;align-items:center;justify-content:center;padding:24px}
+    .dms-action-modal-window{width:min(920px,94vw);max-height:90vh;overflow:auto;border-radius:20px;background:linear-gradient(180deg,#f8fbff 0%,#eef4fb 100%);box-shadow:0 28px 80px rgba(0,0,0,.32);border:1px solid rgba(26,39,64,.08)}
+    .dms-action-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 22px;border-bottom:1px solid #d8e3f0;background:linear-gradient(180deg,#ffffff 0%,#f5f9ff 100%)}
+    .dms-action-modal-head h3{margin:0;color:#122033;font-size:24px}
+    .dms-action-modal-head p{margin:6px 0 0;color:#5d728d;font-size:14px;line-height:1.5}
+    .dms-action-modal-context{display:flex;gap:8px;flex-wrap:wrap;padding:14px 22px 0}
+    .dms-action-modal-context span{display:inline-grid;gap:4px;padding:10px 12px;border-radius:12px;background:#eaf1fb;color:#2a3c56;font-size:12px;font-weight:700}
+    .dms-action-modal-context strong{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#56729a}
+    .dms-action-modal-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:18px 22px 10px}
+    .dms-action-modal-field{display:grid;gap:6px}
+    .dms-action-modal-field.full{grid-column:1/-1}
+    .dms-action-modal-field span{font-size:12px;font-weight:800;color:#20324e}
+    .dms-action-modal-field .required{color:#c53030}
+    .dms-action-modal-field input,.dms-action-modal-field select,.dms-action-modal-field textarea{width:100%;border:1px solid #c9d7e8;border-radius:12px;background:#fff;color:#15253a;padding:12px 13px;font-size:14px;box-sizing:border-box}
+    .dms-action-modal-field textarea{min-height:110px;resize:vertical}
+    .dms-action-modal-field small{font-size:11px;line-height:1.45;color:#68809e}
+    .dms-action-modal-section-title{grid-column:1/-1;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#6780a3;padding-top:2px}
+    .dms-action-modal-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 22px 22px}
+    .dms-action-modal-status{font-size:13px;color:#b42318;min-height:18px}
 
     @media (max-width: 1200px){
       .cards4{grid-template-columns:repeat(3,1fr)}
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
-      .customer360-layout,.customer360-main-grid,.customer360-lower-grid,.customer360-record-strip,.service-advisor-header,.service-advisor-signal-row,.service-advisor-next-grid,.service-advisor-financial-grid,.service-advisor-feed-summary-grid{grid-template-columns:1fr}
+      .customer360-layout,.customer360-main-grid,.customer360-lower-grid,.customer360-record-strip,.service-advisor-header,.service-advisor-signal-row,.service-advisor-next-grid,.service-advisor-financial-grid,.service-advisor-feed-summary-grid,.dms-action-modal-body{grid-template-columns:1fr}
       .customer360-stack,.customer360-department-hub .customer360-role-tool-grid,.customer360-dashboard-grid,.customer360-department-queue-grid{grid-template-columns:1fr}
       .customer360-department-queue-head{align-items:flex-start;flex-direction:column}
       .customer360-department-queue-filters{justify-content:flex-start;width:100%}
@@ -1697,6 +1716,27 @@
               <button id="sendComposeSmsBtn">Send</button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dmsActionModal" class="dms-action-modal">
+    <div class="dms-action-modal-window">
+      <div class="dms-action-modal-head">
+        <div>
+          <h3 id="dmsActionModalTitle">Create Record</h3>
+          <p id="dmsActionModalSubtitle">Fill in the required DMS fields to continue.</p>
+        </div>
+        <button id="closeDmsActionModalBtn" class="secondary" type="button">Close</button>
+      </div>
+      <div id="dmsActionModalContext" class="dms-action-modal-context"></div>
+      <div id="dmsActionModalBody" class="dms-action-modal-body"></div>
+      <div class="dms-action-modal-footer">
+        <div id="dmsActionModalStatus" class="dms-action-modal-status"></div>
+        <div style="display:flex;gap:8px;">
+          <button id="cancelDmsActionModalBtn" class="secondary" type="button">Cancel</button>
+          <button id="dmsActionModalSubmit" type="button">Save</button>
         </div>
       </div>
     </div>
