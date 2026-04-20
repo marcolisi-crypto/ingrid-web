@@ -2052,6 +2052,29 @@ async function createQuickTaskRecord({ assignedDepartment = currentDepartmentLen
   return data;
 }
 
+async function createQuickNoteRecord({ noteType = "internal", body = "" } = {}) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer) throw new Error("Select a customer before creating a note.");
+
+  const res = await fetch("/.netlify/functions/notes-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      noteType,
+      body
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to create note");
+  await refreshSelectedCustomer360();
+  renderCustomer360();
+  return data;
+}
+
 async function createQuickAppointmentRecord({ service = "", advisor = "", date = "", time = "", transport = "", notes = "" } = {}) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -2091,64 +2114,154 @@ async function createQuickAppointmentRecord({ service = "", advisor = "", date =
   return data;
 }
 
-function startTechnicianInspectionNote() {
+async function startTechnicianInspectionNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[TECHNICIAN] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInspection finding:\n- \nRecommended action:\n- \nMedia captured:\n- `,
-    status: "Inspection note template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before logging a technician finding.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Technician finding",
+    "Inspection finding:\nRecommended action:\nMedia captured:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[TECHNICIAN] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Technician finding recorded."}`
+    });
+    setCustomer360ComposerStatus("Technician finding added.", "success");
+  } catch (err) {
+    console.error("startTechnicianInspectionNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add technician finding.", "error");
+  }
 }
 
-function createTechnicianPartsRequest() {
+async function createTechnicianPartsRequest() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
-    title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} parts request` : `[PARTS] ${customerDisplayName(customer)} parts request`,
-    body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nPart needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Parts request task template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before creating a parts request.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Parts request",
+    "Part needed:\nVIN match checked:\nDelivery target:\nSend to: Technician bay / runner"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "parts",
+      title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} parts request` : `[PARTS] ${customerDisplayName(customer)} parts request`,
+      description: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Parts request queued."}`,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    setCustomer360ComposerStatus("Parts request task created.", "success");
+  } catch (err) {
+    console.error("createTechnicianPartsRequest error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create parts request.", "error");
+  }
 }
 
-function createPartsPickTask() {
+async function createPartsPickTask() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
-    title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} stock pull` : `[PARTS] ${customerDisplayName(customer)} stock pull`,
-    body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nRequested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Parts pick task template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before creating a parts task.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Parts pick task",
+    "Requested part / SKU:\nFitment checked:\nSource: Stock / Transfer / Special order\nDelivery route: Counter / Bay / Runner"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "parts",
+      title: vehicle ? `[PARTS] ${vehicleDisplayName(vehicle)} stock pull` : `[PARTS] ${customerDisplayName(customer)} stock pull`,
+      description: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Parts pick task queued."}`,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    setCustomer360ComposerStatus("Parts task created.", "success");
+  } catch (err) {
+    console.error("createPartsPickTask error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create parts task.", "error");
+  }
 }
 
-function startPartsEtaNote() {
+async function startPartsEtaNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nParts ETA update:\n- Source:\n- ETA:\n- Runner / delivery notes:\n- `,
-    status: "Parts ETA note template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before logging parts ETA.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Parts ETA note",
+    "Source:\nETA:\nRunner / delivery notes:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[PARTS] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Parts ETA logged."}`
+    });
+    setCustomer360ComposerStatus("Parts ETA note added.", "success");
+  } catch (err) {
+    console.error("startPartsEtaNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to log parts ETA.", "error");
+  }
 }
 
-function queueAccountingInvoiceReview() {
+async function queueAccountingInvoiceReview() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
-    title: vehicle ? `[ACCOUNTING] ${vehicleDisplayName(vehicle)} invoice review` : `[ACCOUNTING] ${customerDisplayName(customer)} invoice review`,
-    body: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nInvoice review:\n- Charges validated:\n- Payment request:\n- Statement status:\n- Reconciliation notes:`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Invoice review task template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before queuing accounting review.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Accounting review",
+    "Charges validated:\nPayment request:\nStatement status:\nReconciliation notes:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "accounting",
+      title: vehicle ? `[ACCOUNTING] ${vehicleDisplayName(vehicle)} invoice review` : `[ACCOUNTING] ${customerDisplayName(customer)} invoice review`,
+      description: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Accounting review queued."}`,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    setCustomer360ComposerStatus("Accounting review task created.", "success");
+  } catch (err) {
+    console.error("queueAccountingInvoiceReview error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to queue accounting review.", "error");
+  }
 }
 
-function startLedgerNote() {
+async function startLedgerNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLedger note:\n- Payment status:\n- Statement update:\n- Refund / credit notes:\n- Reconciliation comment:`,
-    status: "Ledger note template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before adding a ledger note.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Ledger note",
+    "Payment status:\nStatement update:\nRefund / credit notes:\nReconciliation comment:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ACCOUNTING] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Ledger note added."}`
+    });
+    setCustomer360ComposerStatus("Ledger note added.", "success");
+  } catch (err) {
+    console.error("startLedgerNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add ledger note.", "error");
+  }
 }
 
 function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehicle) {
@@ -3011,13 +3124,28 @@ async function captureTechnicianMedia(contextType = "repair_order", preferredMed
   input.click();
 }
 
-function startAdvisorJourneyNote() {
+async function startAdvisorJourneyNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nAdvisor follow-up:\n- Concern verified:\n- Next action for technician:\n- Customer expectation:`,
-    status: "Advisor note template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before adding an advisor note.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Advisor follow-up",
+    "Concern verified:\nNext action for technician:\nCustomer expectation:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Advisor follow-up added."}`
+    });
+    setCustomer360ComposerStatus("Advisor note added.", "success");
+  } catch (err) {
+    console.error("startAdvisorJourneyNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add advisor note.", "error");
+  }
 }
 
 async function startBdcCallbackTask() {
@@ -3076,13 +3204,28 @@ async function startSalesDealTask() {
   }
 }
 
-function startFiReviewNote() {
+async function startFiReviewNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[FI] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFinance / funding review:\n- Menu products discussed:\n- Funding status:\n- Warranty notes:\n- Delivery readiness:`,
-    status: "F&I review template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before adding an F&I note.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "F&I review",
+    "Menu products discussed:\nFunding status:\nWarranty notes:\nDelivery readiness:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[FI] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "F&I review added."}`
+    });
+    setCustomer360ComposerStatus("F&I note added.", "success");
+  } catch (err) {
+    console.error("startFiReviewNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add F&I note.", "error");
+  }
 }
 
 async function startDeliveryHandoffAppointment() {
@@ -3119,42 +3262,102 @@ async function startDeliveryHandoffAppointment() {
   }
 }
 
-function startVehicleHealthEventNote() {
+async function startVehicleHealthEventNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nVehicle health event:\n- Battery state:\n- Mileage update:\n- Recall / maintenance signal:\n- Recommended next step:`,
-    status: "Vehicle health event template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before logging a vehicle event.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Vehicle health event",
+    "Battery state:\nMileage update:\nRecall / maintenance signal:\nRecommended next step:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Vehicle health event logged."}`
+    });
+    setCustomer360ComposerStatus("Vehicle health event added.", "success");
+  } catch (err) {
+    console.error("startVehicleHealthEventNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add vehicle health event.", "error");
+  }
 }
 
-function startVinArchiveEntryNote() {
+async function startVinArchiveEntryNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nVIN archive entry:\n- File / media type:\n- Source:\n- Notes:\n- Linked department:`,
-    status: "VIN archive entry template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before adding VIN archive evidence.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "VIN archive entry",
+    "File / media type:\nSource:\nNotes:\nLinked department:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "VIN archive entry added."}`
+    });
+    setCustomer360ComposerStatus("VIN archive note added.", "success");
+  } catch (err) {
+    console.error("startVinArchiveEntryNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add VIN archive note.", "error");
+  }
 }
 
-function startLoanerTask() {
+async function startLoanerTask() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
-    title: `[SERVICE] ${vehicleDisplayName(vehicle)} loaner coordination`,
-    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLoaner / transport workflow:\n- Transportation need:\n- Loaner approved:\n- Pickup / return notes:\n- Advisor follow-up:`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Loaner coordination task template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before creating a loaner task.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Loaner / transport workflow",
+    "Transportation need:\nLoaner approved:\nPickup / return notes:\nAdvisor follow-up:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "service",
+      title: `[SERVICE] ${vehicleDisplayName(vehicle)} loaner coordination`,
+      description: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Loaner coordination queued."}`,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    setCustomer360ComposerStatus("Loaner task created.", "success");
+  } catch (err) {
+    console.error("startLoanerTask error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create loaner task.", "error");
+  }
 }
 
-function startVehicleGeoMovementNote() {
+async function startVehicleGeoMovementNote() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("note", {
-    body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nGeo / movement update:\n- Current zone:\n- Next destination:\n- Dispatch or lane note:\n- Responsible team:`,
-    status: "Vehicle movement note template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before logging vehicle movement.", "error");
+    return;
+  }
+  const detail = window.prompt(
+    "Vehicle movement",
+    "Current zone:\nNext destination:\nDispatch or lane note:\nResponsible team:"
+  );
+  if (detail === null) return;
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[VEHICLE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Vehicle movement logged."}`
+    });
+    setCustomer360ComposerStatus("Vehicle movement note added.", "success");
+  } catch (err) {
+    console.error("startVehicleGeoMovementNote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to add vehicle movement note.", "error");
+  }
 }
 
 function hasKeywordMatch(items = [], keywords = []) {
