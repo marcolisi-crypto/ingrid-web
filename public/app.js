@@ -2138,6 +2138,27 @@ function getModalContextMarkup() {
   `;
 }
 
+function renderDmsActionSummaryCards(items = []) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return items.map((item) => `
+    <div class="dms-action-modal-summary-card">
+      <small>${escapeHtml(item.label || "")}</small>
+      <strong>${escapeHtml(item.value || "—")}</strong>
+      <span>${escapeHtml(item.detail || "")}</span>
+    </div>
+  `).join("");
+}
+
+function renderDmsActionNotes(items = []) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return items.map((item) => `
+    <div class="dms-action-modal-note">
+      <strong>${escapeHtml(item.label || "Desk note")}</strong>
+      ${escapeHtml(item.body || "")}
+    </div>
+  `).join("");
+}
+
 function renderDmsActionField(field = {}) {
   if (field.type === "section") {
     return `<div class="dms-action-modal-section-title">${escapeHtml(field.label || "")}</div>`;
@@ -2175,17 +2196,27 @@ function renderDmsActionField(field = {}) {
 
 function renderDmsActionModal(config = {}) {
   const modal = document.getElementById("dmsActionModal");
+  const windowEl = document.getElementById("dmsActionModalWindow");
+  const eyebrow = document.getElementById("dmsActionModalEyebrow");
   const title = document.getElementById("dmsActionModalTitle");
   const subtitle = document.getElementById("dmsActionModalSubtitle");
   const context = document.getElementById("dmsActionModalContext");
+  const summary = document.getElementById("dmsActionModalSummary");
+  const notes = document.getElementById("dmsActionModalNotes");
   const body = document.getElementById("dmsActionModalBody");
   const status = document.getElementById("dmsActionModalStatus");
   const submit = document.getElementById("dmsActionModalSubmit");
-  if (!modal || !title || !subtitle || !context || !body || !status || !submit) return;
+  if (!modal || !windowEl || !eyebrow || !title || !subtitle || !context || !summary || !notes || !body || !status || !submit) return;
 
+  windowEl.className = `dms-action-modal-window ${escapeHtml(config.theme || "")}`.trim();
+  eyebrow.textContent = config.eyebrow || "DMS Action";
   title.textContent = config.title || "Create Record";
   subtitle.textContent = config.subtitle || "";
   context.innerHTML = config.contextHtml || getModalContextMarkup();
+  summary.innerHTML = renderDmsActionSummaryCards(config.summaryItems || []);
+  summary.style.display = summary.innerHTML ? "grid" : "none";
+  notes.innerHTML = renderDmsActionNotes(config.notes || []);
+  notes.style.display = notes.innerHTML ? "block" : "none";
   body.innerHTML = (config.fields || []).map((field) => renderDmsActionField(field)).join("");
   status.textContent = "";
   submit.textContent = config.submitLabel || "Save";
@@ -2245,10 +2276,17 @@ async function submitDmsActionModal() {
 }
 
 function openQuickWorkflowNoteModal({ title = "Add Note", subtitle = "", promptLabel = "Details", defaultBody = "", noteType = "internal", prefix = "", successCopy = "Note added." } = {}) {
+  const noteTheme = ["service", "parts", "accounting", "sales", "bdc", "fi"].includes(currentDepartmentLens) ? (currentDepartmentLens === "sales" || currentDepartmentLens === "bdc" || currentDepartmentLens === "fi" ? "crm" : currentDepartmentLens) : "operations";
   openDmsActionModal({
+    theme: noteTheme,
+    eyebrow: `${titleCase(currentDepartmentLens || "home")} Notes`,
     title,
     subtitle,
     submitLabel: "Save Note",
+    summaryItems: [
+      { label: "Customer", value: customerDisplayName(getSelectedCustomerRecord()), detail: vehicleDisplayName(getSelectedVehicleRecord()) || "No vehicle attached" },
+      { label: "Record type", value: "Internal note", detail: "Saved into the shared timeline for this customer." }
+    ],
     fields: [
       { name: "body", label: promptLabel, type: "textarea", required: true, full: true, value: defaultBody }
     ],
@@ -2266,13 +2304,22 @@ function openQuickWorkflowNoteModal({ title = "Add Note", subtitle = "", promptL
 }
 
 function openQuickWorkflowTaskModal({ title = "Create Task", subtitle = "", promptLabel = "Details", defaultBody = "", taskTitle = "Task", assignedDepartment = currentDepartmentLens, dueAt = toLocalDateInputValue(new Date()), successCopy = "Task created." } = {}) {
+  const taskTheme = assignedDepartment === "accounting" ? "accounting" : assignedDepartment === "parts" ? "parts" : assignedDepartment === "service" ? "service" : ["sales", "bdc", "fi"].includes(assignedDepartment) ? "crm" : "operations";
   openDmsActionModal({
+    theme: taskTheme,
+    eyebrow: `${titleCase(assignedDepartment || currentDepartmentLens || "home")} Queue`,
     title,
     subtitle,
     submitLabel: "Create Task",
+    summaryItems: [
+      { label: "Assigned department", value: titleCase(assignedDepartment || "Unassigned"), detail: "Task will appear in that team’s live queue." },
+      { label: "Customer", value: customerDisplayName(getSelectedCustomerRecord()), detail: vehicleDisplayName(getSelectedVehicleRecord()) || "No vehicle attached" }
+    ],
     fields: [
+      { type: "section", label: "Task setup" },
       { name: "taskTitle", label: "Task title", type: "text", required: true, value: taskTitle },
       { name: "body", label: promptLabel, type: "textarea", required: true, full: true, value: defaultBody },
+      { type: "section", label: "Due date" },
       { name: "dueAt", label: "Due date", type: "date", value: dueAt }
     ],
     onSubmit: async (values) => {
@@ -3141,14 +3188,27 @@ async function startServiceReceptionCreate(payload = null) {
 
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "service",
+      eyebrow: "Service Advisor Desk",
       title: "Create Service Write-Up",
       subtitle: "Capture the advisor intake details before opening the repair order.",
       submitLabel: "Create Write-Up",
+      summaryItems: [
+        { label: "Customer", value: customerDisplayName(customer), detail: customer?.primaryPhone || customer?.phone || "Customer profile attached" },
+        { label: "Vehicle", value: vehicleDisplayName(vehicle), detail: vehicle?.vin || "VIN can be added later" },
+        { label: "Appointment", value: nextAppointment?.service || "Walk-in write-up", detail: nextAppointment?.date ? `${nextAppointment.date} • ${nextAppointment.time || "Time pending"}` : "No appointment linked yet" }
+      ],
+      notes: [
+        { label: "Advisor workflow", body: "Use this write-up to capture the concern, mileage-in, and transportation needs before converting the visit into a live RO." }
+      ],
       fields: [
+        { type: "section", label: "Customer concern" },
         { name: "concern", label: "Customer concern", type: "textarea", required: true, full: true, value: nextAppointment?.service || "Customer concern captured from advisor write-up" },
+        { type: "section", label: "Arrival details" },
         { name: "advisor", label: "Advisor", type: "text", required: true, value: nextAppointment?.advisor || getDefaultAdvisorForLens() },
         { name: "odometerIn", label: "Mileage in", type: "number", value: vehicle?.mileage ? String(vehicle.mileage) : "", min: 0 },
         { name: "transportOption", label: "Transport", type: "select", value: nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
+        { type: "section", label: "Advisor notes" },
         { name: "notes", label: "Write-up notes", type: "textarea", full: true, value: nextAppointment?.notes || "" }
       ],
       onSubmit: async (values) => startServiceReceptionCreate({ ...values, __submit: true })
@@ -3202,16 +3262,30 @@ async function openRepairOrderFrom360(payload = null) {
 
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "service",
+      eyebrow: "Repair Order Control",
       title: serviceReception ? "Open Repair Order from Write-Up" : "Open Repair Order",
       subtitle: "Confirm the advisor, complaint, odometer, and promise before creating the live RO.",
       submitLabel: "Create RO",
+      summaryItems: [
+        { label: "Write-Up", value: serviceReception?.receptionNumber || "No write-up linked", detail: serviceReception ? "Advisor intake is ready to convert." : "RO will be created directly from the customer record." },
+        { label: "Vehicle", value: vehicleDisplayName(vehicle), detail: vehicle?.vin || "VIN pending" },
+        { label: "Promise", value: nextAppointment?.date || "No promise set", detail: nextAppointment?.time || "Use the fields below to set the promised time." }
+      ],
+      notes: [
+        { label: "RO creation", body: "This is the main advisor control point. Once saved, the RO becomes the live working object for service, technician, parts, and accounting." }
+      ],
       fields: [
+        { type: "section", label: "RO header" },
         { name: "advisor", label: "Advisor", type: "text", required: true, value: serviceReception?.advisor || nextAppointment?.advisor || getDefaultAdvisorForLens() },
         { name: "complaint", label: "Complaint / concern", type: "textarea", required: true, full: true, value: serviceReception?.concern || nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from service lane" },
+        { type: "section", label: "Vehicle arrival" },
         { name: "odometerIn", label: "Mileage in", type: "number", value: serviceReception?.odometerIn ?? vehicle?.mileage ?? "", min: 0 },
         { name: "transportOption", label: "Transport", type: "select", value: serviceReception?.transportOption || nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
+        { type: "section", label: "Promise details" },
         { name: "promiseAtDate", label: "Promised date", type: "date", value: nextAppointment?.date || "" },
         { name: "promiseAtTime", label: "Promised time", type: "text", value: nextAppointment?.time || "", placeholder: "4:30 PM" },
+        { type: "section", label: "Advisor notes" },
         { name: "notes", label: "Advisor notes", type: "textarea", full: true, value: serviceReception?.notes || nextAppointment?.notes || "" }
       ],
       onSubmit: async (values) => openRepairOrderFrom360({ ...values, __submit: true })
@@ -3330,12 +3404,24 @@ async function createServiceQuote(payload = null) {
 
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "service",
+      eyebrow: "Service Quoting",
       title: "Create Service Quote",
       subtitle: "Add labor or diagnostic work to the live repair order.",
       submitLabel: "Create Quote",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Service labor will be added to this RO." },
+        { label: "Current total", value: formatMoney(getRepairOrderAmounts(repairOrder).estimate), detail: "Existing estimate before this quote line." },
+        { label: "Pay type", value: "Customer pay", detail: "Use warranty claims and splits separately when needed." }
+      ],
+      notes: [
+        { label: "Advisor quote", body: "Use service quotes for labor, diagnostics, and recommended maintenance that still needs customer approval." }
+      ],
       fields: [
+        { type: "section", label: "Operation" },
         { name: "opCode", label: "Operation code", type: "text", required: true, value: "DIAG" },
         { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Diagnostic inspection and advisor estimate" },
+        { type: "section", label: "Pricing" },
         { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 0.1 },
         { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "149", min: 0, step: 0.01 },
         { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "pending", "approved", "declined"] }
@@ -3412,12 +3498,24 @@ async function createPartsQuote(payload = null) {
 
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Parts Counter",
       title: "Create Parts Quote",
       subtitle: "Quote the parts needed against the active repair order.",
       submitLabel: "Create Parts Quote",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Parts quote will be attached to this RO." },
+        { label: "Current parts value", value: formatMoney(getRepairOrderAmounts(repairOrder).parts), detail: "Live parts total before this new line." },
+        { label: "Sourcing posture", value: "Counter review", detail: "Use stock, OEM, aftermarket, or transfer below." }
+      ],
+      notes: [
+        { label: "Parts quote", body: "Use this window when the counter is quoting parts for approval before the item becomes a stocked line or special order." }
+      ],
       fields: [
+        { type: "section", label: "Part details" },
         { name: "partNumber", label: "Part number", type: "text", required: true, value: "PART-REQ" },
         { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Requested service part" },
+        { type: "section", label: "Pricing and source" },
         { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 1 },
         { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "source", label: "Source", type: "select", value: "stock", options: ["stock", "oem", "aftermarket", "transfer"] },
@@ -3653,13 +3751,25 @@ async function createSpecialPartOrder(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Special Order Desk",
       title: "Create Special Order",
       subtitle: "Open an OEM or aftermarket special order tied to the current job.",
       submitLabel: "Place Order",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder?.repairOrderNumber || "No RO linked", detail: repairOrder ? "Order will be tracked against the active service job." : "Special order can still be created without an active RO." },
+        { label: "Order type", value: "Special order", detail: "Use stock order or transfer when the part is not customer-specific." },
+        { label: "Fulfillment", value: "Counter to bay", detail: "ETA and arrival can be tracked after ordering." }
+      ],
+      notes: [
+        { label: "Parts sourcing", body: "Use this for VIN-specific or customer-approved items that need vendor ordering, ETA tracking, and parts counter follow-through." }
+      ],
       fields: [
+        { type: "section", label: "Part sourcing" },
         { name: "partNumber", label: "Part number", type: "text", required: true, value: "OEM-SO-001" },
         { name: "vendor", label: "Vendor", type: "text", required: true, value: "OEM" },
         { name: "orderType", label: "Order type", type: "select", value: "special_order", options: ["special_order", "stock_order", "transfer"] },
+        { type: "section", label: "Order values" },
         { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 1, step: 1 },
         { name: "unitCost", label: "Unit cost", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "etaDate", label: "ETA date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 3)) },
@@ -3700,12 +3810,24 @@ async function createAccountsPayableBill(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Accounts Payable",
       title: "Create AP Bill",
       subtitle: "Create a vendor payable tied to the current service job.",
       submitLabel: "Create AP Bill",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder?.repairOrderNumber || "No RO linked", detail: repairOrder ? "Vendor bill will stay attached to this service job." : "AP can still be created without an RO." },
+        { label: "Profit centre", value: "Service / Parts", detail: "Use this bill for supplier cost tied to the active repair order." },
+        { label: "Posting posture", value: "Open payable", detail: "Bill will enter AP aging after creation." }
+      ],
+      notes: [
+        { label: "Back-office control", body: "Use AP bills for vendor invoices, sublet costs, and supplier obligations that need accounting review and later payment." }
+      ],
       fields: [
+        { type: "section", label: "Vendor document" },
         { name: "vendorName", label: "Vendor", type: "text", required: true, value: "OEM Parts Vendor" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `AP-${Date.now().toString().slice(-6)}` },
+        { type: "section", label: "Posting details" },
         { name: "amount", label: "Amount", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 14)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "approved", "paid"] }
@@ -3749,11 +3871,23 @@ async function createAccountsReceivableInvoice(payload = null) {
   if (!payload?.__submit) {
     const total = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
     openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Accounts Receivable",
       title: "Create AR Invoice",
       subtitle: "Post a customer receivable tied to the active repair order.",
       submitLabel: "Create AR Invoice",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Customer receivable will be tied to this job." },
+        { label: "Customer", value: customerDisplayName(customer), detail: customer?.primaryPhone || customer?.email || "Customer ledger ready" },
+        { label: "Open balance", value: formatMoney(total), detail: "Suggested receivable amount from the current RO." }
+      ],
+      notes: [
+        { label: "Receivable posting", body: "Use AR invoices when the job needs to enter customer receivables, collections, and statement aging." }
+      ],
       fields: [
+        { type: "section", label: "Invoice header" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `AR-${Date.now().toString().slice(-6)}` },
+        { type: "section", label: "Amounts and timing" },
         { name: "amount", label: "Amount", type: "number", required: true, value: String(total), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
@@ -3799,11 +3933,23 @@ async function createServiceInvoice(payload = null) {
   if (!payload?.__submit) {
     const defaultAmount = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
     openDmsActionModal({
+      theme: "service",
+      eyebrow: "Service Billing",
       title: "Create Service Invoice",
       subtitle: "Post the customer-facing service invoice from the live repair order.",
       submitLabel: "Create Service Invoice",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Service invoice will close out labor and approved service work." },
+        { label: "Estimate total", value: formatMoney(getRepairOrderAmounts(repairOrder).estimate), detail: "Suggested amount based on the current repair order." },
+        { label: "Balance due", value: formatMoney(getRepairOrderAmounts(repairOrder).balance), detail: "Customer-facing service balance before posting." }
+      ],
+      notes: [
+        { label: "Service cashiering", body: "Use the service invoice once advisor-approved labor and service items are ready to move into receivables and payment collection." }
+      ],
       fields: [
+        { type: "section", label: "Invoice header" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `SVC-${Date.now().toString().slice(-6)}` },
+        { type: "section", label: "Cashier details" },
         { name: "amount", label: "Amount", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
@@ -3850,11 +3996,23 @@ async function createPartsInvoice(payload = null) {
     const partsTotal = sumRepairOrderPartLines(repairOrder);
     const fallbackTotal = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
     openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Parts Billing",
       title: "Create Parts Invoice",
       subtitle: "Post a customer-facing parts invoice from the live repair order.",
       submitLabel: "Create Parts Invoice",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Parts invoice will draw from the active repair order." },
+        { label: "Parts total", value: formatMoney(partsTotal > 0 ? partsTotal : fallbackTotal), detail: "Suggested amount from quoted or posted part lines." },
+        { label: "Customer", value: customerDisplayName(customer), detail: "Invoice will be posted to the customer ledger." }
+      ],
+      notes: [
+        { label: "Counter billing", body: "Use this window for parts-only billing or parts charges that should post separately from the main service invoice." }
+      ],
       fields: [
+        { type: "section", label: "Invoice header" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `PART-${Date.now().toString().slice(-6)}` },
+        { type: "section", label: "Amount and due date" },
         { name: "amount", label: "Amount", type: "number", required: true, value: String(partsTotal > 0 ? partsTotal : fallbackTotal), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
@@ -4995,13 +5153,25 @@ function getDepartmentCreateActions(lens = "home") {
 async function startCreateCustomerRecord(payload = null) {
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "crm",
+      eyebrow: "Customer Master",
       title: "Create Customer",
       subtitle: "Add the customer record before scheduling appointments, writing up service, or opening an RO.",
       submitLabel: "Create Customer",
       contextHtml: "",
+      summaryItems: [
+        { label: "Department", value: titleCase(currentDepartmentLens || "home"), detail: "Customer record will become the shared DMS spine." },
+        { label: "Usage", value: "Appointments, ROs, invoices", detail: "This customer can be reused across service, sales, parts, and accounting." },
+        { label: "Required now", value: "Name + phone", detail: "You can add more profile detail later." }
+      ],
+      notes: [
+        { label: "Master record", body: "Keep this simple at intake. The goal is a clean customer record that every department can drill into." }
+      ],
       fields: [
+        { type: "section", label: "Customer identity" },
         { name: "firstName", label: "First name", type: "text", required: true, value: "" },
         { name: "lastName", label: "Last name", type: "text", required: true, value: "" },
+        { type: "section", label: "Primary contact" },
         { name: "primaryPhone", label: "Primary phone", type: "text", required: true, value: "" },
         { name: "email", label: "Email", type: "email", value: "" },
         { name: "preferredLanguage", label: "Language", type: "select", value: "English", options: ["English", "French"] }
@@ -5043,14 +5213,26 @@ async function startCreateVehicleRecord(payload = null) {
 
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "crm",
+      eyebrow: "Vehicle Master",
       title: "Create Vehicle",
       subtitle: "Attach the vehicle to the selected customer before booking service or opening the RO.",
       submitLabel: "Create Vehicle",
+      summaryItems: [
+        { label: "Customer", value: customerDisplayName(customer), detail: customer?.primaryPhone || customer?.email || "Selected customer" },
+        { label: "Role", value: "Primary vehicle record", detail: "VIN-linked record for appointments, write-ups, and ROs." },
+        { label: "Required now", value: "VIN + year + make + model", detail: "Trim and mileage can be updated as the visit progresses." }
+      ],
+      notes: [
+        { label: "Vehicle file", body: "This creates the core VIN record the dealership will use for service history, archive evidence, and live repair work." }
+      ],
       fields: [
+        { type: "section", label: "Vehicle identity" },
         { name: "vin", label: "VIN", type: "text", required: true, value: "" },
         { name: "year", label: "Year", type: "number", required: true, value: "" },
         { name: "make", label: "Make", type: "text", required: true, value: "" },
         { name: "model", label: "Model", type: "text", required: true, value: "" },
+        { type: "section", label: "Vehicle details" },
         { name: "trim", label: "Trim", type: "text", value: "" },
         { name: "mileage", label: "Mileage", type: "number", value: "", min: 0 }
       ],
@@ -5091,14 +5273,26 @@ function startDepartmentAppointmentCreate(payload = null) {
   const defaultService = getDefaultQuickAppointmentService();
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: currentDepartmentLens === "sales" ? "crm" : "service",
+      eyebrow: currentDepartmentLens === "sales" ? "Showroom Scheduling" : "Advisor Scheduling",
       title: currentDepartmentLens === "sales" ? "Create Visit" : "Create Appointment",
       subtitle: "Book the next customer commitment with the advisor and transport details required to submit.",
       submitLabel: currentDepartmentLens === "sales" ? "Create Visit" : "Book Appointment",
+      summaryItems: [
+        { label: "Customer", value: customerDisplayName(getSelectedCustomerRecord()), detail: getSelectedCustomerRecord()?.primaryPhone || "Selected customer" },
+        { label: "Vehicle", value: vehicleDisplayName(getSelectedVehicleRecord()), detail: getSelectedVehicleRecord()?.vin || "Vehicle context attached" },
+        { label: "Desk", value: currentDepartmentLens === "sales" ? "Sales / BDC" : "Service advisor", detail: currentDepartmentLens === "sales" ? "Use this for showroom, test-drive, or delivery visits." : "Use this for service check-in and advisor scheduling." }
+      ],
+      notes: [
+        { label: currentDepartmentLens === "sales" ? "Visit booking" : "Appointment booking", body: currentDepartmentLens === "sales" ? "This creates a customer commitment the sales team can drill into from the dashboard." : "This creates a service appointment the advisor can later turn into a write-up and repair order." }
+      ],
       fields: [
+        { type: "section", label: currentDepartmentLens === "sales" ? "Visit details" : "Appointment details" },
         { name: "service", label: currentDepartmentLens === "sales" ? "Visit type" : "Appointment type", type: "text", required: true, value: defaultService },
         { name: "advisor", label: "Assigned advisor", type: "text", required: true, value: getDefaultAdvisorForLens() },
         { name: "date", label: "Date", type: "date", required: true, value: getNextBusinessDateValue() },
         { name: "time", label: "Time", type: "text", required: true, value: "10:00", placeholder: "10:00" },
+        { type: "section", label: "Arrival plan" },
         { name: "transport", label: "Transport", type: "select", value: currentDepartmentLens === "sales" ? "dropoff" : "", options: ["", "dropoff", "waiter", "shuttle", "loaner"] },
         { name: "notes", label: "Notes", type: "textarea", full: true, value: "" }
       ],

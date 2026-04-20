@@ -716,13 +716,40 @@
     .customer360-archive-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#22304b;color:#b7d1ff;font-size:16px;flex:0 0 auto}
     .customer360-archive-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
     .dms-action-modal{display:none;position:fixed;inset:0;background:rgba(8,12,20,.58);z-index:10001;align-items:center;justify-content:center;padding:24px}
-    .dms-action-modal-window{width:min(920px,94vw);max-height:90vh;overflow:auto;border-radius:20px;background:linear-gradient(180deg,#f8fbff 0%,#eef4fb 100%);box-shadow:0 28px 80px rgba(0,0,0,.32);border:1px solid rgba(26,39,64,.08)}
+    .dms-action-modal-window{width:min(980px,94vw);max-height:90vh;overflow:auto;border-radius:20px;background:linear-gradient(180deg,#f8fbff 0%,#eef4fb 100%);box-shadow:0 28px 80px rgba(0,0,0,.32);border:1px solid rgba(26,39,64,.08)}
+    .dms-action-modal-window.service{background:linear-gradient(180deg,#f6fbff 0%,#e8f1fb 100%)}
+    .dms-action-modal-window.parts{background:linear-gradient(180deg,#fffaf1 0%,#f7efe0 100%)}
+    .dms-action-modal-window.accounting{background:linear-gradient(180deg,#f8fafc 0%,#edf2f7 100%)}
+    .dms-action-modal-window.crm{background:linear-gradient(180deg,#fdf9ff 0%,#f1ebfb 100%)}
+    .dms-action-modal-window.operations{background:linear-gradient(180deg,#f5fcf8 0%,#e6f4ed 100%)}
     .dms-action-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 22px;border-bottom:1px solid #d8e3f0;background:linear-gradient(180deg,#ffffff 0%,#f5f9ff 100%)}
+    .dms-action-modal-window.service .dms-action-modal-head{background:linear-gradient(180deg,#ffffff 0%,#eef6ff 100%)}
+    .dms-action-modal-window.parts .dms-action-modal-head{background:linear-gradient(180deg,#fffdf8 0%,#fff4df 100%)}
+    .dms-action-modal-window.accounting .dms-action-modal-head{background:linear-gradient(180deg,#ffffff 0%,#f2f5f9 100%)}
+    .dms-action-modal-window.crm .dms-action-modal-head{background:linear-gradient(180deg,#ffffff 0%,#f5efff 100%)}
+    .dms-action-modal-window.operations .dms-action-modal-head{background:linear-gradient(180deg,#ffffff 0%,#edf8f1 100%)}
+    .dms-action-modal-head-copy{display:grid;gap:8px}
+    .dms-action-modal-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#5c7392}
+    .dms-action-modal-window.service .dms-action-modal-eyebrow{color:#245586}
+    .dms-action-modal-window.parts .dms-action-modal-eyebrow{color:#8b5a12}
+    .dms-action-modal-window.accounting .dms-action-modal-eyebrow{color:#46566c}
+    .dms-action-modal-window.crm .dms-action-modal-eyebrow{color:#6d45a3}
+    .dms-action-modal-window.operations .dms-action-modal-eyebrow{color:#25624a}
     .dms-action-modal-head h3{margin:0;color:#122033;font-size:24px}
     .dms-action-modal-head p{margin:6px 0 0;color:#5d728d;font-size:14px;line-height:1.5}
     .dms-action-modal-context{display:flex;gap:8px;flex-wrap:wrap;padding:14px 22px 0}
     .dms-action-modal-context span{display:inline-grid;gap:4px;padding:10px 12px;border-radius:12px;background:#eaf1fb;color:#2a3c56;font-size:12px;font-weight:700}
     .dms-action-modal-context strong{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#56729a}
+    .dms-action-modal-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:14px 22px 0}
+    .dms-action-modal-summary-card{display:grid;gap:4px;padding:12px 14px;border-radius:14px;border:1px solid rgba(30,41,59,.08);background:rgba(255,255,255,.72)}
+    .dms-action-modal-summary-card small{font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#64748b}
+    .dms-action-modal-summary-card strong{font-size:15px;color:#15253a}
+    .dms-action-modal-summary-card span{font-size:12px;color:#64748b;line-height:1.45}
+    .dms-action-modal-window.service .dms-action-modal-summary-card{background:rgba(255,255,255,.82);border-color:rgba(56,100,163,.12)}
+    .dms-action-modal-window.parts .dms-action-modal-summary-card{background:rgba(255,250,241,.9);border-color:rgba(158,98,19,.14)}
+    .dms-action-modal-window.accounting .dms-action-modal-summary-card{background:rgba(255,255,255,.86);border-color:rgba(89,106,133,.14)}
+    .dms-action-modal-window.crm .dms-action-modal-summary-card{background:rgba(255,255,255,.84);border-color:rgba(109,69,163,.16)}
+    .dms-action-modal-window.operations .dms-action-modal-summary-card{background:rgba(255,255,255,.86);border-color:rgba(43,113,83,.14)}
     .dms-action-modal-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:18px 22px 10px}
     .dms-action-modal-field{display:grid;gap:6px}
     .dms-action-modal-field.full{grid-column:1/-1}
@@ -731,7 +758,10 @@
     .dms-action-modal-field input,.dms-action-modal-field select,.dms-action-modal-field textarea{width:100%;border:1px solid #c9d7e8;border-radius:12px;background:#fff;color:#15253a;padding:12px 13px;font-size:14px;box-sizing:border-box}
     .dms-action-modal-field textarea{min-height:110px;resize:vertical}
     .dms-action-modal-field small{font-size:11px;line-height:1.45;color:#68809e}
-    .dms-action-modal-section-title{grid-column:1/-1;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#6780a3;padding-top:2px}
+    .dms-action-modal-section-title{grid-column:1/-1;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#6780a3;padding-top:8px;margin-top:2px;border-top:1px solid rgba(103,128,163,.16)}
+    .dms-action-modal-notes{padding:2px 22px 0}
+    .dms-action-modal-note{padding:11px 13px;border-radius:12px;background:rgba(255,255,255,.74);border:1px dashed rgba(90,110,138,.22);font-size:12px;line-height:1.55;color:#51657d}
+    .dms-action-modal-note strong{display:block;margin-bottom:4px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b7f99}
     .dms-action-modal-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 22px 22px}
     .dms-action-modal-status{font-size:13px;color:#b42318;min-height:18px}
 
@@ -739,7 +769,7 @@
       .cards4{grid-template-columns:repeat(3,1fr)}
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
-      .customer360-layout,.customer360-main-grid,.customer360-lower-grid,.customer360-record-strip,.service-advisor-header,.service-advisor-signal-row,.service-advisor-next-grid,.service-advisor-financial-grid,.service-advisor-feed-summary-grid,.dms-action-modal-body{grid-template-columns:1fr}
+      .customer360-layout,.customer360-main-grid,.customer360-lower-grid,.customer360-record-strip,.service-advisor-header,.service-advisor-signal-row,.service-advisor-next-grid,.service-advisor-financial-grid,.service-advisor-feed-summary-grid,.dms-action-modal-body,.dms-action-modal-summary{grid-template-columns:1fr}
       .customer360-stack,.customer360-department-hub .customer360-role-tool-grid,.customer360-dashboard-grid,.customer360-department-queue-grid{grid-template-columns:1fr}
       .customer360-department-queue-head{align-items:flex-start;flex-direction:column}
       .customer360-department-queue-filters{justify-content:flex-start;width:100%}
@@ -1722,15 +1752,18 @@
   </div>
 
   <div id="dmsActionModal" class="dms-action-modal">
-    <div class="dms-action-modal-window">
+    <div id="dmsActionModalWindow" class="dms-action-modal-window">
       <div class="dms-action-modal-head">
-        <div>
+        <div class="dms-action-modal-head-copy">
+          <div id="dmsActionModalEyebrow" class="dms-action-modal-eyebrow">DMS Action</div>
           <h3 id="dmsActionModalTitle">Create Record</h3>
           <p id="dmsActionModalSubtitle">Fill in the required DMS fields to continue.</p>
         </div>
         <button id="closeDmsActionModalBtn" class="secondary" type="button">Close</button>
       </div>
       <div id="dmsActionModalContext" class="dms-action-modal-context"></div>
+      <div id="dmsActionModalSummary" class="dms-action-modal-summary"></div>
+      <div id="dmsActionModalNotes" class="dms-action-modal-notes"></div>
       <div id="dmsActionModalBody" class="dms-action-modal-body"></div>
       <div class="dms-action-modal-footer">
         <div id="dmsActionModalStatus" class="dms-action-modal-status"></div>
