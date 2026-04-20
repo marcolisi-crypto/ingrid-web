@@ -263,6 +263,23 @@
     .customer360-ops-chip.danger{border-color:rgba(228,99,120,.24);background:linear-gradient(180deg,rgba(72,27,39,.9) 0%,rgba(47,20,28,.92) 100%)}
     .customer360-ops-chip.good{border-color:rgba(92,198,138,.22);background:linear-gradient(180deg,rgba(25,62,45,.88) 0%,rgba(17,42,32,.92) 100%)}
     .customer360-manager-queue{display:grid;gap:12px;padding:14px 16px;border-radius:14px;background:radial-gradient(circle at top right, rgba(55,102,214,.16), transparent 36%),linear-gradient(180deg,#141f33 0%,#10192a 100%);border:1px solid rgba(255,255,255,.06);box-shadow:0 12px 24px rgba(0,0,0,.16)}
+    .customer360-ro-board{display:grid;gap:12px;padding:14px 16px;border-radius:14px;background:radial-gradient(circle at top right, rgba(57,120,255,.16), transparent 34%),linear-gradient(180deg,#152238 0%,#10192b 100%);border:1px solid rgba(255,255,255,.06);box-shadow:0 12px 24px rgba(0,0,0,.16)}
+    .customer360-ro-board-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+    .customer360-ro-board-head h3{margin:0;color:#f3f7ff;font-size:19px}
+    .customer360-ro-board-head span{display:block;margin-top:4px;color:#97a9c5;font-size:12px;line-height:1.45}
+    .customer360-ro-board-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+    .customer360-ro-card{padding:14px;border-radius:14px;background:linear-gradient(180deg,#101a2d 0%,#0d1525 100%);border:1px solid rgba(255,255,255,.07);display:grid;gap:10px;text-align:left;color:#dce6f5}
+    .customer360-ro-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+    .customer360-ro-card-top strong{display:block;color:#f5f8ff;font-size:15px}
+    .customer360-ro-card-top span{display:block;color:#91a5c5;font-size:12px;margin-top:4px}
+    .customer360-ro-card-complaint{color:#e6edf9;font-size:13px;line-height:1.5}
+    .customer360-ro-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .customer360-ro-kpi{padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
+    .customer360-ro-kpi small{display:block;color:#8ea2c3;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+    .customer360-ro-kpi strong{display:block;color:#f5f8ff;font-size:13px}
+    .customer360-ro-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .customer360-ro-actions .customer360-toolbar-btn{width:100%}
+    .customer360-ro-empty{padding:14px;border-radius:12px;border:1px dashed rgba(255,255,255,.12);color:#95a8c9;background:rgba(255,255,255,.02)}
     .customer360-manager-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .customer360-manager-head h3{margin:0;color:#f2f6ff;font-size:17px}
     .customer360-manager-head span{display:block;margin-top:4px;color:#96acd0;font-size:12px;line-height:1.45}
@@ -946,6 +963,7 @@
                 <h2 id="customer360MainTitle" class="customer360-main-title">Customer 360° Dashboard</h2>
                 <div id="customer360OpsStrip" class="customer360-ops-strip"></div>
                 <section id="customer360ManagerQueue" class="customer360-manager-queue"></section>
+                <section id="customer360RoBoard" class="customer360-ro-board"></section>
               </div>
               <div class="customer360-title-tools">
                 <button class="customer360-mini-btn">Hire</button>

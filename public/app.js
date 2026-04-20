@@ -394,6 +394,17 @@ function formatCountLabel(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function formatMoney(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return "$0.00";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numeric);
+}
+
 function addDays(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -789,6 +800,9 @@ function buildLensArchiveItems(vehicle, customer, calls = [], notes = [], appoin
 
 function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [], calls = []) {
   const nextAppointment = appointments[0];
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
   const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss")).length;
   const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss"));
   const laneTasks = (currentTasks || []).filter((item) => item.customerId === customer?.id && String(item.status || "").toLowerCase() !== "completed");
@@ -1035,33 +1049,37 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
     <div class="customer360-service-card">
       <div class="customer360-service-row">
         <div>
-          <div class="customer360-service-label">Lane Status</div>
-          <div class="customer360-service-value">${laneStatus}</div>
-          <div class="customer360-service-copy">${nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : movementCopy ? `${escapeHtml(movementCopy)}.` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
+          <div class="customer360-service-label">Live Repair Order</div>
+          <div class="customer360-service-value">${activeRepairOrder ? `${escapeHtml(activeRepairOrder.repairOrderNumber || "RO-lite")} • ${escapeHtml(titleCase(String(activeRepairOrder.status || "open")))}` : laneStatus}</div>
+          <div class="customer360-service-copy">${activeRepairOrder ? `${escapeHtml(activeRepairOrder.complaint || "Complaint pending")} • ${escapeHtml(formatMoney(activeRepairOrder.totalAmount || ((activeRepairOrder.laborTotal || 0) + (activeRepairOrder.partsTotal || 0) + (activeRepairOrder.feesTotal || 0))))} total • ${escapeHtml(formatMoney(activeRepairOrder.balanceDue || activeRepairOrder.totalAmount || 0))} balance` : nextAppointment ? `${escapeHtml(nextAppointment.service || "Service visit")} with ${escapeHtml(nextAppointment.advisor || "First Available")}` : movementCopy ? `${escapeHtml(movementCopy)}.` : "No service booking yet. Use the 360 composer to book the next lane event."}</div>
         </div>
-        <span class="customer360-status-pill ${nextAppointment ? "good" : movementCopy ? "warn" : "info"}">${nextAppointment ? "Booked" : movementCopy ? "Moving" : "Open"}</span>
+        <span class="customer360-status-pill ${activeRepairOrder ? getRepairOrderStatusTone(activeRepairOrder.status) : nextAppointment ? "good" : movementCopy ? "warn" : "info"}">${activeRepairOrder ? escapeHtml(titleCase(String(activeRepairOrder.status || "open"))) : nextAppointment ? "Booked" : movementCopy ? "Moving" : "Open"}</span>
       </div>
       <div class="customer360-service-row">
         <div>
-          <div class="customer360-service-label">Loaner Desk</div>
-          <div class="customer360-service-value">${loanerState}</div>
-          <div class="customer360-service-copy">${loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
+          <div class="customer360-service-label">${activeRepairOrder ? "Technician Time" : "Loaner Desk"}</div>
+          <div class="customer360-service-value">${activeRepairOrder ? (latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "No time posted") : loanerState}</div>
+          <div class="customer360-service-copy">${activeRepairOrder ? (latestClockEvent ? `${escapeHtml(formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc || latestClockEvent.updatedAtUtc))} • ${technicianClockedIn ? "Technician is currently on the RO." : "Latest clock event is posted to the job."}` : "Technician clocking has not started on this RO yet.") : loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Advisor should confirm transportation needs before write-up." : "Reserve later if diagnostics expand into all-day work."}</div>
         </div>
-        <span class="customer360-status-pill ${loanerState === "In Progress" ? "warn" : loanerState === "Suggested" ? "warn" : "info"}">${loanerState}</span>
+        <span class="customer360-status-pill ${activeRepairOrder ? (technicianClockedIn ? "warn" : "info") : loanerState === "In Progress" ? "warn" : loanerState === "Suggested" ? "warn" : "info"}">${activeRepairOrder ? (technicianClockedIn ? "Clocked In" : "Ready") : loanerState}</span>
       </div>
       <div class="customer360-service-row">
         <div>
-          <div class="customer360-service-label">Open Follow-Up</div>
-          <div class="customer360-service-value">${escapeHtml(topTask?.title || "No active task")}</div>
-          <div class="customer360-service-copy">${overdueLaneTasks.length ? `${overdueLaneTasks.length} service item${overdueLaneTasks.length === 1 ? "" : "s"} overdue and needs intervention.` : escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
+          <div class="customer360-service-label">${activeRepairOrder ? "Advisor Controls" : "Open Follow-Up"}</div>
+          <div class="customer360-service-value">${activeRepairOrder ? "Estimate • Parts • Accounting" : escapeHtml(topTask?.title || "No active task")}</div>
+          <div class="customer360-service-copy">${activeRepairOrder ? "Use this lane to keep the write-up open, add estimate lines, request parts, and post accounting without leaving the advisor view." : overdueLaneTasks.length ? `${overdueLaneTasks.length} service item${overdueLaneTasks.length === 1 ? "" : "s"} overdue and needs intervention.` : escapeHtml(topTask?.description || "A technician or advisor task will surface here once work begins.")}</div>
         </div>
-        ${topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
+        ${activeRepairOrder ? `<span class="customer360-status-pill info">${escapeHtml(formatMoney(activeRepairOrder.balanceDue || activeRepairOrder.totalAmount || 0))}</span>` : topTask ? `<span class="customer360-status-pill info">${escapeHtml(topTask.priority || "normal")}</span>` : `<span class="customer360-status-pill good">Clear</span>`}
       </div>
       ${buildServiceSignalMarkup(serviceSignals)}
       <div class="customer360-service-actions">
+        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addRepairOrderEstimateLine()">Add Estimate</button>` : ""}
+        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addRepairOrderPartRequest()">Add Part Line</button>` : ""}
+        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="${technicianClockedIn ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`}">${technicianClockedIn ? "Clock Technician Out" : "Clock Technician In"}</button>` : ""}
+        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addAccountingRepairOrderEntry()">Post Payment / Entry</button>` : ""}
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
         ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Task</button>` : ""}
-        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')"}">${nextAppointment ? "Open Service Visit" : "Open Service Composer"}</button>
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')"}">${activeRepairOrder ? "Close RO" : nextAppointment ? "Open Service Visit" : "Open Service Composer"}</button>
       </div>
     </div>
   `;
@@ -1207,8 +1225,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
       <div class="customer360-lens-card">
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Repair Order</div>
-          <div class="customer360-lens-value">${activeRepairOrder ? `${escapeHtml(activeRepairOrder.repairOrderNumber || "RO-lite")} • ${escapeHtml(String(activeRepairOrder.status || "open"))}` : vehicle?.vin ? `RO-lite • ${escapeHtml(vehicle.vin.slice(-6))}` : "RO-lite pending"}</div>
+          <div class="customer360-lens-value">${activeRepairOrder ? `${escapeHtml(activeRepairOrder.repairOrderNumber || "RO-lite")} • ${escapeHtml(titleCase(String(activeRepairOrder.status || "open")))}` : vehicle?.vin ? `RO-lite • ${escapeHtml(vehicle.vin.slice(-6))}` : "RO-lite pending"}</div>
           <div class="customer360-lens-copy">Primary concern: ${escapeHtml(activeRepairOrder?.complaint || topTask?.description || nextAppointment?.service || "Customer concern not written yet.")}</div>
+          <div class="customer360-lens-copy" style="margin-top:8px;">${activeRepairOrder ? `Estimate ${escapeHtml(formatMoney(activeRepairOrder.totalAmount || ((activeRepairOrder.laborTotal || 0) + (activeRepairOrder.partsTotal || 0) + (activeRepairOrder.feesTotal || 0))))} • Balance ${escapeHtml(formatMoney(activeRepairOrder.balanceDue || activeRepairOrder.totalAmount || 0))} • Tech ${escapeHtml(latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "not clocked")}` : "Open the RO here before estimates, technician time, parts, and accounting are posted."}</div>
         </div>
         <div class="customer360-lens-grid">
           <div class="customer360-lens-stat">
@@ -1251,6 +1270,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Workflow</button>` : ""}
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Close Repair Order" : "Open Repair Order"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Add Estimate Line" : "Open RO First"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderPartRequest()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Add Part Line" : "Open RO First"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? (technicianClockedIn ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`) : "openRepairOrderFrom360()"}">${activeRepairOrder ? (technicianClockedIn ? "Clock Technician Out" : "Clock Technician In") : "Open RO First"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="startAdvisorJourneyNote()">Add Advisor Note</button>
         </div>
       </div>
@@ -2703,6 +2724,113 @@ function getActiveRepairOrderRecord() {
 
 function getRepairOrderLatestClockEvent(repairOrder) {
   return Array.isArray(repairOrder?.technicianClockEvents) ? repairOrder.technicianClockEvents[0] || null : null;
+}
+
+function getRepairOrderStatusTone(status = "") {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized.includes("close") || normalized.includes("complete")) return "good";
+  if (normalized.includes("progress") || normalized.includes("open")) return "warn";
+  return "info";
+}
+
+function buildRepairOrderBoardMarkup(repairOrders = []) {
+  if (!repairOrders.length) {
+    return `
+      <div class="customer360-ro-board-head">
+        <div>
+          <h3>Live Repair Orders</h3>
+          <span>No repair order is open for this customer yet. Advisors should be able to start the visit from here in one click.</span>
+        </div>
+      </div>
+      <div class="customer360-ro-empty">
+        No active RO yet. Open the first repair order to start write-up, estimates, parts, technician time, and accounting against the same record.
+      </div>
+      <div class="customer360-ro-actions">
+        <button type="button" class="customer360-toolbar-btn" onclick="openRepairOrderFrom360()">Open Repair Order</button>
+        <button type="button" class="customer360-toolbar-btn secondary" onclick="setCustomer360ComposerMode('appointment')">Schedule Appointment</button>
+      </div>
+    `;
+  }
+
+  const sortedRepairOrders = repairOrders.slice().sort((left, right) => {
+    const leftOpen = ["closed", "completed"].includes(String(left.status || "").toLowerCase()) ? 0 : 1;
+    const rightOpen = ["closed", "completed"].includes(String(right.status || "").toLowerCase()) ? 0 : 1;
+    if (leftOpen !== rightOpen) return rightOpen - leftOpen;
+    return new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime();
+  });
+
+  const openCount = sortedRepairOrders.filter((item) => !["closed", "completed"].includes(String(item.status || "").toLowerCase())).length;
+
+  return `
+    <div class="customer360-ro-board-head">
+      <div>
+        <h3>Live Repair Orders</h3>
+        <span>${openCount ? `${openCount} live ${openCount === 1 ? "RO" : "ROs"} for the advisor desk.` : "Recent RO history for this customer and vehicle."}</span>
+      </div>
+      <div class="customer360-ro-actions" style="grid-template-columns:repeat(2,max-content);">
+        <button type="button" class="customer360-toolbar-btn" onclick="openRepairOrderFrom360()">Open Repair Order</button>
+        <button type="button" class="customer360-toolbar-btn secondary" onclick="setDepartmentLens('service')">Open Advisor Lens</button>
+      </div>
+    </div>
+    <div class="customer360-ro-board-grid">
+      ${sortedRepairOrders.map((repairOrder) => {
+        const sourceId = escapeHtml(getRepairOrderSourceId(repairOrder));
+        const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
+        const closed = ["closed", "completed"].includes(String(repairOrder.status || "").toLowerCase());
+        const partsTotal = Number(repairOrder.partsTotal || 0);
+        const laborTotal = Number(repairOrder.laborTotal || 0);
+        const feesTotal = Number(repairOrder.feesTotal || 0);
+        const total = Number(repairOrder.totalAmount || (partsTotal + laborTotal + feesTotal));
+        const balance = Number(repairOrder.balanceDue || total);
+        return `
+          <div class="customer360-ro-card">
+            <div class="customer360-ro-card-top">
+              <div>
+                <strong>${escapeHtml(repairOrder.repairOrderNumber || "RO-lite")}</strong>
+                <span>${escapeHtml(vehicleDisplayName(getSelectedVehicleRecord()))}</span>
+              </div>
+              <span class="customer360-status-pill ${getRepairOrderStatusTone(repairOrder.status)}">${escapeHtml(titleCase(repairOrder.status || "open"))}</span>
+            </div>
+            <div class="customer360-ro-card-complaint">${escapeHtml(repairOrder.complaint || "Complaint not written yet.")}</div>
+            <div class="customer360-ro-kpis">
+              <div class="customer360-ro-kpi">
+                <small>Advisor</small>
+                <strong>${escapeHtml(repairOrder.advisorName || repairOrder.assignedAdvisor || "Rachel Smith")}</strong>
+              </div>
+              <div class="customer360-ro-kpi">
+                <small>Promised</small>
+                <strong>${escapeHtml(formatDisplayDateTime(repairOrder.promisedAtUtc || repairOrder.promisedTimeUtc || repairOrder.updatedAtUtc || repairOrder.createdAtUtc))}</strong>
+              </div>
+              <div class="customer360-ro-kpi">
+                <small>Total</small>
+                <strong>${escapeHtml(formatMoney(total))}</strong>
+              </div>
+              <div class="customer360-ro-kpi">
+                <small>Balance</small>
+                <strong>${escapeHtml(formatMoney(balance))}</strong>
+              </div>
+              <div class="customer360-ro-kpi">
+                <small>Tech Clock</small>
+                <strong>${escapeHtml(latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "No time yet")}</strong>
+              </div>
+              <div class="customer360-ro-kpi">
+                <small>Write-Up</small>
+                <strong>${escapeHtml(`${formatMoney(laborTotal)} labor • ${formatMoney(partsTotal)} parts`)}</strong>
+              </div>
+            </div>
+            <div class="customer360-ro-actions">
+              <button type="button" class="customer360-toolbar-btn" onclick="setDepartmentLens('service')">${closed ? "View RO" : "Advisor View"}</button>
+              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? "openRepairOrderFrom360()" : "addRepairOrderEstimateLine()"}">${closed ? "Reopen Flow" : "Add Estimate"}</button>
+              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? `openCustomer360FocusedArtifact('tasks','${sourceId}','service')` : "addRepairOrderPartRequest()"}">${closed ? "Open Activity" : "Add Part"}</button>
+              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? "addAccountingRepairOrderEntry()" : (latestClockEvent?.eventType === "clock_in" ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`)}">${closed ? "Post Payment" : (latestClockEvent?.eventType === "clock_in" ? "Clock Out" : "Clock In")}</button>
+              <button type="button" class="customer360-toolbar-btn secondary" onclick="addAccountingRepairOrderEntry()">Post Accounting</button>
+              <button type="button" class="customer360-toolbar-btn ${closed ? "secondary" : ""}" onclick="${closed ? "openRepairOrderFrom360()" : "closeActiveRepairOrder()"}">${closed ? "Open New RO" : "Close RO"}</button>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 async function loadRepairOrders(customerId = selectedCustomerId, vehicleId = getSelectedVehicleRecord()?.id || "") {
@@ -4528,6 +4656,7 @@ function renderCustomer360Detail() {
   const timelineEl = document.getElementById("customer360Timeline");
   const opsStripEl = document.getElementById("customer360OpsStrip");
   const managerQueueEl = document.getElementById("customer360ManagerQueue");
+  const roBoardEl = document.getElementById("customer360RoBoard");
   const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
   const urgentTasks = openTasks.filter((task) => {
     const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
@@ -4557,6 +4686,7 @@ function renderCustomer360Detail() {
     if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
     if (opsStripEl) opsStripEl.innerHTML = "";
     if (managerQueueEl) managerQueueEl.innerHTML = "";
+    if (roBoardEl) roBoardEl.innerHTML = "";
     return;
   }
 
@@ -4814,6 +4944,10 @@ function renderCustomer360Detail() {
         ${visibleManagerCards.map((card) => buildManagerQueueCard(card)).join("")}
       </div>
     `;
+  }
+
+  if (roBoardEl) {
+    roBoardEl.innerHTML = buildRepairOrderBoardMarkup(getSelectedCustomerRepairOrders());
   }
 
   if (summaryTitleEl) {
