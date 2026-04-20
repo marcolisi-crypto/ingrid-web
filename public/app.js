@@ -2451,6 +2451,7 @@ function getManagerQueueFreshnessLabel(value, label = "Moved") {
 }
 
 function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "", focused = false, priorityReason = "", freshness = "" } = {}) {
+  const ownerAge = [ownerLabel || "", freshness || ""].filter(Boolean).join(" • ");
   return `
     <button type="button" class="customer360-manager-card ${focused ? "focused" : ""}" ${action ? `onclick="${action}"` : ""}>
       <div class="customer360-manager-card-top">
@@ -2462,10 +2463,10 @@ function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "",
       </div>
       <p>${escapeHtml(copy || "Queue detail will appear here.")}</p>
       ${priorityReason ? `<span class="customer360-manager-reason">Why top: ${escapeHtml(priorityReason)}</span>` : ""}
-      ${freshness ? `<span class="customer360-manager-freshness">${escapeHtml(freshness)}</span>` : ""}
+      ${ownerAge ? `<span class="customer360-manager-ownerage">${escapeHtml(ownerAge)}</span>` : ""}
       <div class="customer360-manager-meta">
         <span class="customer360-manager-pill ${escapeHtml(tone || "info")}">${escapeHtml(countLabel || "0 open")}</span>
-        <span class="customer360-manager-pill info">${escapeHtml(ownerLabel || "Open queue")}</span>
+        ${freshness && !ownerLabel ? `<span class="customer360-manager-freshness">${escapeHtml(freshness)}</span>` : ""}
       </div>
     </button>
   `;
