@@ -5459,6 +5459,36 @@ function buildTaskWorkflowRow(row = {}, fallbackDepartment = currentDepartmentLe
   `;
 }
 
+function buildInlineOwnerSummary(label = "", owner = "", meta = "", tone = "info") {
+  const safeLabel = escapeHtml(label || "Owner");
+  const safeOwner = escapeHtml(owner || "Department queue");
+  const safeMeta = escapeHtml(meta || "Ready for routing");
+  return `
+    <div class="customer360-inline-owner ${escapeHtml(tone)}">
+      <strong>${safeLabel}</strong>
+      <span>${safeOwner} • ${safeMeta}</span>
+    </div>
+  `;
+}
+
+function getLatestRepairOrderLaborOp(repairOrder = {}) {
+  const laborOps = Array.isArray(repairOrder?.laborOps) ? repairOrder.laborOps : [];
+  return [...laborOps]
+    .sort((a, b) => new Date(b.updatedAtUtc || b.createdAtUtc || 0).getTime() - new Date(a.updatedAtUtc || a.createdAtUtc || 0).getTime())[0] || null;
+}
+
+function getRepairOrderAccountingReviewTask(repairOrder = {}) {
+  const repairOrderNumber = String(repairOrder?.repairOrderNumber || "").toLowerCase();
+  const activeTasks = (currentTasks || []).filter((task) => {
+    if (task.customerId !== selectedCustomerId) return false;
+    if (String(task.status || "").toLowerCase() === "completed") return false;
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    if (!haystack.includes("[accounting]")) return false;
+    return repairOrderNumber ? haystack.includes(repairOrderNumber) : true;
+  });
+  return activeTasks[0] || null;
+}
+
 function getActiveServiceAdvisorRoster() {
   return (configCache?.advisors || DEFAULT_CONFIG.advisors || [])
     .filter((advisor) => advisor.active !== false)
@@ -5476,6 +5506,7 @@ function buildAppointmentAdvisorControls(appointment = {}) {
     .join("");
   return `
     <div class="customer360-task-routing">
+      ${buildInlineOwnerSummary("Appointment owner", currentAdvisor || "Advisor queue", appointment.status ? titleCase(appointment.status) : "Unassigned visit", currentAdvisor ? "good" : "warn")}
       <span class="customer360-task-routing-tag">Advisor</span>
       <select id="${selectId}">${options}</select>
       <button type="button" onclick="assignAppointmentAdvisor('${appointmentId}','${selectId}')">Assign</button>
@@ -5511,8 +5542,15 @@ function buildLaborDispatchControls(repairOrder = {}) {
   if (!repairOrderId) return "";
   const selectId = `laborTech-${repairOrderId}`;
   const roster = getDepartmentRoster("technicians");
+  const activeLaborOp = getLatestRepairOrderLaborOp(repairOrder);
   return `
     <div class="customer360-task-routing">
+      ${buildInlineOwnerSummary(
+        "Dispatch owner",
+        activeLaborOp?.technicianName || "Technician queue",
+        activeLaborOp?.dispatchStatus ? titleCase(activeLaborOp.dispatchStatus) : "Ready to dispatch",
+        activeLaborOp?.technicianName ? "info" : "warn"
+      )}
       <span class="customer360-task-routing-tag">Dispatch</span>
       <select id="${selectId}">
         ${roster.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
@@ -5554,13 +5592,20 @@ function buildAccountingHandoffControls(repairOrder = {}) {
   if (!repairOrderId) return "";
   const selectId = `accountingOwner-${repairOrderId}`;
   const roster = getDepartmentRoster("accounting");
+  const accountingTask = getRepairOrderAccountingReviewTask(repairOrder);
   return `
     <div class="customer360-task-routing">
+      ${buildInlineOwnerSummary(
+        "Review owner",
+        accountingTask?.assignedUser || "Accounting queue",
+        accountingTask ? "Review already open" : "Ready to hand off",
+        accountingTask?.assignedUser ? "good" : accountingTask ? "info" : "warn"
+      )}
       <span class="customer360-task-routing-tag">Accounting</span>
       <select id="${selectId}">
-        ${roster.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
+        ${roster.map((name) => `<option value="${escapeHtml(name)}" ${accountingTask?.assignedUser === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}
       </select>
-      <button type="button" onclick="sendRepairOrderToAccounting('${repairOrderId}','${selectId}')">Send Review</button>
+      <button type="button" onclick="sendRepairOrderToAccounting('${repairOrderId}','${selectId}')">${accountingTask ? "Reassign" : "Send Review"}</button>
     </div>
   `;
 }
