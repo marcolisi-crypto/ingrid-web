@@ -10,6 +10,8 @@ let currentMediaAssets = [];
 let currentPartOrders = [];
 let currentAccountsPayableBills = [];
 let currentAccountsReceivableInvoices = [];
+let currentGlAccounts = [];
+let currentWorkInProgress = [];
 let currentCustomers = [];
 let currentVehicles = [];
 let currentCustomerNotes = [];
@@ -4740,6 +4742,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
   const totalSpecialOrders = allRepairOrders.reduce((sum, repairOrder) => sum + getRepairOrderPartOrders(repairOrder).length, 0);
   const totalArInvoices = (currentAccountsReceivableInvoices || []).length;
   const totalApBills = (currentAccountsPayableBills || []).length;
+  const totalWarrantyReceivables = allRepairOrders.reduce((sum, repairOrder) => sum + (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims.filter((claim) => !["paid", "closed", "posted"].includes(String(claim.receivableStatus || "").toLowerCase())).length : 0), 0);
+  const totalWip = (currentWorkInProgress || []).length;
+  const totalGlAccounts = (currentGlAccounts || []).length;
   const totalRoMedia = (currentMediaAssets || []).filter((item) => String(item.contextType || "").toLowerCase() === "repair_order").length;
   const tomorrowStart = new Date();
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
@@ -5107,6 +5112,114 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','accounting')`,
         cta: "Open AP"
       });
+  const arAgingRows = (currentAccountsReceivableInvoices || [])
+    .filter((invoice) => !["paid", "closed", "completed"].includes(String(invoice.status || "").toLowerCase()))
+    .slice()
+    .sort((a, b) => new Date(a.dueAtUtc || a.updatedAtUtc || a.createdAtUtc || 0) - new Date(b.dueAtUtc || b.updatedAtUtc || b.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((invoice) => {
+      const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(invoice.repairOrderId || ""));
+      const rowCustomer = getCustomerById(invoice.customerId || repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${invoice.invoiceNumber || "AR invoice"} • ${titleCase(invoice.receivableType || "aftersales")}`,
+        meta: `${formatMoney(invoice.balanceDue || invoice.amount || 0)} • ${invoice.agingBucket ? titleCase(String(invoice.agingBucket).replaceAll("_", " ")) : "Current aging"}`,
+        owner: invoice.profitCentre ? titleCase(String(invoice.profitCentre).replaceAll("_", " ")) : "Accounting queue",
+        status: titleCase(invoice.status || "open"),
+        dueAt: invoice.dueAtUtc || "",
+        priority: getJourneyArtifactSla(invoice.dueAtUtc || invoice.updatedAtUtc || invoice.createdAtUtc).tone === "danger" ? "high" : "normal",
+        updatedAt: invoice.updatedAtUtc || invoice.createdAtUtc || "",
+        badges: [titleCase(invoice.receivableType || "aftersales"), invoice.brand || "Unassigned"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String((invoice.customerId || repairOrder?.customerId || "")))}','accounting')`,
+        cta: "Open AR"
+      });
+    });
+  const apAgingRows = (currentAccountsPayableBills || [])
+    .filter((bill) => !["paid", "closed", "completed"].includes(String(bill.status || "").toLowerCase()))
+    .slice()
+    .sort((a, b) => new Date(a.dueAtUtc || a.updatedAtUtc || a.createdAtUtc || 0) - new Date(b.dueAtUtc || b.updatedAtUtc || b.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((bill) => {
+      const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(bill.repairOrderId || ""));
+      const rowCustomer = getCustomerById(repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${bill.invoiceNumber || "AP bill"} • ${titleCase(bill.payableType || "other supplier")}`,
+        meta: `${bill.vendorName || "Vendor"} • ${formatMoney(bill.balanceDue || bill.amount || 0)}`,
+        owner: bill.profitCentre ? titleCase(String(bill.profitCentre).replaceAll("_", " ")) : "Accounting queue",
+        status: titleCase(bill.status || "open"),
+        dueAt: bill.dueAtUtc || "",
+        priority: getJourneyArtifactSla(bill.dueAtUtc || bill.updatedAtUtc || bill.createdAtUtc).tone === "danger" ? "high" : "normal",
+        updatedAt: bill.updatedAtUtc || bill.createdAtUtc || "",
+        badges: [titleCase(bill.payableType || "other supplier"), bill.brand || "Unassigned"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','accounting')`,
+        cta: "Open AP"
+      });
+    });
+  const wipRows = (currentWorkInProgress || [])
+    .slice()
+    .sort((a, b) => new Date(b.updatedAtUtc || b.createdAtUtc || 0) - new Date(a.updatedAtUtc || a.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((item) => {
+      const repairOrder = allRepairOrders.find((ro) => String(ro.id || "") === String(item.repairOrderId || ""));
+      const rowCustomer = getCustomerById(repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const total = Number(item.labourAmount || 0) + Number(item.partsAmount || 0) + Number(item.subletAmount || 0);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder?.repairOrderNumber || "RO"} • ${titleCase(item.profitCentre || "service")} WIP`,
+        meta: `${titleCase(item.payType || "customer")} • ${formatMoney(total)}`,
+        owner: titleCase(item.profitCentre || "service"),
+        status: titleCase(item.status || "open"),
+        dueAt: item.postedAtUtc || "",
+        updatedAt: item.updatedAtUtc || item.createdAtUtc || "",
+        badges: [`L ${formatMoney(item.labourAmount || 0)}`, `P ${formatMoney(item.partsAmount || 0)}`],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','accounting')`,
+        cta: "Open WIP"
+      });
+    });
+  const warrantyReceivableRows = allRepairOrders
+    .flatMap((repairOrder) => (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims.map((claim) => ({ repairOrder, claim })) : []))
+    .filter(({ claim }) => !["paid", "closed", "posted"].includes(String(claim.receivableStatus || "").toLowerCase()))
+    .slice(0, 8)
+    .map(({ repairOrder, claim }) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${claim.claimNumber || "Warranty claim"} • ${repairOrder.repairOrderNumber || "RO"}`,
+        meta: `${claim.manufacturer || "OEM"} • ${formatMoney(claim.approvedAmount || claim.claimAmount || 0)}`,
+        owner: "Warranty receivable",
+        status: titleCase(claim.receivableStatus || claim.status || "open"),
+        dueAt: claim.postedAtUtc || claim.approvedAtUtc || claim.submittedAtUtc || "",
+        updatedAt: claim.updatedAtUtc || claim.createdAtUtc || "",
+        badges: [titleCase(claim.claimType || "warranty"), claim.opCode || "Claim"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','accounting')`,
+        cta: "Open Claim"
+      });
+    });
+  const glSetupRows = (currentGlAccounts || [])
+    .slice()
+    .sort((a, b) => String(a.accountNumber || "").localeCompare(String(b.accountNumber || "")))
+    .slice(0, 8)
+    .map((account) => buildDepartmentQueueRow({
+      customer: null,
+      vehicle: null,
+      title: `${account.accountNumber || "GL"} • ${account.description || "General ledger account"}`,
+      meta: `${titleCase(account.profitCentre || account.department || "unassigned")} • ${account.statementSection || "statement section pending"}`,
+      owner: account.profitCentre ? titleCase(String(account.profitCentre).replaceAll("_", " ")) : "Accounting setup",
+      status: account.isActive === false ? "Inactive" : account.isControlAccount ? "Control" : "Active",
+      updatedAt: account.updatedAtUtc || account.createdAtUtc || "",
+      badges: [account.brand || "All brands", account.oemStatementGroup || "No OEM group"],
+      action: "setDepartmentLens('accounting')",
+      cta: "Open GL"
+    }));
     });
 
   const homeCards = [
@@ -5188,12 +5301,13 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
     },
     accounting: {
       title: "Accounting Dashboard",
-      copy: "AR, AP, balances, and posting queue for the live job.",
+      copy: "AR, AP, WIP, warranty receivables, and GL setup for the store.",
       cards: [
-        { label: "AR Invoices", value: `${totalArInvoices}`, meta: currentAccountsReceivableInvoices[0]?.invoiceNumber || "No AR invoices posted", tone: totalArInvoices ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalArInvoices ? "Open AR" : "Open Accounting" },
-        { label: "AP Bills", value: `${totalApBills}`, meta: currentAccountsPayableBills[0]?.invoiceNumber || "No AP bills posted", tone: totalApBills ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalApBills ? "Open AP" : "Open Accounting" },
-        { label: "RO Balance", value: formatMoney(totalOpenRoBalance || 0), meta: allRepairOrders.length ? `${allRepairOrders.length} open repair orders` : "No active repair order", tone: totalOpenRoBalance > 0 ? "warn" : "good", action: "setDepartmentLens('service')", cta: allRepairOrders.length ? "Open Service" : "Queue Review" },
-        { label: "Reviews", value: `${allAccountingTasks.length}`, meta: allAccountingTasks[0]?.title || "No accounting tasks live", tone: allAccountingTasks.length ? "info" : "good", action: "setDepartmentLens('accounting')", cta: allAccountingTasks.length ? "Open Reviews" : "Queue Review" }
+        { label: "AR Aging", value: `${totalArInvoices}`, meta: arAgingRows[0] ? "Receivables are grouped for aging and type review." : "No AR invoices posted", tone: totalArInvoices ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalArInvoices ? "Open AR Aging" : "Open Accounting" },
+        { label: "AP Aging", value: `${totalApBills}`, meta: apAgingRows[0] ? "Payables are grouped by supplier type and aging." : "No AP bills posted", tone: totalApBills ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalApBills ? "Open AP Aging" : "Open Accounting" },
+        { label: "Open WIP", value: `${totalWip}`, meta: wipRows[0] ? "Unposted labour, parts, and sublet are waiting below." : "No open WIP records", tone: totalWip ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalWip ? "Open WIP" : "Create WIP" },
+        { label: "Warranty", value: `${totalWarrantyReceivables}`, meta: warrantyReceivableRows[0] ? "Warranty receivables are ready for follow-through." : "No warranty receivables waiting", tone: totalWarrantyReceivables ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalWarrantyReceivables ? "Open Warranty" : "Open Claims" },
+        { label: "GL Setup", value: `${totalGlAccounts}`, meta: glSetupRows[0] ? "Statement-ready GL accounts are loaded below." : "No GL accounts configured yet", tone: totalGlAccounts ? "info" : "warn", action: "setDepartmentLens('accounting')", cta: totalGlAccounts ? "Open GL" : "Create GL" }
       ]
     }
   };
@@ -5225,6 +5339,11 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       buildDepartmentQueueSection("Arrivals / Ready To Deliver", arrivalRows, "No parts are marked as arrived or ready.")
     ],
     accounting: [
+      buildDepartmentQueueSection("AR Aging", arAgingRows, "No AR invoices are currently open."),
+      buildDepartmentQueueSection("AP Aging", apAgingRows, "No AP bills are currently open."),
+      buildDepartmentQueueSection("Open WIP", wipRows, "No work in progress records are open."),
+      buildDepartmentQueueSection("Warranty Receivables", warrantyReceivableRows, "No warranty receivables are waiting."),
+      buildDepartmentQueueSection("GL Setup", glSetupRows, "No GL accounts are configured yet."),
       buildDepartmentQueueSection("Open Accounting Reviews", accountingQueueRows, "No accounting reviews are pending."),
       buildDepartmentQueueSection("Open RO Balances", accountingBalanceRows, "No repair orders have an open balance."),
       buildDepartmentQueueSection("AR Due", arDueRows, "No AR invoices are currently due."),
@@ -5499,6 +5618,32 @@ async function loadAccountsReceivableInvoices(repairOrderId = "") {
   } catch (err) {
     console.error("loadAccountsReceivableInvoices error:", err);
     currentAccountsReceivableInvoices = [];
+  }
+}
+
+async function loadGlAccounts() {
+  try {
+    const res = await fetch("/.netlify/functions/accounting-gl-accounts-list");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to load GL accounts");
+    currentGlAccounts = Array.isArray(data.accounts) ? data.accounts : [];
+  } catch (err) {
+    console.error("loadGlAccounts error:", err);
+    currentGlAccounts = [];
+  }
+}
+
+async function loadWorkInProgress(repairOrderId = "") {
+  try {
+    const params = new URLSearchParams();
+    if (repairOrderId) params.set("repairOrderId", repairOrderId);
+    const res = await fetch(`/.netlify/functions/accounting-wip-list?${params.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to load work in progress");
+    currentWorkInProgress = Array.isArray(data.items) ? data.items : [];
+  } catch (err) {
+    console.error("loadWorkInProgress error:", err);
+    currentWorkInProgress = [];
   }
 }
 
@@ -6528,6 +6673,8 @@ async function refreshSelectedCustomer360() {
     currentPartOrders = [];
     currentAccountsPayableBills = [];
     currentAccountsReceivableInvoices = [];
+    currentGlAccounts = [];
+    currentWorkInProgress = [];
     return;
   }
 
@@ -6554,7 +6701,9 @@ async function refreshSelectedCustomer360() {
     loadMediaAssets(customer.id, vehicle?.id || "", activeRepairOrderId),
     loadPartOrders(activeRepairOrderId),
     loadAccountsPayableBills(),
-    loadAccountsReceivableInvoices(activeRepairOrderId)
+    loadAccountsReceivableInvoices(activeRepairOrderId),
+    loadGlAccounts(),
+    loadWorkInProgress(activeRepairOrderId)
   ]);
 }
 
