@@ -2463,7 +2463,7 @@ function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "",
       </div>
       <p>${escapeHtml(copy || "Queue detail will appear here.")}</p>
       ${priorityReason ? `<span class="customer360-manager-reason">Why top: ${escapeHtml(priorityReason)}</span>` : ""}
-      ${ownerAge ? `<span class="customer360-manager-ownerage">${escapeHtml(ownerAge)}</span>` : ""}
+      ${ownerAge ? `<span class="customer360-manager-ownerage ${escapeHtml(tone || "info")}">${escapeHtml(ownerAge)}</span>` : ""}
       <div class="customer360-manager-meta">
         <span class="customer360-manager-pill ${escapeHtml(tone || "info")}">${escapeHtml(countLabel || "0 open")}</span>
         ${freshness && !ownerLabel ? `<span class="customer360-manager-freshness">${escapeHtml(freshness)}</span>` : ""}
