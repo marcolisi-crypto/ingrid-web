@@ -270,6 +270,20 @@
     .customer360-dashboard-head h3{margin:0;color:#f4f8ff;font-size:18px}
     .customer360-dashboard-head span{display:block;margin-top:4px;color:#91a8ca;font-size:12px;line-height:1.45}
     .customer360-dashboard-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .customer360-department-queue-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+    .customer360-department-queue{padding:14px;border-radius:14px;background:linear-gradient(180deg,#16233a 0%,#111b2d 100%);border:1px solid rgba(255,255,255,.06);display:grid;gap:12px}
+    .customer360-department-queue-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .customer360-department-queue-head strong{color:#f2f6ff;font-size:14px}
+    .customer360-department-queue-head span{color:#9db2d3;font-size:12px}
+    .customer360-department-queue-list{display:grid;gap:10px}
+    .customer360-department-queue-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#182743 0%,#142036 100%);cursor:pointer;text-align:left;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+    .customer360-department-queue-row:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.32);box-shadow:0 12px 22px rgba(0,0,0,.18)}
+    .customer360-department-queue-main{display:grid;gap:4px;min-width:0}
+    .customer360-department-queue-main strong{color:#f3f7ff;font-size:13px}
+    .customer360-department-queue-main span{color:#a4b8d8;font-size:12px;line-height:1.4}
+    .customer360-department-queue-submeta{display:flex;gap:8px;flex-wrap:wrap;color:#7f97bb;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .customer360-department-queue-side{display:grid;justify-items:end;gap:8px;flex:0 0 auto}
+    .customer360-department-queue-badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
     .customer360-dashboard-card{display:grid;gap:8px;width:100%;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#18243a 0%,#121e31 100%);color:#eef4ff;text-align:left;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
     .customer360-dashboard-card:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.28);box-shadow:0 12px 20px rgba(0,0,0,.16)}
     .customer360-dashboard-card.info{border-color:rgba(117,164,255,.18)}
@@ -637,7 +651,7 @@
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
       .customer360-layout,.customer360-main-grid,.customer360-lower-grid,.customer360-record-strip{grid-template-columns:1fr}
-      .customer360-stack,.customer360-department-hub .customer360-role-tool-grid,.customer360-dashboard-grid{grid-template-columns:1fr}
+      .customer360-stack,.customer360-department-hub .customer360-role-tool-grid,.customer360-dashboard-grid,.customer360-department-queue-grid{grid-template-columns:1fr}
       .customer360-journey-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width: 960px){

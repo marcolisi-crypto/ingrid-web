@@ -3642,6 +3642,71 @@ function buildDepartmentDashboardCard({ label = "", value = "", meta = "", tone 
   `;
 }
 
+function getCustomerById(customerId = "") {
+  return (currentCustomers || []).find((item) => String(item.id) === String(customerId)) || null;
+}
+
+function getVehicleById(vehicleId = "") {
+  return (currentVehicles || []).find((item) => String(item.id) === String(vehicleId)) || null;
+}
+
+function getRepairOrdersByCustomer(customerId = "") {
+  return (currentRepairOrders || []).filter((item) => String(item.customerId || "") === String(customerId));
+}
+
+async function openDepartmentQueueRecord(customerId = "", lens = "home", kind = "", sourceId = "") {
+  if (customerId) selectedCustomerId = customerId;
+  await refreshSelectedCustomer360();
+  if (kind && sourceId) {
+    openCustomer360FocusedArtifact(kind, sourceId, lens || currentDepartmentLens);
+    return;
+  }
+  setDepartmentLens(lens || "home");
+}
+
+function buildDepartmentQueueSection(title = "", rows = [], emptyCopy = "No queue items.") {
+  return `
+    <div class="customer360-department-queue">
+      <div class="customer360-department-queue-head">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(rows.length ? `${rows.length} live` : "0 live")}</span>
+      </div>
+      <div class="customer360-department-queue-list">
+        ${rows.length ? rows.join("") : `<div class="customer360-empty">${escapeHtml(emptyCopy)}</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function buildDepartmentQueueRow({
+  customer = null,
+  vehicle = null,
+  title = "",
+  meta = "",
+  badges = [],
+  action = "",
+  cta = "Open"
+} = {}) {
+  return `
+    <button type="button" class="customer360-department-queue-row" ${action ? `onclick="${action}"` : ""}>
+      <div class="customer360-department-queue-main">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(meta)}</span>
+        <div class="customer360-department-queue-submeta">
+          <span>${escapeHtml(customerDisplayName(customer))}</span>
+          <span>${escapeHtml(vehicleDisplayName(vehicle))}</span>
+        </div>
+      </div>
+      <div class="customer360-department-queue-side">
+        <div class="customer360-department-queue-badges">
+          ${badges.map((badge) => `<span class="customer360-chip">${escapeHtml(badge)}</span>`).join("")}
+        </div>
+        <span class="customer360-dashboard-cta">${escapeHtml(cta)}</span>
+      </div>
+    </button>
+  `;
+}
+
 function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointments = [], calls = []) {
   const activeRepairOrder = getActiveRepairOrderRecord();
   const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
@@ -3662,15 +3727,144 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
   const roArInvoices = activeRepairOrder ? getRepairOrderArInvoices(activeRepairOrder) : [];
   const roApBills = activeRepairOrder ? getRepairOrderApBills(activeRepairOrder) : [];
   const roMedia = activeRepairOrder ? getRepairOrderMediaAssets(activeRepairOrder) : [];
+  const allOpenTasks = (currentTasks || []).filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const allAppointments = (currentAppointments || []).filter((item) => String(item.status || "").toLowerCase() !== "completed");
+  const allRepairOrders = (currentRepairOrders || []).filter((item) => !["closed", "completed"].includes(String(item.status || "").toLowerCase()));
+  const allServiceTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "service");
+  const allBdcTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "bdc");
+  const allSalesTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "sales");
+  const allTechnicianTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "technicians");
+  const allFiTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "fi");
+  const allPartsTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "parts");
+  const allAccountingTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "accounting");
+  const allMissedCalls = (currentCalls || []).filter((call) => String(call.status || "").toLowerCase().includes("miss"));
+  const totalOpenRoBalance = allRepairOrders.reduce((sum, repairOrder) => sum + Number(getRepairOrderAmounts(repairOrder).balance || 0), 0);
+  const totalLaborOps = allRepairOrders.reduce((sum, repairOrder) => sum + (repairOrder.laborOps || []).length, 0);
+  const totalMpiItems = allRepairOrders.reduce((sum, repairOrder) => sum + (repairOrder.multiPointInspections || []).length, 0);
+  const totalPartLines = allRepairOrders.reduce((sum, repairOrder) => sum + (repairOrder.partLines || []).length, 0);
+  const totalSpecialOrders = allRepairOrders.reduce((sum, repairOrder) => sum + getRepairOrderPartOrders(repairOrder).length, 0);
+  const totalArInvoices = (currentAccountsReceivableInvoices || []).length;
+  const totalApBills = (currentAccountsPayableBills || []).length;
+  const totalRoMedia = (currentMediaAssets || []).filter((item) => String(item.contextType || "").toLowerCase() === "repair_order").length;
+  const tomorrowStart = new Date();
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  tomorrowStart.setHours(0, 0, 0, 0);
+  const tomorrowEnd = new Date(tomorrowStart);
+  tomorrowEnd.setHours(23, 59, 59, 999);
+  const tomorrowAppointments = allAppointments.filter((item) => {
+    const raw = item.date ? new Date(`${item.date}T12:00:00`) : new Date(item.startAtUtc || item.createdAtUtc || 0);
+    return raw >= tomorrowStart && raw <= tomorrowEnd;
+  });
+  const upcomingServiceRows = allAppointments
+    .slice()
+    .sort((a, b) => new Date(a.startAtUtc || `${a.date || ""}T${a.time || "00:00"}` || 0) - new Date(b.startAtUtc || `${b.date || ""}T${b.time || "00:00"}` || 0))
+    .slice(0, 8)
+    .map((appointment) => {
+      const rowCustomer = getCustomerById(appointment.customerId);
+      const rowVehicle = getVehicleById(appointment.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: appointment.service || "Service appointment",
+        meta: `${formatDisplayDateTime(appointment.startAtUtc || `${appointment.date || ""}T${appointment.time || "00:00"}`)} • ${appointment.advisor || "Advisor queue"}`,
+        badges: [titleCase(appointment.status || "scheduled"), appointment.transport || "Standard"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(appointment.customerId || ""))}','service','appointments','${escapeHtml(String(appointment.id || appointment.appointmentId || ""))}')`,
+        cta: "Open Visit"
+      });
+    });
+  const tomorrowServiceRows = tomorrowAppointments
+    .slice(0, 8)
+    .map((appointment) => {
+      const rowCustomer = getCustomerById(appointment.customerId);
+      const rowVehicle = getVehicleById(appointment.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: appointment.service || "Tomorrow appointment",
+        meta: `${appointment.time || "Time pending"} • ${appointment.advisor || "Advisor queue"}`,
+        badges: ["Tomorrow", appointment.transport || "Standard"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(appointment.customerId || ""))}','service','appointments','${escapeHtml(String(appointment.id || appointment.appointmentId || ""))}')`,
+        cta: "Open Tomorrow"
+      });
+    });
+  const openRoRows = allRepairOrders
+    .slice()
+    .sort((a, b) => new Date(a.updatedAtUtc || a.createdAtUtc || 0) - new Date(b.updatedAtUtc || b.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const amounts = getRepairOrderAmounts(repairOrder);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • ${repairOrder.complaint || "Repair order"}`,
+        meta: `${getRepairOrderAdvisorName(repairOrder)} • Promise ${formatDisplayDateTime(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc || repairOrder.createdAtUtc)}`,
+        badges: [titleCase(repairOrder.status || "open"), formatMoney(amounts.balance || 0)],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
+        cta: "Open RO"
+      });
+    });
+  const technicianQueueRows = allRepairOrders
+    .filter((repairOrder) => (repairOrder.laborOps || []).length || (repairOrder.multiPointInspections || []).length)
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const latestLabor = getLatestRepairOrderLaborOp(repairOrder);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • ${(repairOrder.laborOps || []).length} labor ops`,
+        meta: `${latestLabor?.technicianName || "Tech queue"} • ${latestLabor?.dispatchStatus ? titleCase(latestLabor.dispatchStatus) : "Awaiting dispatch"}`,
+        badges: [`MPI ${(repairOrder.multiPointInspections || []).length}`, latestLabor?.technicianName || "Queue"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','technicians')`,
+        cta: "Open Job"
+      });
+    });
+  const partsQueueRows = allRepairOrders
+    .filter((repairOrder) => (repairOrder.partLines || []).length || getRepairOrderPartOrders(repairOrder).length)
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const specialOrders = getRepairOrderPartOrders(repairOrder);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • ${(repairOrder.partLines || []).length} part lines`,
+        meta: `${specialOrders.length} special order${specialOrders.length === 1 ? "" : "s"} • ${formatMoney(getRepairOrderAmounts(repairOrder).parts || 0)} parts`,
+        badges: [specialOrders[0]?.status ? titleCase(specialOrders[0].status) : "Stock", specialOrders[0]?.partNumber || "RO parts"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','parts')`,
+        cta: "Open Parts"
+      });
+    });
+  const accountingQueueRows = allRepairOrders
+    .filter((repairOrder) => getRepairOrderAmounts(repairOrder).balance > 0 || (repairOrder.accountingEntries || []).length)
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const reviewTask = getRepairOrderAccountingReviewTask(repairOrder);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • ${formatMoney(getRepairOrderAmounts(repairOrder).balance || 0)} due`,
+        meta: `${reviewTask?.assignedUser || "Accounting queue"} • ${(repairOrder.accountingEntries || []).length} entries posted`,
+        badges: [reviewTask ? "Review live" : "Needs review", titleCase(repairOrder.status || "open")],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','accounting')`,
+        cta: "Open Review"
+      });
+    });
 
   const homeCards = [
-    { label: "Service", value: `${appointments.length}`, meta: `${getSelectedCustomerRepairOrders().length} repair orders tied to this customer`, tone: appointments.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "Open Service Dashboard" },
-    { label: "BDC", value: `${missedCalls.length}`, meta: `${bdcTasks.length} callback tasks live`, tone: missedCalls.length ? "danger" : bdcTasks.length ? "warn" : "good", action: "setDepartmentLens('bdc')", cta: "Open BDC Dashboard" },
-    { label: "Sales", value: `${salesTasks.length}`, meta: `${appointments.length ? "Visit booked" : "No showroom visit yet"}`, tone: salesTasks.length ? "warn" : "info", action: "setDepartmentLens('sales')", cta: "Open Sales Dashboard" },
-    { label: "Technicians", value: `${activeRepairOrder?.laborOps?.length || 0}`, meta: `${technicianTasks.length} technician tasks live`, tone: activeRepairOrder ? "warn" : "info", action: "setDepartmentLens('technicians')", cta: "Open Technician Dashboard" },
-    { label: "F&I", value: `${fiTasks.length}`, meta: `${salesTasks.length ? "Deal ready for handoff" : "No deal in finance yet"}`, tone: fiTasks.length ? "warn" : "good", action: "setDepartmentLens('fi')", cta: "Open F&I Dashboard" },
-    { label: "Parts", value: `${roPartOrders.length || partsTasks.length}`, meta: `${(activeRepairOrder?.partLines || []).length || 0} parts tied to the RO`, tone: roPartOrders.length || partsTasks.length ? "warn" : "good", action: "setDepartmentLens('parts')", cta: "Open Parts Dashboard" },
-    { label: "Accounting", value: `${roArInvoices.length + roApBills.length}`, meta: `${formatMoney(roAmounts.balance || 0)} still open on this job`, tone: roArInvoices.length || roApBills.length ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting Dashboard" }
+    { label: "Service", value: `${allAppointments.length}`, meta: `${allRepairOrders.length} open ROs across fixed ops`, tone: allAppointments.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "Open Service Dashboard" },
+    { label: "BDC", value: `${allMissedCalls.length}`, meta: `${allBdcTasks.length} callback tasks live`, tone: allMissedCalls.length ? "danger" : allBdcTasks.length ? "warn" : "good", action: "setDepartmentLens('bdc')", cta: "Open BDC Dashboard" },
+    { label: "Sales", value: `${allSalesTasks.length}`, meta: `${allAppointments.length ? `${allAppointments.length} visits booked` : "No showroom visit yet"}`, tone: allSalesTasks.length ? "warn" : "info", action: "setDepartmentLens('sales')", cta: "Open Sales Dashboard" },
+    { label: "Technicians", value: `${totalLaborOps}`, meta: `${allTechnicianTasks.length} technician tasks live`, tone: totalLaborOps ? "warn" : "info", action: "setDepartmentLens('technicians')", cta: "Open Technician Dashboard" },
+    { label: "F&I", value: `${allFiTasks.length}`, meta: `${allSalesTasks.length ? "Deal handoffs active" : "No deal in finance yet"}`, tone: allFiTasks.length ? "warn" : "good", action: "setDepartmentLens('fi')", cta: "Open F&I Dashboard" },
+    { label: "Parts", value: `${totalSpecialOrders || allPartsTasks.length}`, meta: `${totalPartLines} part lines across open ROs`, tone: totalSpecialOrders || allPartsTasks.length ? "warn" : "good", action: "setDepartmentLens('parts')", cta: "Open Parts Dashboard" },
+    { label: "Accounting", value: `${totalArInvoices + totalApBills}`, meta: `${formatMoney(totalOpenRoBalance)} open across all live ROs`, tone: totalArInvoices || totalApBills || totalOpenRoBalance ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting Dashboard" }
   ];
 
   const byLens = {
@@ -3681,74 +3875,146 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
     },
     service: {
       title: "Service Dashboard",
-      copy: "Advisor tools and live fixed-ops state for this customer.",
+      copy: "Advisor tools and live fixed-ops state across the store.",
       cards: [
-        { label: "Open ROs", value: `${getSelectedCustomerRepairOrders().length}`, meta: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is active` : "No open repair order yet", tone: activeRepairOrder ? "warn" : "info", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Open Active RO" : "Open Repair Order" },
-        { label: "Appointments", value: `${appointments.length}`, meta: appointments[0]?.service || "No service visit booked", tone: appointments.length ? "good" : "warn", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','service')` : "setCustomer360ComposerMode('appointment')", cta: appointments.length ? "Open Appointment" : "Book Appointment" },
-        { label: "Estimate", value: formatMoney(roAmounts.total || 0), meta: `${(activeRepairOrder?.estimateLines || []).length || 0} estimate lines on the RO`, tone: activeRepairOrder ? "info" : "good", action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Add Estimate Line" : "Open RO First" },
-        { label: "Balance", value: formatMoney(roAmounts.balance || 0), meta: `${roArInvoices.length} AR invoice(s) and ${roApBills.length} AP bill(s) linked`, tone: roAmounts.balance > 0 ? "warn" : "good", action: activeRepairOrder ? "createAccountsReceivableInvoice()" : "setDepartmentLens('accounting')", cta: activeRepairOrder ? "Post AR Invoice" : "Open Accounting" }
+        { label: "Open ROs", value: `${allRepairOrders.length}`, meta: openRoRows[0] ? "Every open repair order is available below." : "No open repair order yet", tone: allRepairOrders.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "View Open ROs" },
+        { label: "Appointments", value: `${allAppointments.length}`, meta: upcomingServiceRows[0] ? "Storewide advisor appointment queue." : "No service visit booked", tone: allAppointments.length ? "good" : "warn", action: "setDepartmentLens('service')", cta: "View Appointments" },
+        { label: "Tomorrow", value: `${tomorrowAppointments.length}`, meta: tomorrowServiceRows[0] ? "Tomorrow's drive opens are below." : "No appointments booked for tomorrow", tone: tomorrowAppointments.length ? "info" : "good", action: "setDepartmentLens('service')", cta: "View Tomorrow" },
+        { label: "Open Balance", value: formatMoney(totalOpenRoBalance || 0), meta: `${totalArInvoices} AR invoice(s) and ${totalApBills} AP bill(s) linked`, tone: totalOpenRoBalance > 0 ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting" }
       ]
     },
     bdc: {
       title: "BDC Dashboard",
       copy: "Communication queue, callbacks, and appointment conversion.",
       cards: [
-        { label: "Missed Calls", value: `${missedCalls.length}`, meta: missedCalls[0]?.from || "No missed calls right now", tone: missedCalls.length ? "danger" : "good", action: missedCalls[0] ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCalls[0].id || missedCalls[0].callId || missedCalls[0].createdAtUtc || missedCalls[0].from || ""))}','bdc')` : "setDepartmentLens('bdc')", cta: missedCalls.length ? "Rescue Call" : "Open Queue" },
-        { label: "Callbacks", value: `${bdcTasks.length}`, meta: bdcTasks[0]?.title || "No callback tasks live", tone: bdcTasks.length ? "warn" : "good", action: bdcTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTasks[0].id || bdcTasks[0].taskId || bdcTasks[0].createdAtUtc || bdcTasks[0].title || ""))}','bdc')` : "startBdcCallbackTask()", cta: bdcTasks.length ? "Open Callback" : "Queue Callback" },
-        { label: "Texts", value: `${calls.length}`, meta: "Calls and SMS remain interactive from this customer record", tone: calls.length ? "info" : "good", action: "openSmsForPhone(getSelectedCustomerPrimaryPhone())", cta: "Open Messaging" },
-        { label: "Appointments", value: `${appointments.length}`, meta: appointments[0]?.service || "No booked visit", tone: appointments.length ? "good" : "warn", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','bdc')` : "setCustomer360ComposerMode('appointment')", cta: appointments.length ? "Open Appointment" : "Book Visit" }
+        { label: "Missed Calls", value: `${allMissedCalls.length}`, meta: allMissedCalls[0]?.from || "No missed calls right now", tone: allMissedCalls.length ? "danger" : "good", action: "setDepartmentLens('bdc')", cta: allMissedCalls.length ? "Rescue Queue" : "Open Queue" },
+        { label: "Callbacks", value: `${allBdcTasks.length}`, meta: allBdcTasks[0]?.title || "No callback tasks live", tone: allBdcTasks.length ? "warn" : "good", action: "setDepartmentLens('bdc')", cta: allBdcTasks.length ? "Open Callbacks" : "Queue Callback" },
+        { label: "Texts", value: `${(currentCalls || []).length}`, meta: "Storewide phone and SMS traffic queue", tone: (currentCalls || []).length ? "info" : "good", action: "setDepartmentLens('bdc')", cta: "Open Messaging" },
+        { label: "Appointments", value: `${allAppointments.length}`, meta: upcomingServiceRows[0] ? "Appointments are ready for confirmation." : "No booked visit", tone: allAppointments.length ? "good" : "warn", action: "setDepartmentLens('bdc')", cta: allAppointments.length ? "Open Appointments" : "Book Visit" }
       ]
     },
     sales: {
       title: "Sales Dashboard",
       copy: "Deal desk, showroom, and handoff actions for the sales team.",
       cards: [
-        { label: "Open Deals", value: `${salesTasks.length}`, meta: salesTasks[0]?.title || "No active deal task yet", tone: salesTasks.length ? "warn" : "good", action: salesTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTasks[0].id || salesTasks[0].taskId || salesTasks[0].createdAtUtc || salesTasks[0].title || ""))}','sales')` : "startSalesDealTask()", cta: salesTasks.length ? "Open Deal" : "Start Deal" },
-        { label: "Showroom Visits", value: `${appointments.length}`, meta: appointments[0]?.service || "No test drive scheduled", tone: appointments.length ? "good" : "warn", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','sales')` : "setCustomer360ComposerMode('appointment')", cta: appointments.length ? "Open Visit" : "Schedule Visit" },
-        { label: "Customer Context", value: `${calls.length + currentCustomerNotes.length}`, meta: "Communications and notes remain clickable", tone: "info", action: "setCustomer360TimelineFilter('all')", cta: "Open Activity" },
-        { label: "F&I Handoff", value: `${fiTasks.length}`, meta: fiTasks[0]?.title || "No finance handoff yet", tone: fiTasks.length ? "warn" : "good", action: fiTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(fiTasks[0].id || fiTasks[0].taskId || fiTasks[0].createdAtUtc || fiTasks[0].title || ""))}','fi')` : "setDepartmentLens('fi')", cta: fiTasks.length ? "Open F&I" : "Hand Off" }
+        { label: "Open Deals", value: `${allSalesTasks.length}`, meta: allSalesTasks[0]?.title || "No active deal task yet", tone: allSalesTasks.length ? "warn" : "good", action: "setDepartmentLens('sales')", cta: allSalesTasks.length ? "Open Deals" : "Start Deal" },
+        { label: "Showroom Visits", value: `${allAppointments.length}`, meta: upcomingServiceRows[0] ? "Upcoming visit queue is live." : "No test drive scheduled", tone: allAppointments.length ? "good" : "warn", action: "setDepartmentLens('sales')", cta: allAppointments.length ? "Open Visits" : "Schedule Visit" },
+        { label: "Customer Context", value: `${(currentCalls || []).length + (currentTasks || []).length}`, meta: "Communications and workflow remain clickable", tone: "info", action: "setDepartmentLens('sales')", cta: "Open Activity" },
+        { label: "F&I Handoff", value: `${allFiTasks.length}`, meta: allFiTasks[0]?.title || "No finance handoff yet", tone: allFiTasks.length ? "warn" : "good", action: "setDepartmentLens('fi')", cta: allFiTasks.length ? "Open F&I" : "Hand Off" }
       ]
     },
     technicians: {
       title: "Technician Dashboard",
       copy: "Clocking, labor dispatch, MPI, and media capture in one place.",
       cards: [
-        { label: "Clock State", value: latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "Not Clocked", meta: activeRepairOrder?.repairOrderNumber || "No active repair order", tone: latestClockEvent?.eventType === "clock_in" ? "warn" : activeRepairOrder ? "info" : "good", action: activeRepairOrder ? (latestClockEvent?.eventType === "clock_in" ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()", cta: activeRepairOrder ? (latestClockEvent?.eventType === "clock_in" ? "Clock Out" : "Clock In") : "Open RO First" },
-        { label: "Labor Ops", value: `${(activeRepairOrder?.laborOps || []).length}`, meta: activeRepairOrder?.laborOps?.[0]?.description || "No labor ops dispatched yet", tone: activeRepairOrder?.laborOps?.length ? "warn" : "good", action: activeRepairOrder ? "addRepairOrderLaborOp()" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Dispatch Labor" : "Open RO First" },
-        { label: "MPI Items", value: `${(activeRepairOrder?.multiPointInspections || []).length}`, meta: activeRepairOrder?.multiPointInspections?.[0]?.itemName || "No MPI results on this RO", tone: activeRepairOrder?.multiPointInspections?.length ? "info" : "good", action: activeRepairOrder ? "addRepairOrderInspection()" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Complete MPI" : "Open RO First" },
-        { label: "Media", value: `${roMedia.length}`, meta: roMedia[0]?.fileName || "No technician photos or videos yet", tone: roMedia.length ? "good" : "info", action: roMedia[0]?.storageUrl ? `window.open('${escapeHtml(String(roMedia[0].storageUrl || ""))}','_blank')` : "captureTechnicianMedia('repair_order','photo')", cta: roMedia.length ? "Open Media" : "Capture Media" }
+        { label: "Active Jobs", value: `${technicianQueueRows.length}`, meta: technicianQueueRows[0] ? "Storewide technician queue is live below." : "No active repair order", tone: technicianQueueRows.length ? "warn" : "good", action: "setDepartmentLens('technicians')", cta: technicianQueueRows.length ? "Open Jobs" : "Open Queue" },
+        { label: "Labor Ops", value: `${totalLaborOps}`, meta: totalLaborOps ? "Labor dispatch is active across open ROs." : "No labor ops dispatched yet", tone: totalLaborOps ? "warn" : "good", action: "setDepartmentLens('technicians')", cta: "Open Labor Ops" },
+        { label: "MPI Items", value: `${totalMpiItems}`, meta: totalMpiItems ? "MPI work is active across the store." : "No MPI results on open ROs", tone: totalMpiItems ? "info" : "good", action: "setDepartmentLens('technicians')", cta: "Open MPI" },
+        { label: "Media", value: `${totalRoMedia}`, meta: totalRoMedia ? "Technician media has been captured on live jobs." : "No technician photos or videos yet", tone: totalRoMedia ? "good" : "info", action: "setDepartmentLens('technicians')", cta: totalRoMedia ? "Open Media Queue" : "Capture Media" }
       ]
     },
     fi: {
       title: "F&I Dashboard",
       copy: "Finance review, delivery prep, and funding posture.",
       cards: [
-        { label: "Finance Tasks", value: `${fiTasks.length}`, meta: fiTasks[0]?.title || "No F&I work active", tone: fiTasks.length ? "warn" : "good", action: fiTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(fiTasks[0].id || fiTasks[0].taskId || fiTasks[0].createdAtUtc || fiTasks[0].title || ""))}','fi')` : "startFiReviewNote()", cta: fiTasks.length ? "Open F&I" : "Start Review" },
-        { label: "Delivery", value: `${appointments.length}`, meta: appointments[0]?.service || "No delivery appointment set", tone: appointments.length ? "good" : "info", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','fi')` : "startDeliveryHandoffAppointment()", cta: appointments.length ? "Open Delivery" : "Prep Delivery" },
-        { label: "Sales Handoff", value: `${salesTasks.length}`, meta: salesTasks[0]?.title || "No sales handoff waiting", tone: salesTasks.length ? "info" : "good", action: "setDepartmentLens('sales')", cta: "Open Sales" },
-        { label: "Accounting Sync", value: `${roArInvoices.length + roApBills.length}`, meta: "Finance and accounting stay linked to the same job", tone: roArInvoices.length + roApBills.length ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting" }
+        { label: "Finance Tasks", value: `${allFiTasks.length}`, meta: allFiTasks[0]?.title || "No F&I work active", tone: allFiTasks.length ? "warn" : "good", action: "setDepartmentLens('fi')", cta: allFiTasks.length ? "Open F&I" : "Start Review" },
+        { label: "Delivery", value: `${allAppointments.length}`, meta: allAppointments.length ? "Upcoming delivery / visit records are live." : "No delivery appointment set", tone: allAppointments.length ? "good" : "info", action: "setDepartmentLens('fi')", cta: allAppointments.length ? "Open Delivery" : "Prep Delivery" },
+        { label: "Sales Handoff", value: `${allSalesTasks.length}`, meta: allSalesTasks[0]?.title || "No sales handoff waiting", tone: allSalesTasks.length ? "info" : "good", action: "setDepartmentLens('sales')", cta: "Open Sales" },
+        { label: "Accounting Sync", value: `${totalArInvoices + totalApBills}`, meta: "Finance and accounting stay linked to the same job", tone: totalArInvoices + totalApBills ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting" }
       ]
     },
     parts: {
       title: "Parts Dashboard",
       copy: "Inventory demand, special orders, sourcing, and dispatch.",
       cards: [
-        { label: "Part Lines", value: `${(activeRepairOrder?.partLines || []).length}`, meta: activeRepairOrder?.partLines?.[0]?.description || "No parts attached to the RO", tone: activeRepairOrder?.partLines?.length ? "warn" : "good", action: activeRepairOrder ? "addRepairOrderPartRequest()" : "createPartsPickTask()", cta: activeRepairOrder ? "Add Part Line" : "Create Pick" },
-        { label: "Special Orders", value: `${roPartOrders.length}`, meta: roPartOrders[0]?.partNumber || "No special orders live", tone: roPartOrders.length ? "warn" : "good", action: activeRepairOrder ? "createSpecialPartOrder()" : "setDepartmentLens('parts')", cta: activeRepairOrder ? "Place Special Order" : "Open Parts" },
-        { label: "Open Requests", value: `${partsTasks.length}`, meta: partsTasks[0]?.title || "No parts requests waiting", tone: partsTasks.length ? "info" : "good", action: partsTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTasks[0].id || partsTasks[0].taskId || partsTasks[0].createdAtUtc || partsTasks[0].title || ""))}','parts')` : "createPartsPickTask()", cta: partsTasks.length ? "Open Request" : "Create Request" },
-        { label: "VIN Evidence", value: `${getVinArchiveMediaAssets().length}`, meta: "Use archive evidence before sourcing decisions", tone: "info", action: "openVehicleOpsContext('archive')", cta: "Open VIN Archive" }
+        { label: "Part Lines", value: `${totalPartLines}`, meta: partsQueueRows[0] ? "Part demand is active on live ROs." : "No parts attached to the RO", tone: totalPartLines ? "warn" : "good", action: "setDepartmentLens('parts')", cta: totalPartLines ? "Open Part Lines" : "Create Pick" },
+        { label: "Special Orders", value: `${totalSpecialOrders}`, meta: totalSpecialOrders ? "OEM / aftermarket ordering is active." : "No special orders live", tone: totalSpecialOrders ? "warn" : "good", action: "setDepartmentLens('parts')", cta: totalSpecialOrders ? "Open Orders" : "Open Parts" },
+        { label: "Open Requests", value: `${allPartsTasks.length}`, meta: allPartsTasks[0]?.title || "No parts requests waiting", tone: allPartsTasks.length ? "info" : "good", action: "setDepartmentLens('parts')", cta: allPartsTasks.length ? "Open Requests" : "Create Request" },
+        { label: "VIN Evidence", value: `${getVinArchiveMediaAssets().length}`, meta: "Use archive evidence before sourcing decisions", tone: "info", action: "setDepartmentLens('parts')", cta: "Open VIN Archive" }
       ]
     },
     accounting: {
       title: "Accounting Dashboard",
       copy: "AR, AP, balances, and posting queue for the live job.",
       cards: [
-        { label: "AR Invoices", value: `${roArInvoices.length}`, meta: roArInvoices[0]?.invoiceNumber || "No AR invoices posted", tone: roArInvoices.length ? "warn" : "good", action: activeRepairOrder ? "createAccountsReceivableInvoice()" : "setDepartmentLens('service')", cta: activeRepairOrder ? "Post AR" : "Open Service" },
-        { label: "AP Bills", value: `${roApBills.length}`, meta: roApBills[0]?.invoiceNumber || "No AP bills posted", tone: roApBills.length ? "warn" : "good", action: activeRepairOrder ? "createAccountsPayableBill()" : "setDepartmentLens('parts')", cta: activeRepairOrder ? "Add AP Bill" : "Open Parts" },
-        { label: "RO Balance", value: formatMoney(roAmounts.balance || 0), meta: activeRepairOrder?.repairOrderNumber || "No active repair order", tone: roAmounts.balance > 0 ? "warn" : "good", action: activeRepairOrder ? "setDepartmentLens('service')" : "queueAccountingInvoiceReview()", cta: activeRepairOrder ? "Open RO" : "Queue Review" },
-        { label: "Reviews", value: `${accountingTasks.length}`, meta: accountingTasks[0]?.title || "No accounting tasks live", tone: accountingTasks.length ? "info" : "good", action: accountingTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTasks[0].id || accountingTasks[0].taskId || accountingTasks[0].createdAtUtc || accountingTasks[0].title || ""))}','accounting')` : "queueAccountingInvoiceReview()", cta: accountingTasks.length ? "Open Review" : "Queue Review" }
+        { label: "AR Invoices", value: `${totalArInvoices}`, meta: currentAccountsReceivableInvoices[0]?.invoiceNumber || "No AR invoices posted", tone: totalArInvoices ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalArInvoices ? "Open AR" : "Open Accounting" },
+        { label: "AP Bills", value: `${totalApBills}`, meta: currentAccountsPayableBills[0]?.invoiceNumber || "No AP bills posted", tone: totalApBills ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: totalApBills ? "Open AP" : "Open Accounting" },
+        { label: "RO Balance", value: formatMoney(totalOpenRoBalance || 0), meta: allRepairOrders.length ? `${allRepairOrders.length} open repair orders` : "No active repair order", tone: totalOpenRoBalance > 0 ? "warn" : "good", action: "setDepartmentLens('service')", cta: allRepairOrders.length ? "Open Service" : "Queue Review" },
+        { label: "Reviews", value: `${allAccountingTasks.length}`, meta: allAccountingTasks[0]?.title || "No accounting tasks live", tone: allAccountingTasks.length ? "info" : "good", action: "setDepartmentLens('accounting')", cta: allAccountingTasks.length ? "Open Reviews" : "Queue Review" }
       ]
     }
+  };
+
+  const queueByLens = {
+    home: [
+      buildDepartmentQueueSection("Upcoming Appointments", upcomingServiceRows, "No live appointments across the store."),
+      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No open repair orders across the store.")
+    ],
+    service: [
+      buildDepartmentQueueSection("All Upcoming Appointments", upcomingServiceRows, "No service appointments scheduled."),
+      buildDepartmentQueueSection("Tomorrow's Appointments", tomorrowServiceRows, "No appointments booked for tomorrow."),
+      buildDepartmentQueueSection("All Open Repair Orders", openRoRows, "No open repair orders in fixed ops.")
+    ],
+    technicians: [
+      buildDepartmentQueueSection("Active Technician Jobs", technicianQueueRows, "No technician jobs are active."),
+      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No repair orders are waiting for technician work.")
+    ],
+    parts: [
+      buildDepartmentQueueSection("Open Parts Work", partsQueueRows, "No parts work is open right now."),
+      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No repair orders are waiting on parts.")
+    ],
+    accounting: [
+      buildDepartmentQueueSection("Open Accounting Reviews", accountingQueueRows, "No accounting reviews are pending."),
+      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No repair orders are waiting on accounting.")
+    ],
+    bdc: [
+      buildDepartmentQueueSection("Upcoming Appointments", upcomingServiceRows, "No booked appointments to confirm."),
+      buildDepartmentQueueSection("Open Follow-Ups", allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "bdc").slice(0, 8).map((task) => {
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "BDC follow-up",
+          meta: `${task.assignedUser || "BDC queue"} • ${task.description || "Follow-up task"}`,
+          badges: [titleCase(task.priority || "normal"), titleCase(task.status || "open")],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','bdc','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open Task"
+        });
+      }), "No BDC follow-ups are open.")
+    ],
+    sales: [
+      buildDepartmentQueueSection("Open Sales Tasks", allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "sales").slice(0, 8).map((task) => {
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "Sales task",
+          meta: `${task.assignedUser || "Sales queue"} • ${task.description || "Deal workflow"}`,
+          badges: [titleCase(task.priority || "normal"), titleCase(task.status || "open")],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','sales','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open Deal"
+        });
+      }), "No sales tasks are open."),
+      buildDepartmentQueueSection("Upcoming Appointments", upcomingServiceRows, "No showroom or service visits are booked.")
+    ],
+    fi: [
+      buildDepartmentQueueSection("Open F&I Tasks", allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "fi").slice(0, 8).map((task) => {
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "F&I task",
+          meta: `${task.assignedUser || "F&I queue"} • ${task.description || "Finance workflow"}`,
+          badges: [titleCase(task.priority || "normal"), titleCase(task.status || "open")],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','fi','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open Review"
+        });
+      }), "No F&I work is open."),
+      buildDepartmentQueueSection("Upcoming Deliveries / Visits", upcomingServiceRows, "No upcoming delivery or visit records are booked.")
+    ]
   };
 
   const config = byLens[currentDepartmentLens] || byLens.home;
@@ -3762,6 +4028,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
     </div>
     <div class="customer360-dashboard-grid">
       ${config.cards.map((card) => buildDepartmentDashboardCard(card)).join("")}
+    </div>
+    <div class="customer360-department-queue-grid">
+      ${(queueByLens[currentDepartmentLens] || queueByLens.home).join("")}
     </div>
   `;
 }
@@ -6213,7 +6482,7 @@ function renderCustomer360Detail() {
   if (!customer) {
     currentCustomer360TimelineCards = [];
     if (mainTitleEl) mainTitleEl.textContent = currentDepartmentLens === "home" ? "Department Dashboards" : `${config.name} Dashboard`;
-    if (mainSubtitleEl) mainSubtitleEl.textContent = "Choose a customer to activate this department workspace.";
+    if (mainSubtitleEl) mainSubtitleEl.textContent = "Storewide department dashboards stay available here. Select a row to drill into a live customer workspace.";
     if (summaryTitleEl) summaryTitleEl.textContent = getDepartmentLensConfig().summaryTitle || "AI Summary";
     if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
@@ -6237,9 +6506,12 @@ function renderCustomer360Detail() {
     if (opsStripEl) opsStripEl.innerHTML = "";
     if (managerQueueEl) managerQueueEl.innerHTML = "";
     if (roBoardEl) roBoardEl.innerHTML = "";
-    if (departmentHubEl) departmentHubEl.innerHTML = `<div class="customer360-empty">Choose a customer to load department actions.</div>`;
-    if (departmentDashboardEl) departmentDashboardEl.innerHTML = `<div class="customer360-empty">Choose a customer to load department dashboards.</div>`;
-    if (roleToolsEl) roleToolsEl.innerHTML = `<div class="customer360-empty">Choose a customer to load role-specific workspace tools.</div>`;
+    if (departmentHubEl) departmentHubEl.innerHTML = buildRoleWorkspaceToolsMarkup(null, null, [], [], []);
+    if (departmentDashboardEl) {
+      departmentDashboardEl.className = `customer360-department-dashboard ${escapeHtml(String(currentDepartmentLens || "home"))}`;
+      departmentDashboardEl.innerHTML = buildDepartmentDashboardMarkup(null, null, [], [], []);
+    }
+    if (roleToolsEl) roleToolsEl.innerHTML = buildRoleWorkspaceToolsMarkup(null, null, [], [], []);
     return;
   }
 
