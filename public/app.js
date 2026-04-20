@@ -3856,6 +3856,166 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         cta: "Open Review"
       });
     });
+  const serviceApprovalRows = allRepairOrders
+    .filter((repairOrder) => (repairOrder.estimateLines || []).length && getRepairOrderAmounts(repairOrder).balance > 0)
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Approval needed`,
+        meta: `${(repairOrder.estimateLines || []).length} estimate lines • ${formatMoney(getRepairOrderAmounts(repairOrder).balance)} pending`,
+        badges: [getRepairOrderAdvisorName(repairOrder), getJourneyArtifactSla(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc).label],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
+        cta: "Open Approval"
+      });
+    });
+  const transportQueueRows = allOpenTasks
+    .filter((task) => {
+      const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+      return getTaskAssignedDepartment(task) === "service" && (haystack.includes("loaner") || haystack.includes("transport") || haystack.includes("shuttle"));
+    })
+    .slice(0, 8)
+    .map((task) => {
+      const rowCustomer = getCustomerById(task.customerId);
+      const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: task.title || "Transportation task",
+        meta: `${task.assignedUser || "Service queue"} • ${task.description || "Transport workflow"}`,
+        badges: [titleCase(task.priority || "normal"), getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','service','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+        cta: "Open Transport"
+      });
+    });
+  const technicianWaitingPartsRows = allRepairOrders
+    .filter((repairOrder) => {
+      const orders = getRepairOrderPartOrders(repairOrder);
+      return orders.some((order) => !["delivered", "picked", "complete", "completed"].includes(String(order.status || "").toLowerCase()));
+    })
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const liveOrders = getRepairOrderPartOrders(repairOrder).filter((order) => !["delivered", "picked", "complete", "completed"].includes(String(order.status || "").toLowerCase()));
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Waiting on parts`,
+        meta: `${liveOrders.length} order${liveOrders.length === 1 ? "" : "s"} • ETA ${formatDisplayDateTime(liveOrders[0]?.etaAtUtc || liveOrders[0]?.updatedAtUtc || liveOrders[0]?.createdAtUtc)}`,
+        badges: [liveOrders[0]?.partNumber || "Parts", liveOrders[0]?.status ? titleCase(liveOrders[0].status) : "Ordered"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','technicians')`,
+        cta: "Open Job"
+      });
+    });
+  const technicianApprovalRows = allRepairOrders
+    .filter((repairOrder) => (repairOrder.multiPointInspections || []).some((item) => !["green", "pass", "ok"].includes(String(item.result || "").toLowerCase())))
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const flagged = (repairOrder.multiPointInspections || []).filter((item) => !["green", "pass", "ok"].includes(String(item.result || "").toLowerCase()));
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Waiting approval`,
+        meta: `${flagged.length} MPI item${flagged.length === 1 ? "" : "s"} need advisor decision`,
+        badges: [flagged[0]?.result ? titleCase(flagged[0].result) : "Flagged", flagged[0]?.technicianName || "Tech"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','technicians')`,
+        cta: "Open MPI"
+      });
+    });
+  const specialOrderRows = currentPartOrders
+    .filter((order) => String(order.orderType || "").toLowerCase().includes("special"))
+    .slice(0, 8)
+    .map((order) => {
+      const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(order.repairOrderId || ""));
+      const rowCustomer = getCustomerById(repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${order.partNumber || "Part"} • Special order`,
+        meta: `${titleCase(order.vendor || "vendor")} • ETA ${formatDisplayDateTime(order.etaAtUtc || order.updatedAtUtc || order.createdAtUtc)}`,
+        badges: [titleCase(order.status || "ordered"), repairOrder?.repairOrderNumber || "RO"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','parts')`,
+        cta: "Open Order"
+      });
+    });
+  const arrivalRows = currentPartOrders
+    .filter((order) => ["arrived", "picked", "ready", "received"].includes(String(order.status || "").toLowerCase()))
+    .slice(0, 8)
+    .map((order) => {
+      const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(order.repairOrderId || ""));
+      const rowCustomer = getCustomerById(repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${order.partNumber || "Part"} • Ready to deliver`,
+        meta: `${titleCase(order.status || "arrived")} • ${repairOrder?.repairOrderNumber || "RO queue"}`,
+        badges: [titleCase(order.vendor || "vendor"), "Deliver to bay"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','parts')`,
+        cta: "Open Delivery"
+      });
+    });
+  const accountingBalanceRows = allRepairOrders
+    .filter((repairOrder) => getRepairOrderAmounts(repairOrder).balance > 0)
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Open balance`,
+        meta: `${formatMoney(getRepairOrderAmounts(repairOrder).balance)} due • ${getRepairOrderAdvisorName(repairOrder)}`,
+        badges: [titleCase(repairOrder.status || "open"), getJourneyArtifactSla(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc).label],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','accounting')`,
+        cta: "Open Balance"
+      });
+    });
+  const arDueRows = (currentAccountsReceivableInvoices || [])
+    .filter((invoice) => !["paid", "closed", "completed"].includes(String(invoice.status || "").toLowerCase()))
+    .slice()
+    .sort((a, b) => new Date(a.dueAtUtc || a.updatedAtUtc || a.createdAtUtc || 0) - new Date(b.dueAtUtc || b.updatedAtUtc || b.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((invoice) => {
+      const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(invoice.repairOrderId || ""));
+      const rowCustomer = getCustomerById(invoice.customerId || repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${invoice.invoiceNumber || "AR invoice"} • Receivable due`,
+        meta: `${formatMoney(invoice.balanceDue || invoice.amount || 0)} • Due ${formatDisplayDateTime(invoice.dueAtUtc || invoice.updatedAtUtc || invoice.createdAtUtc)}`,
+        badges: [titleCase(invoice.status || "open"), getJourneyArtifactSla(invoice.dueAtUtc || invoice.updatedAtUtc || invoice.createdAtUtc).label],
+        action: `openDepartmentQueueRecord('${escapeHtml(String((invoice.customerId || repairOrder?.customerId || "")))}','accounting')`,
+        cta: "Open AR"
+      });
+    });
+  const apDueRows = (currentAccountsPayableBills || [])
+    .filter((bill) => !["paid", "closed", "completed"].includes(String(bill.status || "").toLowerCase()))
+    .slice()
+    .sort((a, b) => new Date(a.dueAtUtc || a.updatedAtUtc || a.createdAtUtc || 0) - new Date(b.dueAtUtc || b.updatedAtUtc || b.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((bill) => {
+      const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(bill.repairOrderId || ""));
+      const rowCustomer = getCustomerById(repairOrder?.customerId);
+      const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${bill.invoiceNumber || "AP bill"} • Vendor due`,
+        meta: `${formatMoney(bill.amount || 0)} • Due ${formatDisplayDateTime(bill.dueAtUtc || bill.updatedAtUtc || bill.createdAtUtc)}`,
+        badges: [titleCase(bill.status || "open"), bill.vendorName || "Vendor"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','accounting')`,
+        cta: "Open AP"
+      });
+    });
 
   const homeCards = [
     { label: "Service", value: `${allAppointments.length}`, meta: `${allRepairOrders.length} open ROs across fixed ops`, tone: allAppointments.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "Open Service Dashboard" },
@@ -3953,19 +4113,25 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
     service: [
       buildDepartmentQueueSection("All Upcoming Appointments", upcomingServiceRows, "No service appointments scheduled."),
       buildDepartmentQueueSection("Tomorrow's Appointments", tomorrowServiceRows, "No appointments booked for tomorrow."),
-      buildDepartmentQueueSection("All Open Repair Orders", openRoRows, "No open repair orders in fixed ops.")
+      buildDepartmentQueueSection("All Open Repair Orders", openRoRows, "No open repair orders in fixed ops."),
+      buildDepartmentQueueSection("Waiting Approval", serviceApprovalRows, "No repair orders are waiting on estimate approval."),
+      buildDepartmentQueueSection("Transport / Loaner Queue", transportQueueRows, "No transport or loaner work is active.")
     ],
     technicians: [
       buildDepartmentQueueSection("Active Technician Jobs", technicianQueueRows, "No technician jobs are active."),
-      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No repair orders are waiting for technician work.")
+      buildDepartmentQueueSection("Waiting on Parts", technicianWaitingPartsRows, "No technician jobs are blocked by parts."),
+      buildDepartmentQueueSection("Waiting for Advisor Approval", technicianApprovalRows, "No MPI items are waiting on advisor approval.")
     ],
     parts: [
       buildDepartmentQueueSection("Open Parts Work", partsQueueRows, "No parts work is open right now."),
-      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No repair orders are waiting on parts.")
+      buildDepartmentQueueSection("Special Orders In Flight", specialOrderRows, "No special orders are in flight."),
+      buildDepartmentQueueSection("Arrivals / Ready To Deliver", arrivalRows, "No parts are marked as arrived or ready.")
     ],
     accounting: [
       buildDepartmentQueueSection("Open Accounting Reviews", accountingQueueRows, "No accounting reviews are pending."),
-      buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No repair orders are waiting on accounting.")
+      buildDepartmentQueueSection("Open RO Balances", accountingBalanceRows, "No repair orders have an open balance."),
+      buildDepartmentQueueSection("AR Due", arDueRows, "No AR invoices are currently due."),
+      buildDepartmentQueueSection("AP Due", apDueRows, "No AP bills are currently due.")
     ],
     bdc: [
       buildDepartmentQueueSection("Upcoming Appointments", upcomingServiceRows, "No booked appointments to confirm."),
