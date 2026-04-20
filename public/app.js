@@ -2171,9 +2171,73 @@ function buildStructuredDetailLines(baseText = "", detailMap = {}) {
   return lines.join("\n");
 }
 
+function createLineItemRowDefaults(columns = [], row = {}) {
+  const next = {};
+  (columns || []).forEach((column) => {
+    next[column.name] = row[column.name] ?? column.value ?? "";
+  });
+  return next;
+}
+
+function renderDmsActionLineItems(field = {}, fieldIndex = 0) {
+  const columns = field.columns || [];
+  const rows = (field.rows || []).length ? field.rows : [createLineItemRowDefaults(columns)];
+  const variantClass = field.variant === "parts" ? "parts" : "";
+  const rowsMarkup = rows.map((row, rowIndex) => `
+    <div class="dms-action-line-items-row ${variantClass}" data-line-item-row="${rowIndex}">
+      ${columns.map((column) => {
+        const value = row[column.name] ?? "";
+        const common = `data-line-item-cell=\"true\" data-line-item-column=\"${escapeHtml(column.name)}\" ${column.min !== undefined ? `min="${escapeHtml(String(column.min))}"` : ""} ${column.step !== undefined ? `step="${escapeHtml(String(column.step))}"` : ""} placeholder="${escapeHtml(column.placeholder || "")}"`;
+        let control = "";
+        if (column.type === "select") {
+          const options = (column.options || []).map((option) => {
+            const entry = typeof option === "string" ? { value: option, label: option } : option;
+            const optionValue = String(entry?.value ?? "");
+            return `<option value="${escapeHtml(optionValue)}" ${String(value) === optionValue ? "selected" : ""}>${escapeHtml(entry?.label ?? optionValue)}</option>`;
+          }).join("");
+          control = `<select ${common}>${options}</select>`;
+        } else {
+          control = `<input type="${escapeHtml(column.type || "text")}" value="${escapeHtml(String(value))}" ${common} />`;
+        }
+        return `
+          <div class="dms-action-line-items-cell">
+            <label>${escapeHtml(column.label || column.name || "")}</label>
+            ${control}
+          </div>
+        `;
+      }).join("")}
+      <button type="button" class="dms-action-line-items-remove" data-line-item-remove="${fieldIndex}">Remove</button>
+    </div>
+  `).join("");
+
+  return `
+    <div class="dms-action-line-items" data-line-items-name="${escapeHtml(field.name || "")}" data-line-items-index="${fieldIndex}" data-line-items-variant="${escapeHtml(field.variant || "")}">
+      <div class="dms-action-line-items-head">
+        <div>
+          <strong>${escapeHtml(field.label || "Line Items")}</strong>
+          <span>${escapeHtml(field.help || "Add one or more quoted lines before saving.")}</span>
+        </div>
+        <button type="button" class="secondary" data-line-item-add="${fieldIndex}">${escapeHtml(field.addLabel || "Add Line")}</button>
+      </div>
+      <div class="dms-action-line-items-table">${rowsMarkup}</div>
+      <div class="dms-action-line-items-footer">
+        <div class="dms-action-line-items-total">
+          <small>Running Total</small>
+          <strong data-line-items-total="${fieldIndex}">$0.00</strong>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderDmsActionField(field = {}) {
   if (field.type === "section") {
     return `<div class="dms-action-modal-section-title">${escapeHtml(field.label || "")}</div>`;
+  }
+  if (field.type === "lineItems") {
+    const fields = currentDmsActionModalConfig?.fields || [];
+    const fieldIndex = fields.findIndex((item) => item === field);
+    return renderDmsActionLineItems(field, fieldIndex >= 0 ? fieldIndex : 0);
   }
 
   const id = `dmsActionField_${escapeHtml(field.name || "")}`;
@@ -2232,6 +2296,100 @@ function renderDmsActionModal(config = {}) {
   body.innerHTML = (config.fields || []).map((field) => renderDmsActionField(field)).join("");
   status.textContent = "";
   submit.textContent = config.submitLabel || "Save";
+  initDmsActionModalLineItems();
+}
+
+function buildDmsActionLineItemRow(field = {}, fieldIndex = 0, row = {}) {
+  const columns = field.columns || [];
+  const variantClass = field.variant === "parts" ? "parts" : "";
+  return `
+    <div class="dms-action-line-items-row ${variantClass}" data-line-item-row="">
+      ${columns.map((column) => {
+        const value = row[column.name] ?? column.value ?? "";
+        const common = `data-line-item-cell=\"true\" data-line-item-column=\"${escapeHtml(column.name)}\" ${column.min !== undefined ? `min="${escapeHtml(String(column.min))}"` : ""} ${column.step !== undefined ? `step="${escapeHtml(String(column.step))}"` : ""} placeholder="${escapeHtml(column.placeholder || "")}"`;
+        let control = "";
+        if (column.type === "select") {
+          const options = (column.options || []).map((option) => {
+            const entry = typeof option === "string" ? { value: option, label: option } : option;
+            const optionValue = String(entry?.value ?? "");
+            return `<option value="${escapeHtml(optionValue)}" ${String(value) === optionValue ? "selected" : ""}>${escapeHtml(entry?.label ?? optionValue)}</option>`;
+          }).join("");
+          control = `<select ${common}>${options}</select>`;
+        } else {
+          control = `<input type="${escapeHtml(column.type || "text")}" value="${escapeHtml(String(value))}" ${common} />`;
+        }
+        return `
+          <div class="dms-action-line-items-cell">
+            <label>${escapeHtml(column.label || column.name || "")}</label>
+            ${control}
+          </div>
+        `;
+      }).join("")}
+      <button type="button" class="dms-action-line-items-remove" data-line-item-remove="${fieldIndex}">Remove</button>
+    </div>
+  `;
+}
+
+function calculateDmsActionLineItemsTotal(field = {}, rows = []) {
+  return (rows || []).reduce((sum, row) => {
+    const quantity = Number(row.quantity || row.hours || row.soldHours || 0);
+    const unitPrice = Number(row.unitPrice || row.rate || row.laborRate || 0);
+    return sum + (quantity * unitPrice);
+  }, 0);
+}
+
+function collectDmsActionLineItemRows(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(".dms-action-line-items-row")).map((row) => {
+    const entry = {};
+    row.querySelectorAll("[data-line-item-cell]").forEach((cell) => {
+      entry[cell.dataset.lineItemColumn] = cell.value;
+    });
+    return entry;
+  }).filter((row) => Object.values(row).some((value) => String(value || "").trim()));
+}
+
+function updateDmsActionLineItemsTotal(fieldIndex = 0) {
+  const container = document.querySelector(`[data-line-items-index="${fieldIndex}"]`);
+  const totalEl = document.querySelector(`[data-line-items-total="${fieldIndex}"]`);
+  const field = currentDmsActionModalConfig?.fields?.[fieldIndex];
+  if (!container || !totalEl || !field) return;
+  const rows = collectDmsActionLineItemRows(container);
+  totalEl.textContent = formatMoney(calculateDmsActionLineItemsTotal(field, rows));
+}
+
+function initDmsActionModalLineItems() {
+  document.querySelectorAll("[data-line-item-add]").forEach((button) => {
+    button.onclick = () => {
+      const fieldIndex = Number(button.dataset.lineItemAdd || 0);
+      const field = currentDmsActionModalConfig?.fields?.[fieldIndex];
+      const table = document.querySelector(`[data-line-items-index="${fieldIndex}"] .dms-action-line-items-table`);
+      if (!field || !table) return;
+      table.insertAdjacentHTML("beforeend", buildDmsActionLineItemRow(field, fieldIndex, createLineItemRowDefaults(field.columns || [])));
+      initDmsActionModalLineItems();
+      updateDmsActionLineItemsTotal(fieldIndex);
+    };
+  });
+  document.querySelectorAll("[data-line-item-remove]").forEach((button) => {
+    button.onclick = () => {
+      const fieldIndex = Number(button.dataset.lineItemRemove || 0);
+      const table = document.querySelector(`[data-line-items-index="${fieldIndex}"] .dms-action-line-items-table`);
+      const rows = table?.querySelectorAll(".dms-action-line-items-row") || [];
+      if (rows.length <= 1) return;
+      button.closest(".dms-action-line-items-row")?.remove();
+      updateDmsActionLineItemsTotal(fieldIndex);
+    };
+  });
+  document.querySelectorAll("[data-line-item-cell]").forEach((input) => {
+    input.oninput = () => {
+      const container = input.closest("[data-line-items-index]");
+      if (!container) return;
+      updateDmsActionLineItemsTotal(Number(container.dataset.lineItemsIndex || 0));
+    };
+  });
+  document.querySelectorAll("[data-line-items-index]").forEach((container) => {
+    updateDmsActionLineItemsTotal(Number(container.dataset.lineItemsIndex || 0));
+  });
 }
 
 function openDmsActionModal(config = {}) {
@@ -2258,6 +2416,9 @@ function collectDmsActionModalValues() {
   if (!body) return values;
   body.querySelectorAll("[name]").forEach((element) => {
     values[element.name] = element.value;
+  });
+  body.querySelectorAll("[data-line-items-name]").forEach((container) => {
+    values[container.dataset.lineItemsName] = collectDmsActionLineItemRows(container);
   });
   return values;
 }
@@ -3445,15 +3606,31 @@ async function createServiceQuote(payload = null) {
         { label: "Advisor quote", body: "Use service quotes for labor, diagnostics, and recommended maintenance that still needs customer approval." }
       ],
       fields: [
-        { type: "section", label: "Operation" },
-        { name: "serviceCategory", label: "Service category", type: "select", value: "diagnostic", options: ["diagnostic", "maintenance", "repair", "warranty", "sublet"] },
-        { name: "opCode", label: "Operation code", type: "text", required: true, value: "DIAG" },
-        { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Diagnostic inspection and advisor estimate" },
-        { type: "section", label: "Pricing" },
-        { name: "quantity", label: "Sold hours", type: "number", required: true, value: "1.0", min: 0, step: 0.1 },
-        { name: "unitPrice", label: "Labor rate", type: "number", required: true, value: "149", min: 0, step: 0.01 },
-        { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "pending", "approved", "declined"] }
-        ,{ name: "approvalPath", label: "Approval path", type: "select", value: "advisor_review", options: ["advisor_review", "sms_estimate", "esignature", "walkin_approval"] }
+        {
+          name: "lineItems",
+          type: "lineItems",
+          label: "Service Quote Lines",
+          addLabel: "Add Labor Line",
+          help: "Build the quote with multiple labor or diagnostic lines and a running total.",
+          columns: [
+            { name: "opCode", label: "Op Code", type: "text", value: "DIAG" },
+            { name: "description", label: "Description", type: "text", value: "Diagnostic inspection" },
+            { name: "serviceCategory", label: "Category", type: "select", value: "diagnostic", options: ["diagnostic", "maintenance", "repair", "warranty", "sublet"] },
+            { name: "quantity", label: "Hours", type: "number", value: "1.0", min: 0, step: 0.1 },
+            { name: "unitPrice", label: "Rate", type: "number", value: "149", min: 0, step: 0.01 },
+            { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "pending", "approved", "declined"] }
+          ],
+          rows: [createLineItemRowDefaults([
+            { name: "opCode", value: "DIAG" },
+            { name: "description", value: "Diagnostic inspection" },
+            { name: "serviceCategory", value: "diagnostic" },
+            { name: "quantity", value: "1.0" },
+            { name: "unitPrice", value: "149" },
+            { name: "status", value: "quoted" }
+          ])]
+        },
+        { type: "section", label: "Approval path" },
+        { name: "approvalPath", label: "Approval path", type: "select", value: "advisor_review", options: ["advisor_review", "sms_estimate", "esignature", "walkin_approval"] }
       ],
       onSubmit: async (values) => createServiceQuote({ ...values, __submit: true })
     });
@@ -3461,28 +3638,32 @@ async function createServiceQuote(payload = null) {
   }
 
   try {
-    const res = await fetch("/.netlify/functions/service-repair-order-estimate-line", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        repairOrderId: repairOrder.id,
-        lineType: "labor",
-        opCode: payload.opCode,
-        description: buildStructuredDetailLines(payload.description, {
-          "Category": titleCase(payload.serviceCategory || ""),
-          "Approval Path": titleCase(String(payload.approvalPath || "").replaceAll("_", " "))
-        }),
-        quantity: Number(payload.quantity || 0),
-        unitPrice: Number(payload.unitPrice || 0),
-        department: "service",
-        status: payload.status || "quoted"
-      })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Failed to create service quote");
+    const lineItems = Array.isArray(payload.lineItems) ? payload.lineItems : [];
+    if (!lineItems.length) throw new Error("Add at least one service quote line.");
+    for (const line of lineItems) {
+      const res = await fetch("/.netlify/functions/service-repair-order-estimate-line", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repairOrderId: repairOrder.id,
+          lineType: "labor",
+          opCode: line.opCode,
+          description: buildStructuredDetailLines(line.description, {
+            "Category": titleCase(line.serviceCategory || ""),
+            "Approval Path": titleCase(String(payload.approvalPath || "").replaceAll("_", " "))
+          }),
+          quantity: Number(line.quantity || 0),
+          unitPrice: Number(line.unitPrice || 0),
+          department: "service",
+          status: line.status || "quoted"
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to create service quote");
+    }
     await refreshSelectedCustomer360();
     renderCustomer360();
-    setCustomer360ComposerStatus(`Service quote added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
+    setCustomer360ComposerStatus(`Service quote lines added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("createServiceQuote error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to create service quote.", "error");
@@ -3544,16 +3725,34 @@ async function createPartsQuote(payload = null) {
         { label: "Parts quote", body: "Use this window when the counter is quoting parts for approval before the item becomes a stocked line or special order." }
       ],
       fields: [
-        { type: "section", label: "Part details" },
-        { name: "partNumber", label: "Part number", type: "text", required: true, value: "PART-REQ" },
-        { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Requested service part" },
-        { type: "section", label: "Pricing and source" },
-        { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 1 },
-        { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "89", min: 0, step: 0.01 },
-        { name: "source", label: "Source", type: "select", value: "stock", options: ["stock", "oem", "aftermarket", "transfer"] },
-        { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "requested", "approved", "declined"] },
-        { name: "binLocation", label: "Bin location", type: "text", value: "" },
-        { name: "etaDate", label: "ETA date", type: "date", value: "" }
+        {
+          name: "lineItems",
+          type: "lineItems",
+          label: "Parts Quote Lines",
+          addLabel: "Add Part Line",
+          help: "Build the quote with multiple parts, sourcing details, and a running total.",
+          variant: "parts",
+          columns: [
+            { name: "partNumber", label: "Part #", type: "text", value: "PART-REQ" },
+            { name: "description", label: "Description", type: "text", value: "Requested service part" },
+            { name: "quantity", label: "Qty", type: "number", value: "1", min: 0, step: 1 },
+            { name: "unitPrice", label: "Price", type: "number", value: "89", min: 0, step: 0.01 },
+            { name: "source", label: "Source", type: "select", value: "stock", options: ["stock", "oem", "aftermarket", "transfer"] },
+            { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "requested", "approved", "declined"] },
+            { name: "binLocation", label: "Bin", type: "text", value: "" },
+            { name: "etaDate", label: "ETA", type: "date", value: "" }
+          ],
+          rows: [createLineItemRowDefaults([
+            { name: "partNumber", value: "PART-REQ" },
+            { name: "description", value: "Requested service part" },
+            { name: "quantity", value: "1" },
+            { name: "unitPrice", value: "89" },
+            { name: "source", value: "stock" },
+            { name: "status", value: "quoted" },
+            { name: "binLocation", value: "" },
+            { name: "etaDate", value: "" }
+          ])]
+        }
       ],
       onSubmit: async (values) => createPartsQuote({ ...values, __submit: true })
     });
@@ -3561,28 +3760,32 @@ async function createPartsQuote(payload = null) {
   }
 
   try {
-    const res = await fetch("/.netlify/functions/service-repair-order-part-line", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        repairOrderId: repairOrder.id,
-        partNumber: payload.partNumber,
-        description: buildStructuredDetailLines(payload.description, {
-          "Source": titleCase(payload.source || ""),
-          "Bin": payload.binLocation,
-          "ETA": payload.etaDate
-        }),
-        quantity: Number(payload.quantity || 0),
-        unitPrice: Number(payload.unitPrice || 0),
-        status: payload.status || "quoted",
-        source: payload.source || "stock"
-      })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Failed to create parts quote");
+    const lineItems = Array.isArray(payload.lineItems) ? payload.lineItems : [];
+    if (!lineItems.length) throw new Error("Add at least one parts quote line.");
+    for (const line of lineItems) {
+      const res = await fetch("/.netlify/functions/service-repair-order-part-line", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repairOrderId: repairOrder.id,
+          partNumber: line.partNumber,
+          description: buildStructuredDetailLines(line.description, {
+            "Source": titleCase(line.source || ""),
+            "Bin": line.binLocation,
+            "ETA": line.etaDate
+          }),
+          quantity: Number(line.quantity || 0),
+          unitPrice: Number(line.unitPrice || 0),
+          status: line.status || "quoted",
+          source: line.source || "stock"
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to create parts quote");
+    }
     await refreshSelectedCustomer360();
     renderCustomer360();
-    setCustomer360ComposerStatus(`Parts quote added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
+    setCustomer360ComposerStatus(`Parts quote lines added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("createPartsQuote error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to create parts quote.", "error");
@@ -3985,6 +4188,7 @@ async function createServiceInvoice(payload = null) {
 
   if (!payload?.__submit) {
     const defaultAmount = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
+    const defaultTax = Number((defaultAmount * 0.13).toFixed(2));
     openDmsActionModal({
       theme: "service",
       eyebrow: "Service Billing",
@@ -4005,7 +4209,11 @@ async function createServiceInvoice(payload = null) {
         { type: "section", label: "Cashier details" },
         { name: "paymentMethod", label: "Payment method", type: "select", value: "card_on_file", options: ["card_on_file", "cash", "debit", "finance", "invoice_me"] },
         { name: "receivableType", label: "Receivable type", type: "select", value: "aftersales", options: ["aftersales", "warranty", "maintenance"] },
-        { name: "amount", label: "Amount", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
+        { type: "section", label: "Cashier summary" },
+        { name: "subtotal", label: "Subtotal", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
+        { name: "taxAmount", label: "Tax", type: "number", value: String(defaultTax), min: 0, step: 0.01 },
+        { name: "feesAmount", label: "Shop fees", type: "number", value: "0", min: 0, step: 0.01 },
+        { name: "amount", label: "Total", type: "number", required: true, value: String(Number((defaultAmount + defaultTax).toFixed(2))), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
       ],
@@ -4015,6 +4223,10 @@ async function createServiceInvoice(payload = null) {
   }
 
   try {
+    const subtotal = Number(payload.subtotal || payload.amount || 0);
+    const taxAmount = Number(payload.taxAmount || 0);
+    const feesAmount = Number(payload.feesAmount || 0);
+    const totalAmount = Number(payload.amount || (subtotal + taxAmount + feesAmount));
     const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4022,8 +4234,8 @@ async function createServiceInvoice(payload = null) {
         repairOrderId: repairOrder.id,
         customerId: customer.id,
         invoiceNumber: payload.invoiceNumber,
-        amount: Number(payload.amount || 0),
-        balanceDue: Number(payload.amount || 0),
+        amount: totalAmount,
+        balanceDue: totalAmount,
         status: payload.status || "open",
         dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
@@ -4032,7 +4244,7 @@ async function createServiceInvoice(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create service invoice");
     await createQuickNoteRecord({
       noteType: "internal",
-      body: `[ACCOUNTING] Service Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}`
+      body: `[ACCOUNTING] Service Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nSubtotal: ${formatMoney(subtotal)}\nTax: ${formatMoney(taxAmount)}\nFees: ${formatMoney(feesAmount)}\nTotal: ${formatMoney(totalAmount)}`
     });
     await refreshSelectedCustomer360();
     renderCustomer360();
@@ -4054,6 +4266,8 @@ async function createPartsInvoice(payload = null) {
   if (!payload?.__submit) {
     const partsTotal = sumRepairOrderPartLines(repairOrder);
     const fallbackTotal = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
+    const defaultSubtotal = partsTotal > 0 ? partsTotal : fallbackTotal;
+    const defaultTax = Number((defaultSubtotal * 0.13).toFixed(2));
     openDmsActionModal({
       theme: "parts",
       eyebrow: "Parts Billing",
@@ -4074,7 +4288,11 @@ async function createPartsInvoice(payload = null) {
         { type: "section", label: "Amount and due date" },
         { name: "paymentMethod", label: "Payment method", type: "select", value: "card_on_file", options: ["card_on_file", "cash", "debit", "counter_charge"] },
         { name: "receivableType", label: "Receivable type", type: "select", value: "aftersales", options: ["aftersales", "warranty", "maintenance"] },
-        { name: "amount", label: "Amount", type: "number", required: true, value: String(partsTotal > 0 ? partsTotal : fallbackTotal), min: 0, step: 0.01 },
+        { type: "section", label: "Cashier summary" },
+        { name: "subtotal", label: "Subtotal", type: "number", required: true, value: String(defaultSubtotal), min: 0, step: 0.01 },
+        { name: "taxAmount", label: "Tax", type: "number", value: String(defaultTax), min: 0, step: 0.01 },
+        { name: "feesAmount", label: "Fees", type: "number", value: "0", min: 0, step: 0.01 },
+        { name: "amount", label: "Total", type: "number", required: true, value: String(Number((defaultSubtotal + defaultTax).toFixed(2))), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
       ],
@@ -4084,6 +4302,10 @@ async function createPartsInvoice(payload = null) {
   }
 
   try {
+    const subtotal = Number(payload.subtotal || payload.amount || 0);
+    const taxAmount = Number(payload.taxAmount || 0);
+    const feesAmount = Number(payload.feesAmount || 0);
+    const totalAmount = Number(payload.amount || (subtotal + taxAmount + feesAmount));
     const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4091,8 +4313,8 @@ async function createPartsInvoice(payload = null) {
         repairOrderId: repairOrder.id,
         customerId: customer.id,
         invoiceNumber: payload.invoiceNumber,
-        amount: Number(payload.amount || 0),
-        balanceDue: Number(payload.amount || 0),
+        amount: totalAmount,
+        balanceDue: totalAmount,
         status: payload.status || "open",
         dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
@@ -4101,7 +4323,7 @@ async function createPartsInvoice(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create parts invoice");
     await createQuickNoteRecord({
       noteType: "internal",
-      body: `[ACCOUNTING] Parts Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}`
+      body: `[ACCOUNTING] Parts Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nSubtotal: ${formatMoney(subtotal)}\nTax: ${formatMoney(taxAmount)}\nFees: ${formatMoney(feesAmount)}\nTotal: ${formatMoney(totalAmount)}`
     });
     await refreshSelectedCustomer360();
     renderCustomer360();
