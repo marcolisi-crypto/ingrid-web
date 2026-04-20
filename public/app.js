@@ -2441,7 +2441,16 @@ function buildServiceSignalMarkup(signals = []) {
   `;
 }
 
-function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "", focused = false, priorityReason = "" } = {}) {
+function getManagerQueueFreshnessLabel(value) {
+  if (!value) return "";
+  try {
+    return getJourneyArtifactMovedAtLabel(value);
+  } catch {
+    return "";
+  }
+}
+
+function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "", focused = false, priorityReason = "", freshness = "" } = {}) {
   return `
     <button type="button" class="customer360-manager-card ${focused ? "focused" : ""}" ${action ? `onclick="${action}"` : ""}>
       <div class="customer360-manager-card-top">
@@ -2453,6 +2462,7 @@ function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "",
       </div>
       <p>${escapeHtml(copy || "Queue detail will appear here.")}</p>
       ${priorityReason ? `<span class="customer360-manager-reason">Why top: ${escapeHtml(priorityReason)}</span>` : ""}
+      ${freshness ? `<span class="customer360-manager-freshness">${escapeHtml(freshness)}</span>` : ""}
       <div class="customer360-manager-meta">
         <span class="customer360-manager-pill ${escapeHtml(tone || "info")}">${escapeHtml(countLabel || "0 open")}</span>
         <span class="customer360-manager-pill info">${escapeHtml(ownerLabel || "Open queue")}</span>
@@ -4435,6 +4445,7 @@ function renderCustomer360Detail() {
         headline: serviceTopTask ? (serviceTopTask.title || serviceTopTask.service || "Lane work active") : "Lane queue clear",
         copy: serviceTopTask ? "Promised time, transport, and advisor follow-up are tied to the same service lane queue." : "No active advisor queue items right now.",
         priorityReason: overdueServiceTask ? "Overdue advisor step" : loanerTask ? "Loaner or transport active" : serviceTasks[0] ? "Newest advisor task" : appointments[0] ? "Arrival already booked" : "",
+        freshness: getManagerQueueFreshnessLabel(serviceTopTask?.updatedAtUtc || serviceTopTask?.dueAtUtc || serviceTopTask?.createdAtUtc || serviceTopTask?.date),
         tone: serviceTasks.length ? (serviceTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : "warn") : appointments.length ? "info" : "good",
         countLabel: `${serviceTasks.length} open`,
         ownerLabel: appointments[0]?.advisor ? `Owner ${appointments[0].advisor}` : "Advisor queue",
@@ -4446,6 +4457,7 @@ function renderCustomer360Detail() {
         headline: bdcTopTask ? (bdcTopTask.title || (bdcTopTask.from ? `Missed call from ${bdcTopTask.from}` : "Callback queue active")) : "Callback queue clear",
         copy: bdcTopTask ? "Missed calls, callbacks, and reply SLA are visible from one manager surface." : "No BDC rescue or callback tasks open right now.",
         priorityReason: missedCall ? "Missed call requires rescue" : overdueBdcTask ? "Callback SLA overdue" : bdcTasks[0] ? "Active callback queue" : "",
+        freshness: getManagerQueueFreshnessLabel(bdcTopTask?.updatedAtUtc || bdcTopTask?.startedAt || bdcTopTask?.createdAtUtc || bdcTopTask?.dueAtUtc),
         tone: calls.some((call) => String(call.status || "").toLowerCase().includes("miss")) ? "danger" : bdcTasks.length ? "warn" : "good",
         countLabel: `${bdcTasks.length} callbacks`,
         ownerLabel: "BDC queue",
@@ -4457,6 +4469,7 @@ function renderCustomer360Detail() {
         headline: salesTopTask ? (salesTopTask.title || salesTopTask.service || "Deal pressure active") : "Deal desk clear",
         copy: salesTopTask ? "Deals, showroom commitments, and desk risk stay visible from the same customer record." : "No sales desk items are currently open.",
         priorityReason: overdueSalesTask ? "Deal step overdue" : salesTasks[0] ? "Desk action in motion" : appointments[0] ? "Showroom visit queued" : "",
+        freshness: getManagerQueueFreshnessLabel(salesTopTask?.updatedAtUtc || salesTopTask?.dueAtUtc || salesTopTask?.createdAtUtc || salesTopTask?.date),
         tone: salesTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : salesTasks.length || appointments.length ? "warn" : "good",
         countLabel: `${salesTasks.length} deal steps`,
         ownerLabel: appointments[0] ? "Visit queued" : "Sales queue",
@@ -4468,6 +4481,7 @@ function renderCustomer360Detail() {
         headline: accountingTopTask ? (accountingTopTask.title || "Invoice review active") : "Back office clear",
         copy: accountingTopTask ? "Invoice review, statement aging, and ledger follow-up are surfaced in one accounting queue." : "No accounting review items are open right now.",
         priorityReason: overdueAccountingTask ? "Invoice aging risk" : accountingTasks[0] ? "Review queue active" : "",
+        freshness: getManagerQueueFreshnessLabel(accountingTopTask?.updatedAtUtc || accountingTopTask?.dueAtUtc || accountingTopTask?.createdAtUtc),
         tone: accountingTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : accountingTasks.length ? "warn" : "good",
         countLabel: `${accountingTasks.length} reviews`,
         ownerLabel: "Accounting queue",
