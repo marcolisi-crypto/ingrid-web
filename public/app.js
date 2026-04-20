@@ -2636,12 +2636,7 @@ function inferJourneyHandoffTarget(...values) {
 }
 
 function startServiceWriteUp() {
-  const customer = getSelectedCustomerRecord();
-  const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("appointment", {
-    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nWrite-up summary:\n- Concern:\n- Promised time:\n- Transportation:\n- Advisor notes:`,
-    status: "Service write-up template loaded."
-  });
+  startDepartmentAppointmentCreate();
 }
 
 async function openRepairOrderFrom360() {
@@ -5735,68 +5730,72 @@ function runJourneyNextAction(stageKey = "") {
   action?.run?.();
 }
 
-function preloadFocusedTaskFollowUp(item) {
+async function preloadFocusedTaskFollowUp(item) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
+  await createQuickTaskRecord({
+    assignedDepartment: currentDepartmentLens,
     title: item?.subcopy?.replace(/^Follow Up:\s*/i, "").trim() || `${vehicleDisplayName(vehicle)} next step`,
-    body: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFollow-up from focused artifact:\n${item?.body || ""}\n\nNext action:\n- `,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Follow-up task loaded from focused artifact."
+    description: `${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFollow-up from focused artifact:\n${item?.body || ""}\n\nNext action:\n- `,
+    dueAt: toLocalDateInputValue(new Date())
   });
+  setCustomer360ComposerStatus("Follow-up task created from focused artifact.", "success");
 }
 
-function preloadFocusedVehicleServiceFollowUp(item) {
+async function preloadFocusedVehicleServiceFollowUp(item) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   setDepartmentLens("service");
-  presetCustomer360Composer("task", {
+  await createQuickTaskRecord({
+    assignedDepartment: "service",
     title: `[SERVICE] ${vehicleDisplayName(vehicle)} vehicle follow-up`,
-    body: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nCreated from vehicle health event:\n${item?.body || ""}\n\nNext service action:\n- Advisor review:\n- Lane / diagnostic step:\n- Customer communication:`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Service follow-up loaded from vehicle health event."
+    description: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nCreated from vehicle health event:\n${item?.body || ""}\n\nNext service action:\n- Advisor review:\n- Lane / diagnostic step:\n- Customer communication:`,
+    dueAt: toLocalDateInputValue(new Date())
   });
+  setCustomer360ComposerStatus("Service follow-up created from vehicle health event.", "success");
 }
 
-function preloadFocusedArchiveAction(item, mode = "task") {
+async function preloadFocusedArchiveAction(item, mode = "task") {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   if (mode === "note") {
-    presetCustomer360Composer("note", {
-      body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nArchive follow-up:\n${item?.body || ""}\n\nNext documentation step:\n- Additional file or media needed:\n- Linked department:\n- Notes:`,
-      status: "Archive note loaded from VIN artifact."
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nArchive follow-up:\n${item?.body || ""}\n\nNext documentation step:\n- Additional file or media needed:\n- Linked department:\n- Notes:`
     });
+    setCustomer360ComposerStatus("Archive note created from VIN evidence.", "success");
     return;
   }
 
-  presetCustomer360Composer("task", {
+  await createQuickTaskRecord({
+    assignedDepartment: currentDepartmentLens,
     title: `[ARCHIVE] ${vehicleDisplayName(vehicle)} follow-up`,
-    body: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFollow-up task from VIN archive entry:\n${item?.body || ""}\n\nNext action:\n- Owner:\n- Department handoff:\n- File / evidence needed:`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Archive task loaded from VIN artifact."
+    description: `[ARCHIVE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nFollow-up task from VIN archive entry:\n${item?.body || ""}\n\nNext action:\n- Owner:\n- Department handoff:\n- File / evidence needed:`,
+    dueAt: toLocalDateInputValue(new Date())
   });
+  setCustomer360ComposerStatus("Archive task created from VIN evidence.", "success");
 }
 
-function runFocusedVehicleArtifactAction(action = "followup", sourceId = "") {
+async function runFocusedVehicleArtifactAction(action = "followup", sourceId = "") {
   const id = String(sourceId || "");
   if (!id) return;
   const item = currentCustomer360TimelineCards.find((entry) => String(entry.sourceId || "") === id);
   if (!item) return;
 
   if (action === "service-followup") {
-    preloadFocusedVehicleServiceFollowUp(item);
+    await preloadFocusedVehicleServiceFollowUp(item);
     triggerJourneyFeedback("service", "Vehicle health event moved into service follow-up.");
     return;
   }
 
   if (action === "archive-task") {
-    preloadFocusedArchiveAction(item, "task");
+    await preloadFocusedArchiveAction(item, "task");
     triggerJourneyFeedback(currentDepartmentLens, "Archive task loaded from VIN evidence.");
     return;
   }
 
   if (action === "archive-note") {
-    preloadFocusedArchiveAction(item, "note");
+    await preloadFocusedArchiveAction(item, "note");
     triggerJourneyFeedback(currentDepartmentLens, "Archive note loaded from VIN evidence.");
   }
 }
@@ -5824,7 +5823,7 @@ async function advanceFocusedJourneyItem(kind = "tasks", sourceId = "") {
       normalizeCustomer360TimelineFilter(categorizeCustomer360TimelineItem(entry)) === normalizedKind &&
       String(entry.sourceId || "") === id
     );
-    preloadFocusedTaskFollowUp(item);
+    await preloadFocusedTaskFollowUp(item);
     triggerJourneyFeedback(currentDepartmentLens, "Follow-up task loaded from the focused note.");
     return;
   }
