@@ -2001,14 +2001,123 @@ function startLedgerNote() {
   });
 }
 
+function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehicle) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const nextAppointment = appointments[0] || null;
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.appointmentId || item.createdAtUtc || item.title || ""));
+  const serviceTasks = openTasks.filter((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("[service]") || haystack.includes("advisor") || haystack.includes("loaner") || haystack.includes("transport");
+  });
+  const loanerTask = serviceTasks.find((item) => {
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("loaner") || haystack.includes("transport");
+  });
+  const rows = [
+    {
+      title: activeRepairOrder ? "Open RO" : "Arrival / Write-Up",
+      detail: activeRepairOrder
+        ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${titleCase(activeRepairOrder.status || "open")} • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} balance`
+        : nextAppointment
+          ? `${nextAppointment.service || "Service visit"} is booked and ready to convert into an RO`
+          : `No live RO yet for ${vehicleDisplayName(vehicle)}`,
+      actionLabel: activeRepairOrder ? "Open" : nextAppointment ? "Create RO" : "Schedule",
+      action: activeRepairOrder ? "setDepartmentLens('service')" : nextAppointment ? "openRepairOrderFrom360()" : "setCustomer360ComposerMode('appointment')"
+    },
+    {
+      title: "Estimate / Approval",
+      detail: activeRepairOrder
+        ? `${formatCountLabel((activeRepairOrder.estimateLines || []).length, "estimate line")} • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).total)} current estimate`
+        : "No estimate exists until the RO is opened",
+      actionLabel: activeRepairOrder ? "Add" : "Prep",
+      action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()"
+    },
+    {
+      title: "Technician Dispatch",
+      detail: activeRepairOrder
+        ? (latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} • ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Technician has not clocked onto the RO yet")
+        : "Technician assignment starts after the repair order is opened",
+      actionLabel: activeRepairOrder ? (technicianClockedIn ? "Clock Out" : "Clock In") : "Open RO",
+      action: activeRepairOrder ? (technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()"
+    },
+    {
+      title: "Transportation",
+      detail: loanerTask
+        ? `${loanerTask.title || "Loaner workflow"} is already active`
+        : nextAppointment
+          ? "Loaner / shuttle needs confirmation before promised time is final"
+          : "No transportation workflow has been started yet",
+      actionLabel: loanerTask ? "Open" : "Start",
+      action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"
+    }
+  ];
+
+  return rows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.title)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
+    </div>
+  `).join("");
+}
+
+function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const nextAppointment = appointments[0] || null;
+  const latestNote = notes[0] || null;
+  const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.noteId || item.createdAtUtc || item.body || item.title || ""));
+  const rows = [
+    {
+      label: "Customer Concern",
+      detail: activeRepairOrder?.complaint || latestNote?.body?.slice(0, 90) || "No advisor concern note recorded yet",
+      actionLabel: latestNote ? "Open" : "Add",
+      action: latestNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestNote)}','service')` : "startAdvisorJourneyNote()"
+    },
+    {
+      label: "Promised Time",
+      detail: activeRepairOrder?.promiseAtUtc
+        ? `Promised ${formatDisplayDateTime(activeRepairOrder.promiseAtUtc)}`
+        : nextAppointment
+          ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() || "Visit scheduled without promised-time note"
+          : "No promised-time anchor on the record yet",
+      actionLabel: nextAppointment ? "Open" : "Set",
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "setCustomer360ComposerMode('appointment')"
+    },
+    {
+      label: "Authorization Trail",
+      detail: activeRepairOrder
+        ? `${formatCountLabel((activeRepairOrder.accountingEntries || []).length, "payment or auth entry")} tied to the RO`
+        : "No approval / payment trail until the RO is active",
+      actionLabel: activeRepairOrder ? "Post" : "Prep",
+      action: activeRepairOrder ? "addAccountingRepairOrderEntry()" : "openRepairOrderFrom360()"
+    }
+  ];
+
+  return rows.map((row) => `
+    <div class="customer360-panel-item">
+      <div>
+        <strong>${escapeHtml(row.label)}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+      </div>
+      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
+    </div>
+  `).join("");
+}
+
 function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
   const technicianTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[technician]")) || openTasks[0] || null;
   const partsTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]"));
   const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.createdAtUtc || item.title || ""));
   const inspectionStages = [
     {
       title: "Digital inspection",
-      detail: openTasks[0]?.title || `Open findings for ${vehicleDisplayName(vehicle)}`,
+      detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(activeRepairOrder.estimateLines || []).length} estimate line(s) • ${(activeRepairOrder.partLines || []).length} part line(s)` : (openTasks[0]?.title || `Open findings for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "info" : "warn",
       actionLabel: technicianTask ? "Open" : "Start",
       action: technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "startTechnicianInspectionNote()"
@@ -2022,7 +2131,7 @@ function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
     },
     {
       title: "Advisor approval",
-      detail: "Return recommendation and media to the advisor timeline",
+      detail: latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} at ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Return recommendation and media to the advisor timeline",
       tone: "info",
       actionLabel: "Notify",
       action: "startAdvisorJourneyNote()"
@@ -2077,6 +2186,7 @@ function buildTechnicianNotesMarkup(notes = [], calls = []) {
 }
 
 function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
   const partsTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]")) || openTasks[0] || null;
   const technicianTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[technician]"));
   const nextAppointment = appointments[0];
@@ -2084,14 +2194,14 @@ function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
   const sourcingRows = [
     {
       title: "Stock pull",
-      detail: openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`,
+      detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(activeRepairOrder.partLines || []).length} part line(s) attached` : (openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
       actionLabel: partsTask ? "Open" : "Create",
       action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
     },
     {
       title: "Source decision",
-      detail: openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet",
+      detail: activeRepairOrder ? `${formatMoney(getRepairOrderAmounts(activeRepairOrder).parts)} currently in parts value on the RO` : (openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet"),
       tone: openTasks.length ? "info" : "good",
       actionLabel: partsTask ? "Review" : "Start",
       action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
@@ -2154,20 +2264,21 @@ function buildPartsNotesMarkup(notes = [], appointments = []) {
 }
 
 function buildAccountingTasksMarkup(openTasks = [], vehicle) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
   const accountingTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[accounting]")) || openTasks[0] || null;
   const ledgerNote = (currentCustomerNotes || []).find((item) => item.customerId === selectedCustomerId && (`${item.body || ""}`.toLowerCase().includes("[accounting]") || `${item.body || ""}`.toLowerCase().includes("ledger")));
   const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.noteId || item.createdAtUtc || item.title || item.body || ""));
   const ledgerRows = [
     {
       title: "Invoice review",
-      detail: openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`,
+      detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} still due` : (openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
       actionLabel: accountingTask ? "Open" : "Queue",
       action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     },
     {
       title: "Payment request",
-      detail: openTasks.length ? "Stripe collection or statement follow-up is active" : "No active collection workflow yet",
+      detail: activeRepairOrder ? `${formatCountLabel((activeRepairOrder.accountingEntries || []).length, "accounting entry")} • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).paid)} already applied` : (openTasks.length ? "Stripe collection or statement follow-up is active" : "No active collection workflow yet"),
       tone: openTasks.length ? "info" : "good",
       actionLabel: ledgerNote ? "Open" : "Add",
       action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
@@ -5407,7 +5518,9 @@ function renderCustomer360Detail() {
   }
 
   if (tasksBoardEl) {
-    if (currentDepartmentLens === "technicians") {
+    if (currentDepartmentLens === "service") {
+      tasksBoardEl.innerHTML = buildServiceAdvisorTasksMarkup(openTasks, appointments, vehicle);
+    } else if (currentDepartmentLens === "technicians") {
       tasksBoardEl.innerHTML = buildTechnicianTasksMarkup(openTasks, vehicle);
     } else if (currentDepartmentLens === "parts") {
       tasksBoardEl.innerHTML = buildPartsTasksMarkup(openTasks, appointments, vehicle);
@@ -5432,7 +5545,9 @@ function renderCustomer360Detail() {
   }
 
   if (notesBoardEl) {
-    if (currentDepartmentLens === "technicians") {
+    if (currentDepartmentLens === "service") {
+      notesBoardEl.innerHTML = buildServiceAdvisorNotesMarkup(currentCustomerNotes, appointments);
+    } else if (currentDepartmentLens === "technicians") {
       notesBoardEl.innerHTML = buildTechnicianNotesMarkup(currentCustomerNotes, calls);
     } else if (currentDepartmentLens === "parts") {
       notesBoardEl.innerHTML = buildPartsNotesMarkup(currentCustomerNotes, appointments);
