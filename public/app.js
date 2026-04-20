@@ -896,7 +896,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
     ? getTaggedTimelinePresentation(latestMovementNote.body || "", "Vehicle Health", "Vehicle intelligence").body.split("\n")[0]
     : "";
   const serviceSignals = [
-    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')", detail: nextAppointment ? `Open ${nextAppointment.service || "service visit"} at ${nextAppointment.date || "TBD"} ${nextAppointment.time || ""}`.trim() : "Open service booking workflow" },
+    { label: "Promised", value: nextAppointment ? "Locked" : movementCopy ? "Moving" : "Open", tone: nextAppointment ? "good" : movementCopy ? "warn" : "info", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startDepartmentAppointmentCreate()", detail: nextAppointment ? `Open ${nextAppointment.service || "service visit"} at ${nextAppointment.date || "TBD"} ${nextAppointment.time || ""}`.trim() : "Open service booking workflow" },
     { label: "Loaner", value: loanerTask ? "Live" : appointments.length ? "Review" : "Standby", tone: loanerTask ? "warn" : appointments.length ? "info" : "good", action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()", detail: loanerTask ? `Open ${loanerTask.title || "loaner coordination task"}` : "Start loaner or transport workflow" },
     { label: "Risk", value: overdueLaneTasks.length ? "High" : urgentLaneTasks.length ? "Watch" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: topTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(topTask)}','service')` : "setCustomer360ComposerMode('task')", detail: topTask ? `Open ${topTask.title || "active service task"}` : "Open service follow-up queue" }
   ];
@@ -906,7 +906,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
     { label: "SLA", value: missedCalls ? "Rescue" : urgentLaneTasks.length ? "Watch" : "On", tone: missedCalls ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: missedCall ? `openCustomer360FocusedArtifact('calls','${getArtifactSourceId(missedCall)}','bdc')` : bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()", detail: missedCalls ? "Open rescue contact queue" : bdcTask ? `Open ${bdcTask.title || "callback SLA task"}` : "Open BDC callback workflow" }
   ];
   const salesSignals = [
-    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')", detail: nextAppointment ? `Open ${nextAppointment.service || "showroom visit"} at ${nextAppointment.date || "TBD"} ${nextAppointment.time || ""}`.trim() : "Schedule showroom or test-drive visit" },
+    { label: "Visit", value: nextAppointment ? "Set" : "Open", tone: nextAppointment ? "good" : "warn", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "startDepartmentAppointmentCreate()", detail: nextAppointment ? `Open ${nextAppointment.service || "showroom visit"} at ${nextAppointment.date || "TBD"} ${nextAppointment.time || ""}`.trim() : "Schedule showroom or test-drive visit" },
     { label: "Deal", value: salesTask ? "Live" : "New", tone: salesTask ? "info" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()", detail: salesTask ? `Open ${salesTask.title || "sales deal task"}` : "Create next deal task" },
     { label: "Risk", value: overdueLaneTasks.length ? "High" : "Low", tone: overdueLaneTasks.length ? "danger" : urgentLaneTasks.length ? "warn" : "good", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()", detail: overdueLaneTasks.length ? "Open overdue sales queue" : salesTask ? `Open ${salesTask.title || "desk task"}` : "Open sales workflow" }
   ];
@@ -968,7 +968,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         ${buildServiceSignalMarkup(salesSignals)}
         <div class="customer360-service-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"}">${salesTask ? "Open Deal Task" : "Create Deal Task"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"}">${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "startDepartmentAppointmentCreate()"}">${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
         </div>
       </div>
     `;
@@ -1131,7 +1131,7 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addAccountingRepairOrderEntry()">Post Payment / Entry</button>` : ""}
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
         ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Task</button>` : ""}
-        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : nextAppointment ? "openRepairOrderFrom360()" : "setCustomer360ComposerMode('appointment')"}">${activeRepairOrder ? "Close RO" : nextAppointment ? "Open RO from Appointment" : "Open Service Composer"}</button>
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : nextAppointment ? "openRepairOrderFrom360()" : "startDepartmentAppointmentCreate()"}">${activeRepairOrder ? "Close RO" : nextAppointment ? "Open RO from Appointment" : "Open Service Composer"}</button>
       </div>
       ${activeRepairOrder ? buildRepairOrderDetailSectionsMarkup(activeRepairOrder) : ""}
     </div>
@@ -1240,7 +1240,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
       label: "Visit",
       value: nextAppointment ? "Set" : "Open",
       tone: nextAppointment ? "good" : "warn",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "startDepartmentAppointmentCreate()"
     },
     {
       label: "Desk Risk",
@@ -1372,7 +1372,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${bdcTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(bdcTask)}','bdc')` : "startBdcCallbackTask()"}"><span>☎</span>${bdcTask ? "Open Callback" : "Queue Callback"}</button>
           <button class="customer360-lens-quickbtn" onclick="openSmsForPhone(getSelectedCustomerPrimaryPhone())"><span>💬</span>Send Follow-Up</button>
-          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','bdc')` : "setCustomer360ComposerMode('appointment')"}"><span>📅</span>${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','bdc')` : "startDepartmentAppointmentCreate()"}"><span>📅</span>${nextAppointment ? "Open Visit" : "Schedule Visit"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Play</div>
@@ -1424,7 +1424,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         ${buildLaneSignalMarkup(salesSignals)}
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${salesTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(salesTask)}','sales')` : "startSalesDealTask()"}"><span>🏷</span>${salesTask ? "Open Deal" : "Create Deal"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "setCustomer360ComposerMode('appointment')"}"><span>🚘</span>${nextAppointment ? "Open Visit" : "Schedule Drive"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','sales')` : "startDepartmentAppointmentCreate()"}"><span>🚘</span>${nextAppointment ? "Open Visit" : "Schedule Drive"}</button>
           <button class="customer360-lens-quickbtn" onclick="${fiTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(fiTask)}','fi')` : "startFiReviewNote()"}"><span>🧾</span>${fiTask ? "Open F&amp;I" : "Hand Off F&amp;I"}</button>
         </div>
         <div class="customer360-lens-row">
@@ -1448,7 +1448,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('task')">Open Deal Task</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="setCustomer360ComposerMode('appointment')">Schedule Test Drive</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startDepartmentAppointmentCreate()">Schedule Test Drive</button>
         </div>
       </div>
     `;
@@ -1911,7 +1911,7 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
       },
       {
         label: nextAppointment ? "Open Visit" : "Schedule Drive",
-        action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','sales')` : "setCustomer360ComposerMode('appointment')",
+        action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','sales')` : "startDepartmentAppointmentCreate()",
         secondary: true
       }
     ];
@@ -1984,7 +1984,7 @@ function buildCustomerSummaryActions({ tasks = [], appointments = [], calls = []
   return [
     {
       label: nextAppointment ? "Open Appointment" : "Create Appointment",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','home')` : "setCustomer360ComposerMode('appointment')"
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','home')` : "startDepartmentAppointmentCreate()"
     },
     {
       label: openTasks[0] ? "Open Next Task" : "Add Note",
@@ -2007,6 +2007,88 @@ function presetCustomer360Composer(mode = "note", options = {}) {
 
   setCustomer360ComposerStatus(options.status || "");
   bodyEl?.focus();
+}
+
+function getDefaultQuickAppointmentService() {
+  if (currentDepartmentLens === "sales") return "Test Drive";
+  if (currentDepartmentLens === "fi") return "Delivery";
+  if (currentDepartmentLens === "bdc") return "Customer Visit";
+  return "Service Appointment";
+}
+
+function getNextBusinessDateValue() {
+  let probe = addDays(new Date(), 1);
+  while ([0, 6].includes(probe.getDay())) {
+    probe = addDays(probe, 1);
+  }
+  return toLocalDateInputValue(probe);
+}
+
+async function createQuickTaskRecord({ assignedDepartment = currentDepartmentLens, title = "", description = "", dueAt = "", assignedUser = "" } = {}) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer) throw new Error("Select a customer before creating a task.");
+
+  const res = await fetch("/.netlify/functions/tasks-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      assignedDepartment: normalizeDepartmentKey(assignedDepartment || currentDepartmentLens || "service"),
+      assignedUser,
+      title,
+      description,
+      priority: "normal",
+      dueAtUtc: dueAt ? new Date(dueAt).toISOString() : null
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to create task");
+  await loadTasks();
+  await refreshSelectedCustomer360();
+  renderCustomer360();
+  return data;
+}
+
+async function createQuickAppointmentRecord({ service = "", advisor = "", date = "", time = "", transport = "", notes = "" } = {}) {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  if (!customer) throw new Error("Select a customer before scheduling service.");
+
+  const [firstName = "", ...rest] = customerDisplayName(customer).split(" ");
+  const lastName = rest.join(" ");
+
+  const res = await fetch("/.netlify/functions/book-appointment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customerId: customer.id,
+      vehicleId: vehicle?.id || null,
+      firstName,
+      lastName,
+      phone: customer.phones?.[0] || "",
+      email: customer.email || "",
+      make: vehicle?.make || "",
+      model: vehicle?.model || "",
+      year: vehicle?.year ? String(vehicle.year) : "",
+      vin: vehicle?.vin || "",
+      service,
+      advisor,
+      date,
+      time,
+      transport,
+      notes
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to schedule service");
+  await loadAppointments();
+  await refreshSelectedCustomer360();
+  renderCustomer360();
+  return data;
 }
 
 function startTechnicianInspectionNote() {
@@ -2092,7 +2174,7 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
           ? `${nextAppointment.service || "Service visit"} is booked and ready to convert into an RO`
           : `No live RO yet for ${vehicleDisplayName(vehicle)}`,
       actionLabel: activeRepairOrder ? "Open" : nextAppointment ? "Create RO" : "Schedule",
-      action: activeRepairOrder ? "setDepartmentLens('service')" : nextAppointment ? "openRepairOrderFrom360()" : "setCustomer360ComposerMode('appointment')",
+      action: activeRepairOrder ? "setDepartmentLens('service')" : nextAppointment ? "openRepairOrderFrom360()" : "startDepartmentAppointmentCreate()",
       task: serviceTasks[0] || null
     },
     {
@@ -2151,7 +2233,7 @@ function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
           ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() || "Visit scheduled without promised-time note"
           : "No promised-time anchor on the record yet",
       actionLabel: nextAppointment ? "Open" : "Set",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "setCustomer360ComposerMode('appointment')"
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "startDepartmentAppointmentCreate()"
     },
     {
       label: "Authorization Trail",
@@ -2938,26 +3020,60 @@ function startAdvisorJourneyNote() {
   });
 }
 
-function startBdcCallbackTask() {
+async function startBdcCallbackTask() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
-    title: `[BDC] ${vehicleDisplayName(vehicle)} callback`,
-    body: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLead / callback summary:\n- Last contact result:\n- Next outreach step:\n- Appointment goal:\n- Handoff notes for sales:`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "BDC callback template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before creating a callback task.", "error");
+    return;
+  }
+
+  const detail = window.prompt(
+    "BDC callback notes",
+    "Last contact result:\nNext outreach step:\nAppointment goal:\nHandoff notes for sales:"
+  );
+  if (detail === null) return;
+
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "bdc",
+      title: `[BDC] ${vehicleDisplayName(vehicle)} callback`,
+      description: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Customer callback queued."}`,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    setCustomer360ComposerStatus("BDC callback task created.", "success");
+  } catch (err) {
+    console.error("startBdcCallbackTask error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create BDC callback task.", "error");
+  }
 }
 
-function startSalesDealTask() {
+async function startSalesDealTask() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("task", {
-    title: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review`,
-    body: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nDeal / quote workflow:\n- Quote status:\n- Trade / appraisal notes:\n- Test-drive or showroom plan:\n- Handoff notes for F&I:`,
-    dueAt: toLocalDateInputValue(new Date()),
-    status: "Sales deal task template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before creating a deal task.", "error");
+    return;
+  }
+
+  const detail = window.prompt(
+    "Sales deal notes",
+    "Quote status:\nTrade / appraisal notes:\nTest-drive or showroom plan:\nHandoff notes for F&I:"
+  );
+  if (detail === null) return;
+
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "sales",
+      title: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review`,
+      description: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${detail.trim() || "Sales opportunity review queued."}`,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    setCustomer360ComposerStatus("Sales deal task created.", "success");
+  } catch (err) {
+    console.error("startSalesDealTask error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create sales deal task.", "error");
+  }
 }
 
 function startFiReviewNote() {
@@ -2969,13 +3085,38 @@ function startFiReviewNote() {
   });
 }
 
-function startDeliveryHandoffAppointment() {
+async function startDeliveryHandoffAppointment() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  presetCustomer360Composer("appointment", {
-    body: `[DELIVERY] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nDelivery handoff:\n- Pickup readiness:\n- Final documents confirmed:\n- Delivery specialist notes:\n- Customer celebration details:`,
-    status: "Delivery handoff template loaded."
-  });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before booking delivery.", "error");
+    return;
+  }
+
+  const date = window.prompt("Delivery date (YYYY-MM-DD)", getNextBusinessDateValue())?.trim();
+  if (date === null) return;
+  const time = window.prompt("Delivery time (HH:MM)", "15:00")?.trim();
+  if (time === null) return;
+  const notes = window.prompt(
+    "Delivery notes",
+    `Pickup readiness:\nFinal documents confirmed:\nDelivery specialist notes:\nCustomer celebration details:`
+  );
+  if (notes === null) return;
+
+  try {
+    await createQuickAppointmentRecord({
+      service: "Delivery",
+      advisor: "Delivery Desk",
+      date,
+      time,
+      transport: "pickup",
+      notes: `[DELIVERY] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\n${notes.trim() || "Delivery handoff booked."}`
+    });
+    setCustomer360ComposerStatus("Delivery appointment created.", "success");
+  } catch (err) {
+    console.error("startDeliveryHandoffAppointment error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create delivery appointment.", "error");
+  }
 }
 
 function startVehicleHealthEventNote() {
@@ -3532,7 +3673,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       copy: "Fast access to the main tools that keep the shared customer and vehicle record moving.",
       tools: [
         { label: activeRepairOrder ? "Open Live RO" : "Open Repair Order", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is active for ${vehicleDisplayName(vehicle)}.` : "Start the advisor write-up and attach all service work to one RO.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
-        { label: nextAppointment ? "Open Appointment" : "Create Appointment", detail: nextAppointment ? `${nextAppointment.service || "Visit"} is already booked.` : "Book the next visit without leaving the 360.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "setCustomer360ComposerMode('appointment')", tone: nextAppointment ? "good" : "info" },
+        { label: nextAppointment ? "Open Appointment" : "Create Appointment", detail: nextAppointment ? `${nextAppointment.service || "Visit"} is already booked.` : "Book the next visit without leaving the 360.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "startDepartmentAppointmentCreate()", tone: nextAppointment ? "good" : "info" },
         { label: "Open Inbox", detail: primaryPhone ? `Continue communications with ${formatPhonePretty(primaryPhone)}.` : "Jump into calls and SMS for this customer.", action: primaryPhone ? "openSmsForPhone(getSelectedCustomerPrimaryPhone())" : "setDepartmentLens('bdc')", tone: "info" },
         { label: "VIN Archive", detail: `Work from ${vehicle?.vin || "the VIN"} evidence, media, and health history.`, action: "openVehicleOpsContext('archive')", tone: "good" }
       ]
@@ -3542,7 +3683,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       copy: "Everything an advisor needs to receive, write up, price, and close the visit from one place.",
       tools: [
         { label: activeRepairOrder ? "RO Is Open" : "Open RO from Visit", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is the live working file.` : nextAppointment ? "Convert the booked visit into a live repair order." : "Open the first repair order for this visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
-        { label: activeRepairOrder ? "Add Estimate Line" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "setCustomer360ComposerMode('appointment')", tone: "good" },
+        { label: activeRepairOrder ? "Add Estimate Line" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "startDepartmentAppointmentCreate()", tone: "good" },
         { label: activeRepairOrder ? "Warranty Claim" : "Prepare Loaner", detail: activeRepairOrder ? "Start warranty processing and pay-type posture from the advisor lane." : "Transportation and loaner coordination before the write-up.", action: activeRepairOrder ? "addRepairOrderWarrantyClaim()" : "startLoanerTask()", tone: "warn" },
         { label: activeRepairOrder ? "Set Pay Split" : "Add Advisor Note", detail: activeRepairOrder ? "Stage customer, warranty, or internal pay against the live RO." : "Capture concern, approvals, and promised time context.", action: activeRepairOrder ? "addRepairOrderPaySplit('customer')" : "startAdvisorJourneyNote()", tone: activeRepairOrder ? "good" : "info" }
       ]
@@ -3553,7 +3694,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       tools: [
         { label: missedCall ? "Rescue Missed Call" : "Open SMS Dock", detail: missedCall ? "Highest-priority missed contact needs immediate recovery." : "Continue the active conversation thread.", action: missedCall ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCall.id || missedCall.callId || missedCall.createdAtUtc || missedCall.from || ""))}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())", tone: missedCall ? "danger" : "info" },
         { label: bdcTask ? "Open Callback Task" : "Queue Callback", detail: bdcTask ? "A live callback task is already in motion." : "Create the next follow-up task for the BDC queue.", action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTask.id || bdcTask.taskId || bdcTask.createdAtUtc || bdcTask.title || ""))}','bdc')` : "startBdcCallbackTask()", tone: bdcTask ? "warn" : "info" },
-        { label: nextAppointment ? "Open Booked Visit" : "Book Appointment", detail: nextAppointment ? "Commitment is captured and ready for handoff." : "Turn conversation into an actual store visit.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','bdc')` : "setCustomer360ComposerMode('appointment')", tone: nextAppointment ? "good" : "warn" },
+        { label: nextAppointment ? "Open Booked Visit" : "Book Appointment", detail: nextAppointment ? "Commitment is captured and ready for handoff." : "Turn conversation into an actual store visit.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','bdc')` : "startDepartmentAppointmentCreate()", tone: nextAppointment ? "good" : "warn" },
         { label: "Handoff to Sales", detail: "Move the thread cleanly when the customer is ready for deal work.", action: "setDepartmentLens('sales')", tone: "good" }
       ]
     },
@@ -3562,7 +3703,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       copy: "Deals, visits, trade steps, and delivery prep should be the first actions a sales user sees.",
       tools: [
         { label: salesTask ? "Open Deal Desk" : "Start Deal Task", detail: salesTask ? "There is already a live sales task on this record." : "Open the opportunity and pricing workflow.", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTask.id || salesTask.taskId || salesTask.createdAtUtc || salesTask.title || ""))}','sales')` : "startSalesDealTask()", tone: salesTask ? "warn" : "info" },
-        { label: nextAppointment ? "Open Test Drive / Visit" : "Schedule Test Drive", detail: nextAppointment ? "A visit is already booked for this shopper." : "Set the next showroom commitment.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','sales')` : "setCustomer360ComposerMode('appointment')", tone: nextAppointment ? "good" : "info" },
+        { label: nextAppointment ? "Open Test Drive / Visit" : "Schedule Test Drive", detail: nextAppointment ? "A visit is already booked for this shopper." : "Set the next showroom commitment.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','sales')` : "startDepartmentAppointmentCreate()", tone: nextAppointment ? "good" : "info" },
         { label: "Move to F&I", detail: "Advance the customer into finance and delivery prep when the desk is ready.", action: "setDepartmentLens('fi')", tone: "good" },
         { label: "Customer Timeline", detail: "Review full communications and service history before desking the deal.", action: "setCustomer360TimelineFilter('all')", tone: "info" }
       ]
@@ -3806,8 +3947,31 @@ function startDepartmentAppointmentCreate() {
     setCustomer360ComposerStatus("Select or create a customer before scheduling an appointment.", "error");
     return;
   }
-  setCustomer360ComposerMode("appointment");
-  setCustomer360ComposerStatus("Appointment form is ready.", "success");
+  const defaultService = getDefaultQuickAppointmentService();
+  const service = window.prompt("Appointment type", defaultService)?.trim();
+  if (service === null) return;
+  const date = window.prompt("Appointment date (YYYY-MM-DD)", getNextBusinessDateValue())?.trim();
+  if (date === null) return;
+  const time = window.prompt("Appointment time (HH:MM)", "10:00")?.trim();
+  if (time === null) return;
+  const advisor = window.prompt("Advisor", currentDepartmentLens === "sales" ? "Sales Desk" : "Rachel Smith")?.trim();
+  if (advisor === null) return;
+  const notes = window.prompt("Notes", "")?.trim();
+  if (notes === null) return;
+
+  createQuickAppointmentRecord({
+    service: service || defaultService,
+    advisor: advisor || (currentDepartmentLens === "sales" ? "Sales Desk" : "Rachel Smith"),
+    date,
+    time,
+    transport: currentDepartmentLens === "sales" ? "dropoff" : "",
+    notes: notes || `${service || defaultService} created from ${titleCase(currentDepartmentLens)} dashboard.`
+  })
+    .then(() => setCustomer360ComposerStatus("Appointment created.", "success"))
+    .catch((err) => {
+      console.error("startDepartmentAppointmentCreate error:", err);
+      setCustomer360ComposerStatus(err.message || "Unable to create appointment.", "error");
+    });
 }
 
 function startDepartmentRepairOrderCreate() {
@@ -4644,7 +4808,7 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
       </div>
       <div class="customer360-ro-actions">
         <button type="button" class="customer360-toolbar-btn" onclick="openRepairOrderFrom360()">${nextAppointment ? "Open RO from Appointment" : "Open Repair Order"}</button>
-        <button type="button" class="customer360-toolbar-btn secondary" onclick="setCustomer360ComposerMode('appointment')">Schedule Appointment</button>
+        <button type="button" class="customer360-toolbar-btn secondary" onclick="startDepartmentAppointmentCreate()">Schedule Appointment</button>
       </div>
     `;
   }
@@ -6010,7 +6174,7 @@ function buildDepartmentRecordStripMarkup(customer, vehicle, tasks = [], appoint
             : "Open Home";
   const actionTwo = nextAppointment
     ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','${escapeHtml(String(currentDepartmentLens || "home"))}')`
-    : "setCustomer360ComposerMode('appointment')";
+    : "startDepartmentAppointmentCreate()";
   const actionTwoLabel = nextAppointment ? "Open Visit" : "Create Visit";
 
   return `
@@ -7139,7 +7303,7 @@ function renderCustomer360Detail() {
     let workChipTone = openTasks.length ? "warn" : "good";
     let visitChipTone = activeAppointment ? "info" : "good";
     let workChipAction = firstTaskId ? `openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `setCustomer360ComposerMode('task')`;
-    let visitChipAction = firstAppointmentId ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `setCustomer360ComposerMode('appointment')`;
+    let visitChipAction = firstAppointmentId ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `startDepartmentAppointmentCreate()`;
     let pressureChipAction = firstTaskId ? `openCustomer360FocusedArtifact('tasks','${firstTaskId}','${escapeHtml(String(currentDepartmentLens || "home"))}')` : `setCustomer360ComposerMode('${escapeHtml(String(getDepartmentLensConfig().composerMode || "task"))}')`;
 
     if (currentDepartmentLens === "service") {
@@ -7176,7 +7340,7 @@ function renderCustomer360Detail() {
         : "startBdcCallbackTask()";
       visitChipAction = activeAppointment
         ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','bdc')`
-        : "setCustomer360ComposerMode('appointment')";
+        : "startDepartmentAppointmentCreate()";
       pressureChipAction = missedCall
         ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCall.id || missedCall.callId || missedCall.createdAtUtc || missedCall.from || ""))}','bdc')`
         : workChipAction;
@@ -7194,7 +7358,7 @@ function renderCustomer360Detail() {
         : "startSalesDealTask()";
       visitChipAction = activeAppointment
         ? `openCustomer360FocusedArtifact('appointments','${firstAppointmentId}','sales')`
-        : `setCustomer360ComposerMode('appointment')`;
+        : `startDepartmentAppointmentCreate()`;
       pressureChipAction = workChipAction;
     } else if (currentDepartmentLens === "accounting") {
       workChipLabel = "Invoice Queue";
