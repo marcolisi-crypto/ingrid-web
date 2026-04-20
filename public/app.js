@@ -3648,6 +3648,217 @@ function buildDepartmentDashboardCard({ label = "", value = "", meta = "", tone 
   `;
 }
 
+function buildDepartmentCreateButtonsMarkup(actions = []) {
+  if (!actions.length) return "";
+  return `
+    <div class="customer360-dashboard-createbar">
+      ${actions.map(({ label = "", detail = "", action = "" }) => `
+        <button type="button" class="customer360-dashboard-createbtn" ${action ? `onclick="${action}"` : ""}>
+          <strong>${escapeHtml(label)}</strong>
+          <span>${escapeHtml(detail)}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function getDepartmentCreateActions(lens = "home") {
+  const createMap = {
+    home: [
+      { label: "Create Customer", detail: "Add a new customer record to the DMS.", action: "startCreateCustomerRecord()" },
+      { label: "Create Vehicle", detail: "Add and link a vehicle to the current customer.", action: "startCreateVehicleRecord()" },
+      { label: "Create Appointment", detail: "Book the next visit for the active customer.", action: "startDepartmentAppointmentCreate()" },
+      { label: "Create RO", detail: "Open a repair order for the active customer.", action: "startDepartmentRepairOrderCreate()" }
+    ],
+    service: [
+      { label: "Create Appointment", detail: "Book a service visit from the advisor dashboard.", action: "startDepartmentAppointmentCreate()" },
+      { label: "Create RO", detail: "Open a live repair order from the service desk.", action: "startDepartmentRepairOrderCreate()" },
+      { label: "Create Customer", detail: "Add a new service customer to the DMS.", action: "startCreateCustomerRecord()" },
+      { label: "Create Vehicle", detail: "Add a vehicle to the selected customer record.", action: "startCreateVehicleRecord()" }
+    ],
+    bdc: [
+      { label: "Create Customer", detail: "Start a new customer record from the contact queue.", action: "startCreateCustomerRecord()" },
+      { label: "Create Appointment", detail: "Book a follow-up visit from BDC.", action: "startDepartmentAppointmentCreate()" },
+      { label: "Create Callback Task", detail: "Queue a callback for the right BDC user.", action: "startBdcCallbackTask()" }
+    ],
+    sales: [
+      { label: "Create Customer", detail: "Add a new lead or showroom customer.", action: "startCreateCustomerRecord()" },
+      { label: "Create Vehicle", detail: "Attach a trade, interest unit, or delivery vehicle.", action: "startCreateVehicleRecord()" },
+      { label: "Create Deal Task", detail: "Open the next sales desk step.", action: "startSalesDealTask()" },
+      { label: "Create Visit", detail: "Schedule a showroom or delivery visit.", action: "startDepartmentAppointmentCreate()" }
+    ],
+    technicians: [
+      { label: "Create Labor Op", detail: "Dispatch a new labor operation on the active RO.", action: "startDepartmentLaborOpCreate()" },
+      { label: "Create MPI Item", detail: "Add a digital inspection result to the RO.", action: "startDepartmentMpiCreate()" },
+      { label: "Create Media", detail: "Capture bay photo or video evidence.", action: "captureTechnicianMedia('repair_order','photo')" }
+    ],
+    fi: [
+      { label: "Create Review Task", detail: "Queue a finance review or delivery prep step.", action: "startFiReviewCreate()" },
+      { label: "Create Delivery", detail: "Set the delivery or handoff appointment.", action: "startDeliveryHandoffAppointment()" },
+      { label: "Create AR Invoice", detail: "Post the customer receivable when the RO is live.", action: "startAccountingReceivableCreate()" }
+    ],
+    parts: [
+      { label: "Create Part Line", detail: "Add requested parts to the active RO.", action: "startDepartmentPartCreate()" },
+      { label: "Create Special Order", detail: "Open an OEM or aftermarket special order.", action: "startDepartmentSpecialOrderCreate()" },
+      { label: "Create Parts Task", detail: "Start a pick, source, or ETA workflow.", action: "createPartsPickTask()" }
+    ],
+    accounting: [
+      { label: "Create AR Invoice", detail: "Post the customer receivable for the live job.", action: "startAccountingReceivableCreate()" },
+      { label: "Create AP Bill", detail: "Create a vendor payable tied to the job.", action: "startAccountingPayableCreate()" },
+      { label: "Create Review Task", detail: "Queue a back-office review for the team.", action: "queueAccountingInvoiceReview()" }
+    ]
+  };
+
+  return createMap[lens] || createMap.home;
+}
+
+async function startCreateCustomerRecord() {
+  const firstName = window.prompt("Customer first name", "")?.trim();
+  if (firstName === null) return;
+  const lastName = window.prompt("Customer last name", "")?.trim();
+  if (lastName === null) return;
+  const primaryPhone = window.prompt("Primary phone", "")?.trim();
+  if (primaryPhone === null) return;
+  const email = window.prompt("Email", "")?.trim();
+  if (email === null) return;
+
+  try {
+    const res = await fetch("/.netlify/functions/customers-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        primaryPhone,
+        email,
+        preferredLanguage: "English"
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create customer");
+    selectedCustomerId = data.id || data.customerId || "";
+    await loadCustomer360();
+    setCustomer360ComposerStatus(`Customer ${customerDisplayName(data)} created.`, "success");
+  } catch (err) {
+    console.error("startCreateCustomerRecord error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create customer.", "error");
+  }
+}
+
+async function startCreateVehicleRecord() {
+  const customer = getSelectedCustomerRecord();
+  if (!customer) {
+    setCustomer360ComposerStatus("Select or create a customer before adding a vehicle.", "error");
+    return;
+  }
+
+  const vin = window.prompt("VIN", "")?.trim();
+  if (vin === null) return;
+  const yearRaw = window.prompt("Year", "")?.trim();
+  if (yearRaw === null) return;
+  const make = window.prompt("Make", "")?.trim();
+  if (make === null) return;
+  const model = window.prompt("Model", "")?.trim();
+  if (model === null) return;
+  const trim = window.prompt("Trim", "")?.trim();
+  if (trim === null) return;
+  const mileageRaw = window.prompt("Mileage", "")?.trim();
+  if (mileageRaw === null) return;
+
+  try {
+    const res = await fetch("/.netlify/functions/vehicles-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: customer.id,
+        vin,
+        year: yearRaw ? Number(yearRaw) : null,
+        make,
+        model,
+        trim,
+        mileage: mileageRaw ? Number(mileageRaw) : null
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create vehicle");
+    await loadCustomer360();
+    setCustomer360ComposerStatus(`Vehicle ${vehicleDisplayName(data)} created.`, "success");
+  } catch (err) {
+    console.error("startCreateVehicleRecord error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create vehicle.", "error");
+  }
+}
+
+function startDepartmentAppointmentCreate() {
+  if (!getSelectedCustomerRecord()) {
+    setCustomer360ComposerStatus("Select or create a customer before scheduling an appointment.", "error");
+    return;
+  }
+  setCustomer360ComposerMode("appointment");
+  setCustomer360ComposerStatus("Appointment form is ready.", "success");
+}
+
+function startDepartmentRepairOrderCreate() {
+  if (!getSelectedCustomerRecord()) {
+    setCustomer360ComposerStatus("Select or create a customer before opening an RO.", "error");
+    return;
+  }
+  openRepairOrderFrom360();
+}
+
+function startDepartmentLaborOpCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before dispatching labor.", "error");
+    return;
+  }
+  addRepairOrderLaborOp();
+}
+
+function startDepartmentMpiCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before adding MPI items.", "error");
+    return;
+  }
+  addRepairOrderInspection();
+}
+
+function startDepartmentPartCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before adding parts.", "error");
+    return;
+  }
+  addRepairOrderPartRequest();
+}
+
+function startDepartmentSpecialOrderCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before placing a special order.", "error");
+    return;
+  }
+  createSpecialPartOrder();
+}
+
+function startAccountingReceivableCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before posting AR.", "error");
+    return;
+  }
+  createAccountsReceivableInvoice();
+}
+
+function startAccountingPayableCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before adding AP.", "error");
+    return;
+  }
+  createAccountsPayableBill();
+}
+
+function startFiReviewCreate() {
+  queueAccountingInvoiceReview();
+  setCustomer360ComposerStatus("Finance review queued.", "success");
+}
+
 function getCustomerById(customerId = "") {
   return (currentCustomers || []).find((item) => String(item.id) === String(customerId)) || null;
 }
@@ -4385,6 +4596,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
   };
 
   const config = byLens[currentDepartmentLens] || byLens.home;
+  const createActions = getDepartmentCreateActions(currentDepartmentLens);
   return `
     <div class="customer360-dashboard-head">
       <div>
@@ -4393,6 +4605,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       </div>
       <span class="customer360-status-pill info">${escapeHtml(getDepartmentLensConfig().name)}</span>
     </div>
+    ${buildDepartmentCreateButtonsMarkup(createActions)}
     <div class="customer360-dashboard-grid">
       ${config.cards.map((card) => buildDepartmentDashboardCard(card)).join("")}
     </div>
