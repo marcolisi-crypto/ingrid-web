@@ -33,7 +33,7 @@ export default async (req) => {
         "Accept": "application/json"
       },
       body: JSON.stringify({
-        status: body.status || "completed",
+        status: body.status ?? "",
         assignedDepartment: body.assignedDepartment || "",
         assignedUser: body.assignedUser || ""
       })

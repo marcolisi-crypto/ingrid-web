@@ -2074,7 +2074,8 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
           ? `${nextAppointment.service || "Service visit"} is booked and ready to convert into an RO`
           : `No live RO yet for ${vehicleDisplayName(vehicle)}`,
       actionLabel: activeRepairOrder ? "Open" : nextAppointment ? "Create RO" : "Schedule",
-      action: activeRepairOrder ? "setDepartmentLens('service')" : nextAppointment ? "openRepairOrderFrom360()" : "setCustomer360ComposerMode('appointment')"
+      action: activeRepairOrder ? "setDepartmentLens('service')" : nextAppointment ? "openRepairOrderFrom360()" : "setCustomer360ComposerMode('appointment')",
+      task: serviceTasks[0] || null
     },
     {
       title: "Estimate / Approval",
@@ -2082,7 +2083,8 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
         ? `${formatCountLabel((activeRepairOrder.estimateLines || []).length, "estimate line")} • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).total)} current estimate`
         : "No estimate exists until the RO is opened",
       actionLabel: activeRepairOrder ? "Add" : "Prep",
-      action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()"
+      action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()",
+      task: serviceTasks[0] || null
     },
     {
       title: "Technician Dispatch",
@@ -2090,7 +2092,8 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
         ? (latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} • ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Technician has not clocked onto the RO yet")
         : "Technician assignment starts after the repair order is opened",
       actionLabel: activeRepairOrder ? (technicianClockedIn ? "Clock Out" : "Clock In") : "Open RO",
-      action: activeRepairOrder ? (technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()"
+      action: activeRepairOrder ? (technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()",
+      task: serviceTasks[0] || null
     },
     {
       title: "Transportation",
@@ -2100,19 +2103,12 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
           ? "Loaner / shuttle needs confirmation before promised time is final"
           : "No transportation workflow has been started yet",
       actionLabel: loanerTask ? "Open" : "Start",
-      action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"
+      action: loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()",
+      task: loanerTask
     }
   ];
 
-  return rows.map((row) => `
-    <div class="customer360-panel-item">
-      <div>
-        <strong>${escapeHtml(row.title)}</strong>
-        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
-      </div>
-      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
-    </div>
-  `).join("");
+  return rows.map((row) => buildTaskWorkflowRow(row, "service")).join("");
 }
 
 function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
@@ -2170,40 +2166,36 @@ function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
       detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(activeRepairOrder.multiPointInspections || []).length} MPI item(s) • ${(activeRepairOrder.partLines || []).length} part line(s)` : (openTasks[0]?.title || `Open findings for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "info" : "warn",
       actionLabel: activeRepairOrder ? "Add MPI" : technicianTask ? "Open" : "Start",
-      action: activeRepairOrder ? "addRepairOrderInspection()" : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "startTechnicianInspectionNote()"
+      action: activeRepairOrder ? "addRepairOrderInspection()" : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "startTechnicianInspectionNote()",
+      task: technicianTask
     },
     {
       title: "Labor dispatch",
       detail: activeRepairOrder ? `${(activeRepairOrder.laborOps || []).length} labor op(s) on the RO` : "Open RO before assigning flat-rate work",
       tone: activeRepairOrder ? "warn" : "info",
       actionLabel: activeRepairOrder ? "Dispatch" : "Prep",
-      action: activeRepairOrder ? "addRepairOrderLaborOp()" : "openRepairOrderFrom360()"
+      action: activeRepairOrder ? "addRepairOrderLaborOp()" : "openRepairOrderFrom360()",
+      task: technicianTask
     },
     {
       title: "Parts handoff",
       detail: openTasks.length ? "Queue robot runner or parts counter request" : "No active parts request yet",
       tone: openTasks.length ? "warn" : "good",
       actionLabel: activeRepairOrder ? "Order" : partsTask ? "Open" : "Send",
-      action: activeRepairOrder ? "createSpecialPartOrder()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createTechnicianPartsRequest()"
+      action: activeRepairOrder ? "createSpecialPartOrder()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createTechnicianPartsRequest()",
+      task: partsTask || technicianTask
     },
     {
       title: "Advisor approval",
       detail: latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} at ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Return recommendation and media to the advisor timeline",
       tone: "info",
       actionLabel: "Notify",
-      action: "startAdvisorJourneyNote()"
+      action: "startAdvisorJourneyNote()",
+      task: technicianTask
     }
   ];
 
-  return inspectionStages.map((stage) => `
-    <div class="customer360-panel-item">
-      <div>
-        <strong>${escapeHtml(stage.title)}</strong>
-        <div class="customer360-meta">${escapeHtml(stage.detail)}</div>
-      </div>
-      <button class="customer360-panel-action" onclick="${stage.action}">${escapeHtml(stage.actionLabel)}</button>
-    </div>
-  `).join("");
+  return inspectionStages.map((stage) => buildTaskWorkflowRow(stage, "technicians")).join("");
 }
 
 function buildTechnicianNotesMarkup(notes = [], calls = []) {
@@ -2255,33 +2247,28 @@ function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
       detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(activeRepairOrder.partLines || []).length} part line(s) attached` : (openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
       actionLabel: partsTask ? "Open" : "Create",
-      action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
+      action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()",
+      task: partsTask
     },
     {
       title: "Source decision",
       detail: activeRepairOrder ? `${(currentPartOrders || []).length} live part order(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).parts)} on the RO` : (openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet"),
       tone: openTasks.length ? "info" : "good",
       actionLabel: activeRepairOrder ? "Order" : partsTask ? "Review" : "Start",
-      action: activeRepairOrder ? "createSpecialPartOrder()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
+      action: activeRepairOrder ? "createSpecialPartOrder()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()",
+      task: partsTask
     },
     {
       title: "Dispatch",
       detail: appointments.length ? "Runner can route to active bay" : "Stage at counter until bay is ready",
       tone: appointments.length ? "warn" : "info",
       actionLabel: nextAppointment ? "Open" : technicianTask ? "Return" : "Prep",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()"
+      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()",
+      task: partsTask || technicianTask
     }
   ];
 
-  return sourcingRows.map((row) => `
-    <div class="customer360-panel-item">
-      <div>
-        <strong>${escapeHtml(row.title)}</strong>
-        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
-      </div>
-      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
-    </div>
-  `).join("");
+  return sourcingRows.map((row) => buildTaskWorkflowRow(row, "parts")).join("");
 }
 
 function buildPartsNotesMarkup(notes = [], appointments = []) {
@@ -2333,33 +2320,28 @@ function buildAccountingTasksMarkup(openTasks = [], vehicle) {
       detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(currentAccountsReceivableInvoices || []).length} AR invoice(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} still due` : (openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
       actionLabel: activeRepairOrder ? "Post AR" : accountingTask ? "Open" : "Queue",
-      action: activeRepairOrder ? "createAccountsReceivableInvoice()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
+      action: activeRepairOrder ? "createAccountsReceivableInvoice()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
+      task: accountingTask
     },
     {
       title: "Payment request",
       detail: activeRepairOrder ? `${formatCountLabel((activeRepairOrder.accountingEntries || []).length, "accounting entry")} • ${(currentAccountsPayableBills || []).length} AP bill(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).paid)} already applied` : (openTasks.length ? "Stripe collection or statement follow-up is active" : "No active collection workflow yet"),
       tone: openTasks.length ? "info" : "good",
       actionLabel: activeRepairOrder ? "Post AP" : ledgerNote ? "Open" : "Add",
-      action: activeRepairOrder ? "createAccountsPayableBill()" : ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
+      action: activeRepairOrder ? "createAccountsPayableBill()" : ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()",
+      task: accountingTask
     },
     {
       title: "Reconciliation",
       detail: "Close ledger loop against service, parts, and delivery activity",
       tone: "info",
       actionLabel: accountingTask ? "Review" : "Prep",
-      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
+      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
+      task: accountingTask
     }
   ];
 
-  return ledgerRows.map((row) => `
-    <div class="customer360-panel-item">
-      <div>
-        <strong>${escapeHtml(row.title)}</strong>
-        <div class="customer360-meta">${escapeHtml(row.detail)}</div>
-      </div>
-      <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
-    </div>
-  `).join("");
+  return ledgerRows.map((row) => buildTaskWorkflowRow(row, "accounting")).join("");
 }
 
 function buildAccountingNotesMarkup(notes = []) {
@@ -5435,6 +5417,84 @@ function buildDepartmentTaskQueueToolbar(department = currentDepartmentLens, tas
   `;
 }
 
+function buildTaskAssignmentControls(task = {}, fallbackDepartment = currentDepartmentLens) {
+  const taskId = escapeHtml(String(task.id || task.taskId || ""));
+  if (!taskId) return "";
+  const currentDepartment = getTaskAssignedDepartment(task) || normalizeDepartmentKey(fallbackDepartment) || "service";
+  const currentUser = getTaskAssignedUser(task);
+  const departmentSelectId = `taskAssignDept-${taskId}`;
+  const userSelectId = `taskAssignUser-${taskId}`;
+  const departmentOptions = ["service", "bdc", "sales", "technicians", "fi", "parts", "accounting"]
+    .map((item) => `<option value="${item}" ${currentDepartment === item ? "selected" : ""}>${escapeHtml(DEPARTMENT_LENSES[item]?.name || titleCase(item))}</option>`)
+    .join("");
+  const userOptions = [`<option value="">Department queue</option>`]
+    .concat(getDepartmentRoster(currentDepartment).map((name) => `<option value="${escapeHtml(name)}" ${currentUser === name ? "selected" : ""}>${escapeHtml(name)}</option>`))
+    .join("");
+
+  return `
+    <div class="customer360-task-routing">
+      <span class="customer360-task-routing-tag">${escapeHtml(currentDepartment === normalizeDepartmentKey(fallbackDepartment) ? "In queue" : "Cross-department")}</span>
+      <select id="${departmentSelectId}" onchange="syncInlineTaskAssignmentUsers('${departmentSelectId}','${userSelectId}','${escapeHtml(currentUser)}')">${departmentOptions}</select>
+      <select id="${userSelectId}">${userOptions}</select>
+      <button type="button" onclick="reassignTask('${taskId}','${departmentSelectId}','${userSelectId}')">Assign</button>
+    </div>
+  `;
+}
+
+function buildTaskWorkflowRow(row = {}, fallbackDepartment = currentDepartmentLens) {
+  return `
+    <div class="customer360-panel-item">
+      <div class="customer360-panel-item-body">
+        <strong>${escapeHtml(row.title || row.label || "Task")}</strong>
+        <div class="customer360-meta">${escapeHtml(row.detail || "")}</div>
+        ${row.task ? buildTaskAssignmentControls(row.task, fallbackDepartment) : ""}
+      </div>
+      <button class="customer360-panel-action" onclick="${row.action || ""}">${escapeHtml(row.actionLabel || "Open")}</button>
+    </div>
+  `;
+}
+
+function syncInlineTaskAssignmentUsers(departmentSelectId, userSelectId, selectedUser = "") {
+  const departmentEl = document.getElementById(departmentSelectId);
+  const userEl = document.getElementById(userSelectId);
+  if (!departmentEl || !userEl) return;
+  const department = normalizeDepartmentKey(departmentEl.value || "service");
+  const previousUser = userEl.value || selectedUser || "";
+  userEl.innerHTML = `<option value="">Department queue</option>`;
+  getDepartmentRoster(department).forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    userEl.appendChild(option);
+  });
+  userEl.value = previousUser;
+}
+
+async function reassignTask(taskId, departmentSelectId, userSelectId) {
+  try {
+    const departmentEl = document.getElementById(departmentSelectId);
+    const userEl = document.getElementById(userSelectId);
+    const assignedDepartment = normalizeDepartmentKey(departmentEl?.value || "");
+    const assignedUser = userEl?.value || "";
+    const res = await fetch("/.netlify/functions/tasks-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId,
+        assignedDepartment,
+        assignedUser
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to reassign task");
+    await loadTasks();
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+  } catch (err) {
+    console.error("reassignTask error:", err);
+  }
+}
+
 function setCustomer360ComposerStatus(message = "", tone = "default") {
   const status = document.getElementById("customer360ComposerStatus");
   if (!status) return;
@@ -6464,9 +6524,10 @@ function renderCustomer360Detail() {
         : "No F&I tasks linked yet.";
       tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar(currentDepartmentLens, departmentTasks) + (lensTasks.length ? lensTasks.map((task) => `
         <div class="customer360-panel-item">
-          <div>
+          <div class="customer360-panel-item-body">
             <span>${escapeHtml(task.title || "Task")}</span>
             <div class="customer360-meta">${escapeHtml((task.assignedUser ? `${task.assignedUser} • ` : "") + (task.description || "Open task"))}</div>
+            ${buildTaskAssignmentControls(task, currentDepartmentLens)}
           </div>
           <button class="customer360-panel-action" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(task.id || task.taskId || task.createdAtUtc || task.title || ""))}','${escapeHtml(String(currentDepartmentLens || "home"))}')">Open</button>
         </div>
