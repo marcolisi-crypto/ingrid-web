@@ -86,7 +86,7 @@ function getTaskAssignedUser(task = {}) {
 const DEPARTMENT_LENSES = {
   home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", lensPanelTitle: "Work Queue", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
   sales: { name: "Sales", copy: "Lead, quote, trade, and deal actions stay anchored to the same customer and vehicle timeline.", summaryTitle: "Sales Summary", timelineLabel: "Sales lens", actions: ["Start Deal", "Log Test Drive", "Send Quote"], dashboardTitle: "Sales 360°", lensPanelTitle: "Opportunity", primaryPanelTitle: "Opportunity Tasks", secondaryPanelTitle: "Deal Notes", railTitle: "Sales Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
-  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"], dashboardTitle: "Service Advisor 360°", lensPanelTitle: "RO-Lite", primaryPanelTitle: "Lane Tasks", secondaryPanelTitle: "Advisor Notes", railTitle: "Service Lane", archiveTitle: "VIN Archive", defaultFilter: "appointments", composerMode: "appointment" },
+  service: { name: "Service Advisor", copy: "Appointments, repair orders, vehicle history, and follow-ups stay centered on the 360 view.", summaryTitle: "Service Summary", timelineLabel: "Service lens", actions: ["Schedule Service", "Write RO", "Add Advisor Note"], dashboardTitle: "Service Advisor 360°", lensPanelTitle: "Concern & Request", primaryPanelTitle: "Services & Jobs", secondaryPanelTitle: "Scheduling & Next Steps", railTitle: "Financials & Approval", archiveTitle: "VIN Archive", defaultFilter: "appointments", composerMode: "appointment" },
   bdc: { name: "BDC", copy: "Inbound calls, SMS, queues, and campaign follow-ups work from the same contact record.", summaryTitle: "BDC Summary", timelineLabel: "BDC lens", actions: ["Open Call Queue", "Send Follow-up", "Start Campaign"], dashboardTitle: "BDC 360°", lensPanelTitle: "Queue", primaryPanelTitle: "Follow-Ups", secondaryPanelTitle: "Conversation Notes", railTitle: "Communications Queue", archiveTitle: "Customer Files", defaultFilter: "calls", composerMode: "task" },
   technicians: { name: "Technicians", copy: "Open jobs, inspection updates, and technician notes remain linked to the customer and VIN timeline.", summaryTitle: "Tech Summary", timelineLabel: "Technician lens", actions: ["Start Job", "Complete Job", "Add Internal Note"], dashboardTitle: "Technician 360°", lensPanelTitle: "Work Order", primaryPanelTitle: "Job Tasks", secondaryPanelTitle: "Inspection Notes", railTitle: "Work Bay", archiveTitle: "VIN Archive", defaultFilter: "tasks", composerMode: "note" },
   fi: { name: "F&I", copy: "Deal closing, products, and funding context stay attached to the same operating record.", summaryTitle: "F&I Summary", timelineLabel: "F&I lens", actions: ["Add Warranty", "Finalize Deal", "Print Docs"], dashboardTitle: "F&I 360°", lensPanelTitle: "Funding", primaryPanelTitle: "Closing Tasks", secondaryPanelTitle: "Funding Notes", railTitle: "Delivery Desk", archiveTitle: "Deal Jacket", defaultFilter: "tasks", composerMode: "task" },
@@ -2376,6 +2376,365 @@ function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
   `).join("");
 }
 
+function getServiceAdvisorStatusMeta({ activeRepairOrder = null, serviceReception = null, appointments = [], loanerTask = null } = {}) {
+  const nextAppointment = appointments[0] || null;
+  const repairOrderStatus = String(activeRepairOrder?.status || "").toLowerCase();
+  if (repairOrderStatus.includes("ready")) return { label: "Ready", tone: "good" };
+  if (repairOrderStatus.includes("progress")) return { label: "In Progress", tone: "warn" };
+  if (activeRepairOrder) return { label: "Checked-in", tone: "info" };
+  if (serviceReception) return { label: "Checked-in", tone: "info" };
+  if (loanerTask) return { label: "Waiting", tone: "warn" };
+  if (nextAppointment) return { label: "Waiting", tone: "info" };
+  return { label: "Waiting", tone: "info" };
+}
+
+function inferServiceConcernTags(concern = "") {
+  const normalized = String(concern || "").toLowerCase();
+  const tags = [];
+  if (normalized.includes("warranty")) tags.push("Warranty");
+  if (normalized.includes("oil") || normalized.includes("maintenance") || normalized.includes("tire") || normalized.includes("service")) tags.push("Maintenance");
+  if (normalized.includes("repair") || normalized.includes("brake") || normalized.includes("noise") || normalized.includes("engine") || normalized.includes("diagnostic")) tags.push("Repair");
+  if (!tags.length) tags.push("Maintenance", "Repair");
+  return [...new Set(tags)].slice(0, 3);
+}
+
+function inferAdvisorSentiment(calls = [], notes = []) {
+  const haystack = [
+    calls[0]?.notes,
+    calls[0]?.transcript,
+    notes[0]?.body
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (!haystack) return "Neutral";
+  if (/(upset|angry|frustrat|urgent|asap|immediately)/.test(haystack)) return "Concerned";
+  if (/(thank|great|perfect|appreciate|happy)/.test(haystack)) return "Positive";
+  return "Neutral";
+}
+
+function inferAdvisorUrgency(calls = [], appointments = [], activeRepairOrder = null) {
+  if ((calls || []).some((call) => String(call.status || "").toLowerCase().includes("miss"))) return "Follow-up needed";
+  if (activeRepairOrder && String(activeRepairOrder.status || "").toLowerCase().includes("progress")) return "Customer in process";
+  if ((appointments || [])[0]) return "Customer waiting";
+  return "Normal";
+}
+
+function getServiceAdvisorTimelineStats(customer = null) {
+  const phones = customer?.phones || [];
+  const smsThreads = (currentInboxConversations || []).filter((item) => {
+    const phone = normalizePhoneNumber(item.phone || "");
+    return phones.includes(phone);
+  });
+  return {
+    smsCount: smsThreads.length,
+    visitCount: getSelectedCustomerRepairOrders().length,
+    noteCount: currentCustomerNotes.length,
+    voicemailCount: (currentCalls || []).filter((item) => {
+      const status = String(item.status || "").toLowerCase();
+      return status.includes("voicemail") || status.includes("miss");
+    }).length
+  };
+}
+
+function getServiceAdvisorWorkOrderRows(repairOrder = null) {
+  if (!repairOrder) return [];
+  const estimateLines = Array.isArray(repairOrder.estimateLines) ? repairOrder.estimateLines : [];
+  const partLines = Array.isArray(repairOrder.partLines) ? repairOrder.partLines : [];
+  const laborOps = Array.isArray(repairOrder.laborOps) ? repairOrder.laborOps : [];
+  const rows = estimateLines.map((line, index) => {
+    const status = titleCase((line.status || "pending").replaceAll("_", " "));
+    const matchingLaborOp = laborOps[index] || null;
+    return {
+      item: line.description || line.opCode || "Service line",
+      labor: `${Number(line.quantity || matchingLaborOp?.soldHours || 0) || 0} hr`,
+      parts: partLines[index]?.description || (partLines.length ? `${partLines.length} linked` : "None"),
+      price: formatMoney((Number(line.quantity || 1) || 1) * (Number(line.unitPrice || 0) || 0)),
+      status
+    };
+  });
+  if (rows.length) return rows;
+  return laborOps.map((line) => ({
+    item: line.description || line.opCode || "Technician op",
+    labor: `${Number(line.soldHours || line.flatRateHours || 0) || 0} hr`,
+    parts: partLines.length ? `${partLines.length} linked` : "None",
+    price: formatMoney(Number(line.soldHours || 0) * 125),
+    status: titleCase((line.dispatchStatus || "pending").replaceAll("_", " "))
+  }));
+}
+
+function getServiceAdvisorUpsells(vehicle = null, repairOrder = null) {
+  const mileage = Number(vehicle?.mileage || repairOrder?.odometerIn || 0);
+  const suggestions = [];
+  if (mileage >= 50000) suggestions.push("Brake inspection");
+  if (mileage >= 75000) suggestions.push("Coolant service");
+  if (mileage >= 90000) suggestions.push("Transmission service");
+  if (!suggestions.length) suggestions.push("Cabin air filter", "Tire rotation");
+  return suggestions.slice(0, 3);
+}
+
+function buildServiceAdvisorHeaderMarkup(customer, vehicle, appointments = [], calls = []) {
+  const nextAppointment = appointments[0] || null;
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const serviceReception = getActiveServiceReceptionRecord();
+  const primaryPhone = getSelectedCustomerPrimaryPhone();
+  const status = getServiceAdvisorStatusMeta({
+    activeRepairOrder,
+    serviceReception,
+    appointments
+  });
+  const advisorName = getRepairOrderAdvisorName(activeRepairOrder || serviceReception || {}) || nextAppointment?.advisor || "Rachel Smith";
+  const appointmentLabel = nextAppointment
+    ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() || "Appointment booked"
+    : serviceReception?.createdAtUtc
+      ? `Write-up ${formatDisplayDateTime(serviceReception.createdAtUtc)}`
+      : "No appointment booked";
+
+  return `
+    <div class="service-advisor-header">
+      <div class="service-advisor-header-main">
+        <div class="service-advisor-header-eyebrow">Service Advisor Workspace</div>
+        <div class="service-advisor-header-title-row">
+          <div>
+            <strong class="service-advisor-header-title">${escapeHtml(customerDisplayName(customer))}</strong>
+            <div class="service-advisor-header-copy">
+              ${primaryPhone ? escapeHtml(formatPhonePretty(primaryPhone)) : "No phone on file"}
+              ${customer?.email ? ` • ${escapeHtml(customer.email)}` : ""}
+            </div>
+          </div>
+          <span class="customer360-status-pill ${status.tone}">${escapeHtml(status.label)}</span>
+        </div>
+        <div class="service-advisor-header-meta">
+          <span>${escapeHtml(vehicleDisplayName(vehicle))}</span>
+          ${vehicle?.vin ? `<span>${escapeHtml(vehicle.vin)}</span>` : ""}
+          ${activeRepairOrder?.repairOrderNumber ? `<span>${escapeHtml(activeRepairOrder.repairOrderNumber)}</span>` : ""}
+        </div>
+      </div>
+      <div class="service-advisor-header-stat">
+        <small>Appointment</small>
+        <strong>${escapeHtml(appointmentLabel)}</strong>
+        <span>${escapeHtml(advisorName)} assigned</span>
+      </div>
+      <div class="service-advisor-header-actions">
+        ${primaryPhone ? `<a href="#" class="customer360-record-strip-action phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="call">📞 Call</a>` : ""}
+        ${primaryPhone ? `<a href="#" class="customer360-record-strip-action phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="sms">💬 SMS</a>` : ""}
+        <a href="${customer?.email ? `mailto:${encodeURIComponent(customer.email)}` : "#"}" class="customer360-record-strip-action">📧 Email</a>
+        <button type="button" class="customer360-record-strip-action" onclick="startAdvisorJourneyNote()">➕ Add note</button>
+      </div>
+    </div>
+  `;
+}
+
+function buildServiceAdvisorConcernMarkup(customer, vehicle, appointments = [], calls = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const serviceReception = getActiveServiceReceptionRecord();
+  const concern = activeRepairOrder?.complaint
+    || serviceReception?.concern
+    || calls[0]?.detectedIntent
+    || calls[0]?.notes
+    || calls[0]?.transcript
+    || currentCustomerNotes[0]?.body
+    || "No customer concern captured yet.";
+  const tags = inferServiceConcernTags(concern);
+  const intent = calls[0]?.detectedIntent || (serviceReception?.concern ? "Service write-up captured" : "General service request");
+  const urgency = inferAdvisorUrgency(calls, appointments, activeRepairOrder);
+  const sentiment = inferAdvisorSentiment(calls, currentCustomerNotes);
+  return `
+    <div class="service-advisor-block">
+      <div class="service-advisor-block-top">
+        <div>
+          <small>Concern / Customer Request</small>
+          <strong>${escapeHtml(intent)}</strong>
+        </div>
+        <button type="button" class="customer360-panel-action" onclick="startServiceWriteUp()">${activeRepairOrder || serviceReception ? "Update" : "Create"} Write-Up</button>
+      </div>
+      <div class="service-advisor-concern-body">${escapeHtml(concern)}</div>
+      <div class="service-advisor-tag-row">
+        ${tags.map((tag) => `<span class="service-advisor-tag">${escapeHtml(tag)}</span>`).join("")}
+      </div>
+      <div class="service-advisor-signal-row">
+        <span class="service-advisor-signal"><strong>Intent</strong><span>${escapeHtml(intent)}</span></span>
+        <span class="service-advisor-signal"><strong>Urgency</strong><span>${escapeHtml(urgency)}</span></span>
+        <span class="service-advisor-signal"><strong>Sentiment</strong><span>${escapeHtml(sentiment)}</span></span>
+      </div>
+    </div>
+  `;
+}
+
+function buildServiceAdvisorWorkOrderMarkup(customer, vehicle, appointments = [], calls = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const workRows = getServiceAdvisorWorkOrderRows(activeRepairOrder);
+  const upsells = getServiceAdvisorUpsells(vehicle, activeRepairOrder);
+  const mpiItems = Array.isArray(activeRepairOrder?.multiPointInspections) ? activeRepairOrder.multiPointInspections.slice(0, 3) : [];
+  const laborOps = Array.isArray(activeRepairOrder?.laborOps) ? activeRepairOrder.laborOps.slice(0, 3) : [];
+  const mediaAssets = getRepairOrderMediaAssets(activeRepairOrder).slice(0, 2);
+
+  return `
+    <div class="service-advisor-block">
+      <div class="service-advisor-block-top">
+        <div>
+          <small>Services & Jobs</small>
+          <strong>${activeRepairOrder?.repairOrderNumber ? `Work Order ${escapeHtml(activeRepairOrder.repairOrderNumber)}` : "Open a repair order to start work"}</strong>
+        </div>
+        <div class="service-advisor-inline-actions">
+          <button type="button" class="customer360-panel-action" onclick="createServiceQuote()">Add Recommended Service</button>
+          <button type="button" class="customer360-panel-action" onclick="addRepairOrderLaborOp()">Dispatch Labor</button>
+        </div>
+      </div>
+      ${workRows.length ? `
+        <div class="service-advisor-table">
+          <div class="service-advisor-table-head">
+            <span>Service Item</span>
+            <span>Labor</span>
+            <span>Parts</span>
+            <span>Price</span>
+            <span>Status</span>
+          </div>
+          ${workRows.map((row) => `
+            <div class="service-advisor-table-row">
+              <span>${escapeHtml(row.item)}</span>
+              <span>${escapeHtml(row.labor)}</span>
+              <span>${escapeHtml(row.parts)}</span>
+              <span>${escapeHtml(row.price)}</span>
+              <span><span class="service-advisor-inline-status">${escapeHtml(row.status)}</span></span>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="customer360-empty">No services or jobs have been written on this work order yet.</div>`}
+      <div class="service-advisor-upsell-row">
+        <small>AI Suggested Upsells</small>
+        <div class="service-advisor-tag-row">
+          ${upsells.map((item) => `<button type="button" class="service-advisor-tag action" onclick="createServiceQuote()">${escapeHtml(item)}</button>`).join("")}
+        </div>
+      </div>
+      <div class="service-advisor-tech-notes">
+        <div class="service-advisor-tech-head">
+          <small>Technician Notes (Live Updates)</small>
+          <button type="button" class="customer360-panel-action" onclick="captureTechnicianMedia('repair_order','photo')">Add Photo / Video</button>
+        </div>
+        ${mpiItems.length || laborOps.length || mediaAssets.length ? `
+          <div class="service-advisor-tech-list">
+            ${laborOps.map((item) => `
+              <div class="service-advisor-tech-item">
+                <strong>${escapeHtml(item.technicianName || "Technician")} • ${escapeHtml(titleCase((item.dispatchStatus || "dispatched").replaceAll("_", " ")))}</strong>
+                <span>${escapeHtml(item.description || item.opCode || "Labor operation in progress.")}</span>
+              </div>
+            `).join("")}
+            ${mpiItems.map((item) => `
+              <div class="service-advisor-tech-item">
+                <strong>${escapeHtml(item.itemName || item.category || "Inspection item")} • ${escapeHtml(titleCase(item.severity || item.result || "attention"))}</strong>
+                <span>${escapeHtml(item.notes || "Inspection detail captured from the shop floor.")}</span>
+              </div>
+            `).join("")}
+            ${mediaAssets.map((item) => `
+              <div class="service-advisor-tech-item">
+                <strong>${escapeHtml(item.fileName || titleCase(item.mediaType || "photo"))}</strong>
+                <span>${escapeHtml(item.caption || "Technician media captured for advisor review.")}</span>
+              </div>
+            `).join("")}
+          </div>
+        ` : `<div class="customer360-empty">No live technician updates yet.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function buildServiceAdvisorNextStepsMarkup(customer, vehicle, appointments = [], calls = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const nextAppointment = appointments[0] || null;
+  const loanerTask = (currentTasks || []).find((item) => {
+    if (item.customerId !== customer?.id) return false;
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("loaner") || haystack.includes("transport") || haystack.includes("shuttle");
+  });
+  const promiseAt = getRepairOrderPromisedAt(activeRepairOrder);
+  const transportStatus = nextAppointment?.transport
+    ? nextAppointment.transport
+    : loanerTask
+      ? "Requested"
+      : "Not requested";
+  return `
+    <div class="service-advisor-block">
+      <div class="service-advisor-block-top">
+        <div>
+          <small>Scheduling & Next Steps</small>
+          <strong>Keep transportation and completion visible</strong>
+        </div>
+      </div>
+      <div class="service-advisor-next-grid">
+        <div class="service-advisor-next-card">
+          <small>Loaner Vehicle</small>
+          <strong>${escapeHtml(loanerTask ? "Reserved / active" : "Not started")}</strong>
+          <button type="button" class="customer360-panel-action" onclick="${loanerTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title || ""))}','service')` : "startLoanerTask()"}">${loanerTask ? "Open Loaner" : "Start Loaner"}</button>
+        </div>
+        <div class="service-advisor-next-card">
+          <small>Shuttle / Pickup</small>
+          <strong>${escapeHtml(transportStatus)}</strong>
+          <button type="button" class="customer360-panel-action" onclick="startLoanerTask()">Request Transport</button>
+        </div>
+        <div class="service-advisor-next-card">
+          <small>Estimated Completion</small>
+          <strong>${escapeHtml(promiseAt ? formatDisplayDateTime(promiseAt) : nextAppointment ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() : "Pending")}</strong>
+          <button type="button" class="customer360-panel-action" onclick="startAdvisorJourneyNote()">Update ETA</button>
+        </div>
+        <div class="service-advisor-next-card">
+          <small>Book Next Service</small>
+          <strong>${escapeHtml(Number(vehicle?.mileage || 0) >= 5000 ? "Recommended now" : "Plan ahead")}</strong>
+          <button type="button" class="customer360-panel-action" onclick="startDepartmentAppointmentCreate()">Book Next Service</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildServiceAdvisorApprovalRailMarkup(customer, vehicle, appointments = [], calls = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const amounts = getRepairOrderAmounts(activeRepairOrder);
+  const warrantyClaims = Array.isArray(activeRepairOrder?.warrantyClaims) ? activeRepairOrder.warrantyClaims : [];
+  const estimateLines = Array.isArray(activeRepairOrder?.estimateLines) ? activeRepairOrder.estimateLines : [];
+  const approvedCount = estimateLines.filter((item) => String(item.status || "").toLowerCase().includes("approve") || String(item.status || "").toLowerCase().includes("progress")).length;
+  const pendingCount = estimateLines.filter((item) => {
+    const status = String(item.status || "").toLowerCase();
+    return !status.includes("approve") && !status.includes("declin");
+  }).length;
+  const paymentMethod = activeRepairOrder?.paymentMethod || activeRepairOrder?.paymentMethodOnFile || (activeRepairOrder?.accountingEntries?.length ? "Card on file" : "Verify at cashier");
+
+  return `
+    <div class="service-advisor-financials">
+      <div class="service-advisor-rail-head">
+        <small>Financials & Approval</small>
+        <strong>${escapeHtml(activeRepairOrder?.repairOrderNumber || "No live RO")}</strong>
+      </div>
+      <div class="service-advisor-financial-grid">
+        <div class="service-advisor-financial-card">
+          <small>Estimate Total</small>
+          <strong>${escapeHtml(formatMoney(amounts.total || 0))}</strong>
+        </div>
+        <div class="service-advisor-financial-card">
+          <small>Approved vs Pending</small>
+          <strong>${escapeHtml(`${approvedCount} / ${pendingCount}`)}</strong>
+        </div>
+        <div class="service-advisor-financial-card">
+          <small>Warranty Coverage</small>
+          <strong>${escapeHtml(warrantyClaims.length ? `${warrantyClaims.length} claim${warrantyClaims.length === 1 ? "" : "s"}` : "Customer pay")}</strong>
+        </div>
+        <div class="service-advisor-financial-card">
+          <small>Payment Method</small>
+          <strong>${escapeHtml(paymentMethod)}</strong>
+        </div>
+      </div>
+      <div class="service-advisor-approval-actions">
+        <button type="button" class="customer360-toolbar-btn" onclick="sendServiceEstimateSms()">✅ Send estimate via SMS</button>
+        <button type="button" class="customer360-toolbar-btn" onclick="requestServiceEsignature()">✍️ E-signature</button>
+        <button type="button" class="customer360-toolbar-btn secondary" onclick="markServiceWorkDeclined()">❌ Mark declined</button>
+      </div>
+      <div class="service-advisor-floating-actions">
+        <button type="button" class="service-advisor-float-btn" onclick="checkInServiceCustomer()">Check-in customer</button>
+        <button type="button" class="service-advisor-float-btn" onclick="startServiceRepairFlow()">Start repair</button>
+        <button type="button" class="service-advisor-float-btn" onclick="markRepairOrderReady()">Mark ready</button>
+        <button type="button" class="service-advisor-float-btn danger" onclick="closeActiveRepairOrder()">Close RO</button>
+      </div>
+    </div>
+  `;
+}
+
 function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
   const activeRepairOrder = getActiveRepairOrderRecord();
   const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
@@ -3297,6 +3656,107 @@ async function createPartsInvoice() {
   } catch (err) {
     console.error("createPartsInvoice error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to create parts invoice.", "error");
+  }
+}
+
+async function updateActiveRepairOrderStatus(status = "in_progress", successCopy = "Repair order updated.") {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open a repair order before changing status.", "error");
+    return;
+  }
+
+  try {
+    const res = await fetch("/.netlify/functions/service-repair-order-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        status,
+        notes: `${titleCase(String(status || "").replaceAll("_", " "))} from Service Advisor workspace`
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to update repair order status");
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    setCustomer360ComposerStatus(successCopy, "success");
+  } catch (err) {
+    console.error("updateActiveRepairOrderStatus error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to update repair order status.", "error");
+  }
+}
+
+function checkInServiceCustomer() {
+  if (getActiveServiceReceptionRecord()) {
+    setCustomer360ComposerStatus("Customer is already checked in through the write-up.", "success");
+    return;
+  }
+  startServiceReceptionCreate();
+}
+
+function startServiceRepairFlow() {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  if (!activeRepairOrder) {
+    openRepairOrderFrom360();
+    return;
+  }
+  updateActiveRepairOrderStatus("in_progress", `Repair started on ${activeRepairOrder.repairOrderNumber || "active RO"}.`);
+}
+
+function markRepairOrderReady() {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  if (!activeRepairOrder) {
+    setCustomer360ComposerStatus("Open a repair order before marking it ready.", "error");
+    return;
+  }
+  updateActiveRepairOrderStatus("ready", `${activeRepairOrder.repairOrderNumber || "Repair order"} marked ready.`);
+}
+
+function sendServiceEstimateSms() {
+  const phone = getSelectedCustomerPrimaryPhone();
+  if (!phone) {
+    setCustomer360ComposerStatus("No customer phone on file for SMS delivery.", "error");
+    return;
+  }
+  openSmsForPhone(phone);
+  setCustomer360ComposerStatus("SMS workspace opened for estimate approval.", "success");
+}
+
+async function requestServiceEsignature() {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before requesting e-signature.", "error");
+    return;
+  }
+  try {
+    await createQuickTaskRecord({
+      assignedDepartment: "service",
+      title: `E-signature request for ${repairOrder.repairOrderNumber || "RO"}`,
+      description: `[SERVICE] Customer approval required for estimate on ${repairOrder.repairOrderNumber || "active repair order"}.`
+    });
+    setCustomer360ComposerStatus("E-signature request queued.", "success");
+  } catch (err) {
+    console.error("requestServiceEsignature error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to queue e-signature request.", "error");
+  }
+}
+
+async function markServiceWorkDeclined() {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before marking work declined.", "error");
+    return;
+  }
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[SERVICE] Customer declined current estimate on ${repairOrder.repairOrderNumber || "active repair order"}.`
+    });
+    setCustomer360ComposerStatus("Declined work noted on the record.", "success");
+  } catch (err) {
+    console.error("markServiceWorkDeclined error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to record declined work.", "error");
   }
 }
 
@@ -7463,6 +7923,18 @@ function renderCustomer360Timeline() {
   const vinActionsEl = document.getElementById("customer360VinActions");
   if (!timelineEl) return;
 
+  const customer = getSelectedCustomerRecord();
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const serviceTimelineStats = getServiceAdvisorTimelineStats(customer);
+  const serviceAppointments = (currentAppointments || []).filter((item) => item.customerId === selectedCustomerId);
+  const serviceCalls = (currentCalls || []).filter((call) => {
+    const phones = customer?.phones || [];
+    return phones.includes(normalizePhoneNumber(call.from || "")) || phones.includes(normalizePhoneNumber(call.to || ""));
+  });
+  const serviceIntent = serviceCalls[0]?.detectedIntent || currentCustomerNotes[0]?.body || "No AI intent detected yet";
+  const serviceUrgency = inferAdvisorUrgency(serviceCalls, serviceAppointments, activeRepairOrder);
+  const serviceSentiment = inferAdvisorSentiment(serviceCalls, currentCustomerNotes);
+
   const vinItems = currentCustomer360TimelineCards.filter((item) => categorizeCustomer360TimelineItem(item) === "vin");
   const vinHealthCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vehicle health")).length;
   const vinMovementCount = vinItems.filter((item) => String(item.type || "").toLowerCase().includes("vehicle movement")).length;
@@ -7472,11 +7944,31 @@ function renderCustomer360Timeline() {
   const latestVinArchive = vinItems.find((item) => String(item.type || "").toLowerCase().includes("vin archive"));
 
   if (vinSummaryEl) {
-    vinSummaryEl.innerHTML = `
-      <button type="button" class="customer360-vin-summary-chip health ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "health" ? "active" : ""}" onclick="openVinTimelineSubtype('health')"><span class="customer360-vin-summary-chip-content"><strong>${vinHealthCount} Health</strong><small>${escapeHtml(latestVinHealth ? latestVinHealth.time : "No updates")}</small></span></button>
-      <button type="button" class="customer360-vin-summary-chip movement ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "movement" ? "active" : ""}" onclick="openVinTimelineSubtype('movement')"><span class="customer360-vin-summary-chip-content"><strong>${vinMovementCount} Movement</strong><small>${escapeHtml(latestVinMovement ? latestVinMovement.time : "No updates")}</small></span></button>
-      <button type="button" class="customer360-vin-summary-chip archive ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "archive" ? "active" : ""}" onclick="openVinTimelineSubtype('archive')"><span class="customer360-vin-summary-chip-content"><strong>${vinArchiveCount} Archive</strong><small>${escapeHtml(latestVinArchive ? latestVinArchive.time : "No updates")}</small></span></button>
-    `;
+    if (currentDepartmentLens === "service") {
+      vinSummaryEl.innerHTML = `
+        <div class="service-advisor-feed-summary">
+          <div class="service-advisor-feed-summary-main">
+            <small>AI Reception Context</small>
+            <strong>${escapeHtml(serviceIntent)}</strong>
+            <span>Intent detected from calls, SMS, notes, and prior visits.</span>
+          </div>
+          <div class="service-advisor-feed-summary-grid">
+            <span><strong>${escapeHtml(serviceUrgency)}</strong><small>Urgency</small></span>
+            <span><strong>${escapeHtml(serviceSentiment)}</strong><small>Sentiment</small></span>
+            <span><strong>${escapeHtml(String(serviceTimelineStats.smsCount))}</strong><small>SMS threads</small></span>
+            <span><strong>${escapeHtml(String(serviceTimelineStats.visitCount))}</strong><small>Previous visits</small></span>
+            <span><strong>${escapeHtml(String(serviceTimelineStats.noteCount))}</strong><small>Advisor notes</small></span>
+            <span><strong>${escapeHtml(String(serviceTimelineStats.voicemailCount))}</strong><small>Missed / voicemail</small></span>
+          </div>
+        </div>
+      `;
+    } else {
+      vinSummaryEl.innerHTML = `
+        <button type="button" class="customer360-vin-summary-chip health ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "health" ? "active" : ""}" onclick="openVinTimelineSubtype('health')"><span class="customer360-vin-summary-chip-content"><strong>${vinHealthCount} Health</strong><small>${escapeHtml(latestVinHealth ? latestVinHealth.time : "No updates")}</small></span></button>
+        <button type="button" class="customer360-vin-summary-chip movement ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "movement" ? "active" : ""}" onclick="openVinTimelineSubtype('movement')"><span class="customer360-vin-summary-chip-content"><strong>${vinMovementCount} Movement</strong><small>${escapeHtml(latestVinMovement ? latestVinMovement.time : "No updates")}</small></span></button>
+        <button type="button" class="customer360-vin-summary-chip archive ${currentCustomer360TimelineFilter === "vin" && currentCustomer360VinFilter === "archive" ? "active" : ""}" onclick="openVinTimelineSubtype('archive')"><span class="customer360-vin-summary-chip-content"><strong>${vinArchiveCount} Archive</strong><small>${escapeHtml(latestVinArchive ? latestVinArchive.time : "No updates")}</small></span></button>
+      `;
+    }
   }
 
   if (vinActionsEl) {
@@ -7902,8 +8394,10 @@ function renderCustomer360Detail() {
   const mainTitleEl = document.getElementById("customer360MainTitle");
   const mainSubtitleEl = document.getElementById("customer360MainSubtitle");
   const customerCardEl = document.getElementById("customer360CustomerCard");
+  const summaryCardEl = document.getElementById("customer360SummaryCard");
   const aiSummaryEl = document.getElementById("customer360AiSummary");
   const summaryActionsEl = document.getElementById("customer360SummaryActions");
+  const journeyCardEl = document.getElementById("customer360JourneyCard");
   const journeyStagesEl = document.getElementById("customer360JourneyStages");
   const journeyActionsEl = document.getElementById("customer360JourneyActions");
   const journeyStatusEl = document.getElementById("customer360JourneyStatus");
@@ -7923,6 +8417,11 @@ function renderCustomer360Detail() {
   const departmentHubEl = document.getElementById("customer360DepartmentHub");
   const departmentDashboardEl = document.getElementById("customer360DepartmentDashboard");
   const roleToolsEl = document.getElementById("customer360RoleTools");
+  const archiveTitleEl = document.getElementById("customer360ArchiveTitle");
+  const vehicleRailCardEl = vehicleTitleEl?.closest(".customer360-rail-card") || null;
+  const serviceRailCardEl = serviceLaneEl?.closest(".customer360-rail-card") || null;
+  const archiveRailCardEl = archiveTitleEl?.closest(".customer360-rail-card") || null;
+  const isServiceWorkspace = currentDepartmentLens === "service";
   const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
   const urgentTasks = openTasks.filter((task) => {
     const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
@@ -7966,8 +8465,19 @@ function renderCustomer360Detail() {
   }
 
   const roFocusedLenses = new Set(["service", "technicians", "parts", "accounting"]);
-  if (timelineSectionEl) timelineSectionEl.style.display = "none";
-  if (roBoardEl) roBoardEl.style.display = roFocusedLenses.has(currentDepartmentLens) ? "" : "none";
+  if (timelineSectionEl) timelineSectionEl.style.display = isServiceWorkspace ? "" : "none";
+  if (roBoardEl) roBoardEl.style.display = isServiceWorkspace ? "none" : roFocusedLenses.has(currentDepartmentLens) ? "" : "none";
+  if (summaryCardEl) summaryCardEl.style.display = isServiceWorkspace ? "none" : "";
+  if (journeyCardEl) journeyCardEl.style.display = isServiceWorkspace ? "none" : "";
+  if (opsStripEl) opsStripEl.style.display = isServiceWorkspace ? "none" : "";
+  if (managerQueueEl) managerQueueEl.style.display = isServiceWorkspace ? "none" : "";
+  if (departmentHubEl) departmentHubEl.style.display = isServiceWorkspace ? "none" : "";
+  if (departmentDashboardEl) departmentDashboardEl.style.display = isServiceWorkspace ? "none" : "";
+  if (vehicleRailCardEl) vehicleRailCardEl.style.display = isServiceWorkspace ? "none" : "";
+  if (archiveRailCardEl) archiveRailCardEl.style.display = isServiceWorkspace ? "none" : "";
+  if (serviceRailCardEl) serviceRailCardEl.style.display = "";
+  if (mainTitleEl && isServiceWorkspace) mainTitleEl.textContent = "Service Advisor Workspace";
+  if (mainSubtitleEl && isServiceWorkspace) mainSubtitleEl.textContent = "Simple, advisor-first view for write-up, work order, approvals, and next-step scheduling.";
 
   if (opsStripEl) {
     const serviceTasks = openTasks.filter((task) => {
@@ -8275,6 +8785,8 @@ function renderCustomer360Detail() {
           ${secondaryPhone ? `<span class="customer360-tag">${escapeHtml(formatPhonePretty(secondaryPhone))}</span>` : ""}
         </div>
       `;
+    } else if (isServiceWorkspace) {
+      customerCardEl.innerHTML = buildServiceAdvisorHeaderMarkup(customer, vehicle, appointments, calls);
     } else {
       customerCardEl.innerHTML = buildDepartmentRecordStripMarkup(customer, vehicle, tasks, appointments);
     }
@@ -8402,7 +8914,9 @@ function renderCustomer360Detail() {
   }
 
   if (lensPanelEl) {
-    lensPanelEl.innerHTML = buildLensPanelMarkup(customer, vehicle, openTasks, currentCustomerNotes, appointments, calls);
+    lensPanelEl.innerHTML = isServiceWorkspace
+      ? buildServiceAdvisorConcernMarkup(customer, vehicle, appointments, calls)
+      : buildLensPanelMarkup(customer, vehicle, openTasks, currentCustomerNotes, appointments, calls);
   }
 
   if (tasksBoardEl) {
@@ -8417,7 +8931,7 @@ function renderCustomer360Detail() {
         })
       : openTasks;
     if (currentDepartmentLens === "service") {
-      tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar("service", departmentTasks) + buildServiceAdvisorTasksMarkup(departmentTasks, appointments, vehicle);
+      tasksBoardEl.innerHTML = buildServiceAdvisorWorkOrderMarkup(customer, vehicle, appointments, calls);
     } else if (currentDepartmentLens === "technicians") {
       tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar("technicians", departmentTasks) + buildTechnicianTasksMarkup(departmentTasks, vehicle);
     } else if (currentDepartmentLens === "parts") {
@@ -8461,7 +8975,7 @@ function renderCustomer360Detail() {
 
   if (notesBoardEl) {
     if (currentDepartmentLens === "service") {
-      notesBoardEl.innerHTML = buildServiceAdvisorNotesMarkup(currentCustomerNotes, appointments);
+      notesBoardEl.innerHTML = buildServiceAdvisorNextStepsMarkup(customer, vehicle, appointments, calls);
     } else if (currentDepartmentLens === "technicians") {
       notesBoardEl.innerHTML = buildTechnicianNotesMarkup(currentCustomerNotes, calls);
     } else if (currentDepartmentLens === "parts") {
@@ -8485,7 +8999,9 @@ function renderCustomer360Detail() {
 
   if (serviceLaneEl) {
     const topTask = openTasks[0];
-    serviceLaneEl.innerHTML = buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments, calls);
+    serviceLaneEl.innerHTML = isServiceWorkspace
+      ? buildServiceAdvisorApprovalRailMarkup(customer, vehicle, appointments, calls)
+      : buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments, calls);
   }
 
   if (filesPanelEl) {
