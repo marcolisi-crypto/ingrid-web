@@ -258,7 +258,10 @@
     .customer360-item-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
     .customer360-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#22304b;color:#dfe8f7;font-size:11px;font-weight:700}
     .customer360-main{display:flex;flex-direction:column;gap:12px}
+    .customer360-shell.department-home .customer360-main{gap:12px}
+    .customer360-shell.department-workspace .customer360-main{gap:10px}
     .customer360-main-title{font-size:28px;color:#f5f8fd;font-weight:800;margin:0 0 2px}
+    .customer360-main-subtitle{margin-top:6px;color:#8fa6c9;font-size:13px;line-height:1.45}
     .customer360-department-hub{padding:16px;background:linear-gradient(180deg,#16233a 0%,#111b2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px}
     .customer360-department-hub .customer360-role-tools{padding:0;display:grid;gap:12px}
     .customer360-department-hub .customer360-role-tool-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -359,15 +362,31 @@
     .customer360-manager-pill.info{background:rgba(59,130,246,.16);color:#b7d1ff}
     .customer360-main-grid{display:grid;grid-template-columns:1fr;gap:12px}
     .customer360-customer-card{padding:16px;background:linear-gradient(180deg,#172234 0%,#141d2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#fff}
+    .customer360-shell.department-home .customer360-customer-card{display:block}
+    .customer360-shell.department-workspace .customer360-customer-card{padding:12px 14px;background:linear-gradient(180deg,#142033 0%,#111a2a 100%)}
     .customer360-customer-top{display:flex;gap:14px;align-items:flex-start}
+    .customer360-shell.department-workspace .customer360-customer-top{display:none}
     .customer360-avatar{width:76px;height:76px;border-radius:16px;background:linear-gradient(180deg,#d9b79a,#6f5649);flex:0 0 auto}
     .customer360-profile-name{color:#fff;font-size:28px;font-weight:800;margin:0 0 6px}
     .customer360-profile-lines{color:#c2cfdf;font-size:14px;line-height:1.5}
     .customer360-action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+    .customer360-shell.department-workspace .customer360-action-row{display:none}
     .customer360-action-chip{padding:10px 14px;border-radius:10px;background:linear-gradient(180deg,#244db8 0%,#1a3e98 100%);color:#fff;font-weight:700;border:1px solid rgba(255,255,255,.08);text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
     .customer360-action-chip.secondary{background:#1d2940}
     .customer360-tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .customer360-shell.department-workspace .customer360-tag-row{display:none}
     .customer360-tag{padding:6px 10px;border-radius:999px;background:#212d44;color:#d9e5f7;font-size:12px;font-weight:700}
+    .customer360-record-strip{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr));gap:10px;align-items:stretch}
+    .customer360-record-strip-main{display:grid;gap:6px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#1a2740 0%,#142135 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-record-strip-label{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#87a6d6}
+    .customer360-record-strip-title{font-size:22px;font-weight:800;color:#f5f8fd}
+    .customer360-record-strip-copy{font-size:13px;line-height:1.45;color:#b9c7dc}
+    .customer360-record-strip-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+    .customer360-record-strip-action{display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:10px;background:#20304b;border:1px solid rgba(255,255,255,.06);color:#e8effb;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer}
+    .customer360-record-strip-stat{display:grid;gap:6px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#172234 0%,#121d2d 100%);border:1px solid rgba(255,255,255,.06)}
+    .customer360-record-strip-stat strong{font-size:20px;color:#f7fbff}
+    .customer360-record-strip-stat span{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;font-weight:700}
+    .customer360-record-strip-stat small{font-size:12px;line-height:1.4;color:#9eb2d2}
     .customer360-summary-card{background:radial-gradient(circle at top right, rgba(55,102,214,.24), transparent 34%),linear-gradient(180deg,#16233a 0%,#121d31 100%);color:#e7eef9;border-radius:14px;border:1px solid rgba(255,255,255,.06);padding:18px 20px;box-shadow:0 12px 24px rgba(0,0,0,.18)}
     .customer360-summary-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:#eaf1fb;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.08)}
     .customer360-summary-icon{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#2b5ecb;color:#fff;font-size:14px}
@@ -605,7 +624,7 @@
       .cards4{grid-template-columns:repeat(3,1fr)}
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
-      .customer360-layout,.customer360-main-grid,.customer360-lower-grid{grid-template-columns:1fr}
+      .customer360-layout,.customer360-main-grid,.customer360-lower-grid,.customer360-record-strip{grid-template-columns:1fr}
       .customer360-stack,.customer360-department-hub .customer360-role-tool-grid,.customer360-dashboard-grid{grid-template-columns:1fr}
       .customer360-journey-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
@@ -1023,6 +1042,7 @@
             <div class="customer360-title-row">
               <div>
                 <h2 id="customer360MainTitle" class="customer360-main-title">Customer 360° Dashboard</h2>
+                <div id="customer360MainSubtitle" class="customer360-main-subtitle">Choose a department to work from a simpler dealership dashboard.</div>
                 <div id="customer360OpsStrip" class="customer360-ops-strip"></div>
                 <section id="customer360ManagerQueue" class="customer360-manager-queue"></section>
               </div>

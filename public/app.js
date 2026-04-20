@@ -5055,12 +5055,14 @@ function formatPhoneActionLink(phone, label = "", mode = "call") {
 
 function syncCustomer360LensUi() {
   const config = getDepartmentLensConfig();
+  const shell = document.querySelector(".customer360-shell");
   const contextName = document.getElementById("customer360ContextName");
   const contextCopy = document.getElementById("customer360ContextCopy");
   const toolbarMeta = document.getElementById("customer360ToolbarMeta");
   const summaryTitle = document.getElementById("customer360SummaryTitle");
   const timelineLens = document.getElementById("customer360TimelineLens");
   const mainTitle = document.getElementById("customer360MainTitle");
+  const mainSubtitle = document.getElementById("customer360MainSubtitle");
   const lensPanelTitle = document.getElementById("customer360LensPanelTitle");
   const primaryPanelTitle = document.getElementById("customer360PrimaryPanelTitle");
   const secondaryPanelTitle = document.getElementById("customer360SecondaryPanelTitle");
@@ -5077,12 +5079,21 @@ function syncCustomer360LensUi() {
   if (toolbarMeta) toolbarMeta.textContent = `Pinnacle Auto Group • ${config.name}`;
   if (summaryTitle) summaryTitle.textContent = config.summaryTitle;
   if (timelineLens) timelineLens.textContent = config.timelineLabel;
-  if (mainTitle) mainTitle.textContent = config.dashboardTitle || "Customer 360° Dashboard";
+  if (mainTitle) mainTitle.textContent = currentDepartmentLens === "home" ? "Department Dashboards" : `${config.name} Dashboard`;
+  if (mainSubtitle) {
+    mainSubtitle.textContent = currentDepartmentLens === "home"
+      ? "Open a department workspace. Every dashboard is interactive and tied back to the same DMS record."
+      : `${config.copy} Work from this department dashboard first, then drill into the live record only when needed.`;
+  }
   if (lensPanelTitle) lensPanelTitle.textContent = config.lensPanelTitle || "Work Queue";
   if (primaryPanelTitle) primaryPanelTitle.textContent = config.primaryPanelTitle || "Tasks";
   if (secondaryPanelTitle) secondaryPanelTitle.textContent = config.secondaryPanelTitle || "Notes";
   if (railTitle) railTitle.textContent = config.railTitle || "Service + Loaner";
   if (archiveTitle) archiveTitle.textContent = config.archiveTitle || "VIN Archive";
+  if (shell) {
+    shell.classList.toggle("department-home", currentDepartmentLens === "home");
+    shell.classList.toggle("department-workspace", currentDepartmentLens !== "home");
+  }
 
   actions.forEach((el, index) => {
     if (!el) return;
@@ -5090,6 +5101,80 @@ function syncCustomer360LensUi() {
     const label = config.actions[index] || "Action";
     el.innerHTML = `<span><span class="customer360-action-icon">${iconEl?.textContent || "◔"}</span> ${escapeHtml(label)}</span><span>›</span>`;
   });
+}
+
+function buildDepartmentRecordStripMarkup(customer, vehicle, tasks = [], appointments = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const roAmounts = getRepairOrderAmounts(activeRepairOrder);
+  const openTasks = (tasks || []).filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const nextAppointment = (appointments || [])[0] || null;
+  const primaryPhone = getSelectedCustomerPrimaryPhone();
+  const config = getDepartmentLensConfig();
+  const activeLabel = currentDepartmentLens === "home" ? "Current Record" : `${config.name} Workspace`;
+  const actionOne = currentDepartmentLens === "service"
+    ? (activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()")
+    : currentDepartmentLens === "technicians"
+      ? (activeRepairOrder ? "addTechnicianClockEvent('clock_in')" : "openRepairOrderFrom360()")
+      : currentDepartmentLens === "parts"
+        ? (activeRepairOrder ? "createSpecialPartOrder()" : "openRepairOrderFrom360()")
+        : currentDepartmentLens === "accounting"
+          ? (activeRepairOrder ? "createAccountsReceivableInvoice()" : "setDepartmentLens('accounting')")
+          : primaryPhone
+            ? "openSmsForPhone(getSelectedCustomerPrimaryPhone())"
+            : "setDepartmentLens('home')";
+  const actionOneLabel = currentDepartmentLens === "service"
+    ? (activeRepairOrder ? "Open Live RO" : "Open RO")
+    : currentDepartmentLens === "technicians"
+      ? (activeRepairOrder ? "Clock In" : "Open RO")
+      : currentDepartmentLens === "parts"
+        ? (activeRepairOrder ? "Special Order" : "Open RO")
+        : currentDepartmentLens === "accounting"
+          ? (activeRepairOrder ? "Post AR" : "Open Accounting")
+          : primaryPhone
+            ? "Open Messages"
+            : "Open Home";
+  const actionTwo = nextAppointment
+    ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','${escapeHtml(String(currentDepartmentLens || "home"))}')`
+    : "setCustomer360ComposerMode('appointment')";
+  const actionTwoLabel = nextAppointment ? "Open Visit" : "Create Visit";
+
+  return `
+    <div class="customer360-record-strip">
+      <div class="customer360-record-strip-main">
+        <span class="customer360-record-strip-label">${escapeHtml(activeLabel)}</span>
+        <strong class="customer360-record-strip-title">${escapeHtml(customerDisplayName(customer))}</strong>
+        <div class="customer360-record-strip-copy">
+          ${escapeHtml(vehicleDisplayName(vehicle))} ${vehicle?.vin ? `• ${vehicle.vin}` : ""}
+          ${activeRepairOrder?.repairOrderNumber ? `• ${activeRepairOrder.repairOrderNumber}` : ""}
+        </div>
+        <div class="customer360-record-strip-actions">
+          <button type="button" class="customer360-record-strip-action" onclick="${actionOne}">${escapeHtml(actionOneLabel)}</button>
+          <button type="button" class="customer360-record-strip-action" onclick="${actionTwo}">${escapeHtml(actionTwoLabel)}</button>
+          ${primaryPhone ? `<a href="#" class="customer360-record-strip-action phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="call">Call</a>` : ""}
+        </div>
+      </div>
+      <div class="customer360-record-strip-stat">
+        <span>Open Tasks</span>
+        <strong>${escapeHtml(String(openTasks.length))}</strong>
+        <small>${escapeHtml(openTasks[0]?.title || "No open task pressure on this record.")}</small>
+      </div>
+      <div class="customer360-record-strip-stat">
+        <span>Visit</span>
+        <strong>${escapeHtml(nextAppointment ? "Booked" : "Open")}</strong>
+        <small>${escapeHtml(nextAppointment?.service || "No appointment booked yet.")}</small>
+      </div>
+      <div class="customer360-record-strip-stat">
+        <span>Repair Order</span>
+        <strong>${escapeHtml(activeRepairOrder?.repairOrderNumber || "None")}</strong>
+        <small>${escapeHtml(activeRepairOrder?.status || "Open the first RO from this dashboard.")}</small>
+      </div>
+      <div class="customer360-record-strip-stat">
+        <span>Balance</span>
+        <strong>${escapeHtml(formatMoney(roAmounts.balance || 0))}</strong>
+        <small>${escapeHtml(activeRepairOrder ? "Live RO balance and posting posture." : "No active RO balance yet.")}</small>
+      </div>
+    </div>
+  `;
 }
 
 function updateDepartmentMenuIndicators() {
@@ -5689,6 +5774,7 @@ async function submitCustomer360Composer() {
 function renderCustomer360Detail() {
   const customer = currentCustomers.find((item) => item.id === selectedCustomerId);
   const vehicle = getCustomerPrimaryVehicle(customer);
+  const config = getDepartmentLensConfig();
   const calls = (currentCalls || []).filter((call) => {
     const phones = customer?.phones || [];
     return phones.includes(normalizePhoneNumber(call.from || "")) || phones.includes(normalizePhoneNumber(call.to || ""));
@@ -5736,6 +5822,8 @@ function renderCustomer360Detail() {
   const aiSummary = buildCustomerAiSummary(customer, vehicle, calls, currentCustomerTimeline, tasks, appointments);
 
   const summaryTitleEl = document.getElementById("customer360SummaryTitle");
+  const mainTitleEl = document.getElementById("customer360MainTitle");
+  const mainSubtitleEl = document.getElementById("customer360MainSubtitle");
   const customerCardEl = document.getElementById("customer360CustomerCard");
   const aiSummaryEl = document.getElementById("customer360AiSummary");
   const summaryActionsEl = document.getElementById("customer360SummaryActions");
@@ -5766,6 +5854,8 @@ function renderCustomer360Detail() {
 
   if (!customer) {
     currentCustomer360TimelineCards = [];
+    if (mainTitleEl) mainTitleEl.textContent = currentDepartmentLens === "home" ? "Department Dashboards" : `${config.name} Dashboard`;
+    if (mainSubtitleEl) mainSubtitleEl.textContent = "Choose a customer to activate this department workspace.";
     if (summaryTitleEl) summaryTitleEl.textContent = getDepartmentLensConfig().summaryTitle || "AI Summary";
     if (customerCardEl) customerCardEl.innerHTML = `<div class="customer360-empty">Select a customer to load the 360 dashboard.</div>`;
     if (aiSummaryEl) aiSummaryEl.textContent = "Select a customer to generate a timeline-aware summary.";
@@ -6060,10 +6150,12 @@ function renderCustomer360Detail() {
   }
 
   if (departmentHubEl) {
+    departmentHubEl.className = `customer360-department-hub ${currentDepartmentLens === "home" ? "is-home" : "is-workspace"}`;
     departmentHubEl.innerHTML = buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks, appointments, calls);
   }
 
   if (departmentDashboardEl) {
+    departmentDashboardEl.className = `customer360-department-dashboard ${escapeHtml(String(currentDepartmentLens || "home"))}`;
     departmentDashboardEl.innerHTML = buildDepartmentDashboardMarkup(customer, vehicle, tasks, appointments, calls);
   }
 
@@ -6076,32 +6168,36 @@ function renderCustomer360Detail() {
   }
 
   if (customerCardEl) {
-    const phones = (customer.phones || []).slice(0, 2);
-    const primaryPhone = phones[0] ? normalizePhoneNumber(phones[0]) : "";
-    const secondaryPhone = phones[1] ? normalizePhoneNumber(phones[1]) : "";
-    customerCardEl.innerHTML = `
-      <div class="customer360-customer-top">
-        <div class="customer360-avatar"></div>
-        <div>
-          <div class="customer360-profile-name">${escapeHtml(customerDisplayName(customer))}</div>
-          <div class="customer360-profile-lines">
-            ${primaryPhone ? escapeHtml(formatPhonePretty(primaryPhone)) : "No primary phone"}<br />
-            ${customer.email ? escapeHtml(customer.email) : "No email on file"}
+    if (currentDepartmentLens === "home") {
+      const phones = (customer.phones || []).slice(0, 2);
+      const primaryPhone = phones[0] ? normalizePhoneNumber(phones[0]) : "";
+      const secondaryPhone = phones[1] ? normalizePhoneNumber(phones[1]) : "";
+      customerCardEl.innerHTML = `
+        <div class="customer360-customer-top">
+          <div class="customer360-avatar"></div>
+          <div>
+            <div class="customer360-profile-name">${escapeHtml(customerDisplayName(customer))}</div>
+            <div class="customer360-profile-lines">
+              ${primaryPhone ? escapeHtml(formatPhonePretty(primaryPhone)) : "No primary phone"}<br />
+              ${customer.email ? escapeHtml(customer.email) : "No email on file"}
+            </div>
           </div>
         </div>
-      </div>
-      <div class="customer360-action-row">
-        ${primaryPhone ? `<a href="#" class="customer360-action-chip phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="call">✓ Call</a>` : `<span class="customer360-action-chip">✓ Call</span>`}
-        ${primaryPhone ? `<a href="#" class="customer360-action-chip secondary phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="sms">✉ Text</a>` : `<span class="customer360-action-chip secondary">✉ Text</span>`}
-        <a href="${customer.email ? `mailto:${encodeURIComponent(customer.email)}` : "#"}" class="customer360-action-chip secondary">✉ Email</a>
-      </div>
-      <div class="customer360-tag-row">
-        <span class="customer360-tag">High Value</span>
-        <span class="customer360-tag">Warranty Inquiry</span>
-        <span class="customer360-tag">${escapeHtml(customer.preferredLanguage || "English")}</span>
-        ${secondaryPhone ? `<span class="customer360-tag">${escapeHtml(formatPhonePretty(secondaryPhone))}</span>` : ""}
-      </div>
-    `;
+        <div class="customer360-action-row">
+          ${primaryPhone ? `<a href="#" class="customer360-action-chip phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="call">✓ Call</a>` : `<span class="customer360-action-chip">✓ Call</span>`}
+          ${primaryPhone ? `<a href="#" class="customer360-action-chip secondary phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="sms">✉ Text</a>` : `<span class="customer360-action-chip secondary">✉ Text</span>`}
+          <a href="${customer.email ? `mailto:${encodeURIComponent(customer.email)}` : "#"}" class="customer360-action-chip secondary">✉ Email</a>
+        </div>
+        <div class="customer360-tag-row">
+          <span class="customer360-tag">High Value</span>
+          <span class="customer360-tag">Warranty Inquiry</span>
+          <span class="customer360-tag">${escapeHtml(customer.preferredLanguage || "English")}</span>
+          ${secondaryPhone ? `<span class="customer360-tag">${escapeHtml(formatPhonePretty(secondaryPhone))}</span>` : ""}
+        </div>
+      `;
+    } else {
+      customerCardEl.innerHTML = buildDepartmentRecordStripMarkup(customer, vehicle, tasks, appointments);
+    }
   }
 
   if (aiSummaryEl) {
