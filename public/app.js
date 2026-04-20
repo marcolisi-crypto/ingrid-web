@@ -1079,8 +1079,9 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
         ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addAccountingRepairOrderEntry()">Post Payment / Entry</button>` : ""}
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
         ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Task</button>` : ""}
-        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "setCustomer360ComposerMode('appointment')"}">${activeRepairOrder ? "Close RO" : nextAppointment ? "Open Service Visit" : "Open Service Composer"}</button>
+        <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : nextAppointment ? "openRepairOrderFrom360()" : "setCustomer360ComposerMode('appointment')"}">${activeRepairOrder ? "Close RO" : nextAppointment ? "Open RO from Appointment" : "Open Service Composer"}</button>
       </div>
+      ${activeRepairOrder ? buildRepairOrderDetailSectionsMarkup(activeRepairOrder) : ""}
     </div>
   `;
 }
@@ -2806,9 +2807,89 @@ function buildRepairOrderSnapshotMarkup(customer, vehicle, repairOrder = {}) {
   `;
 }
 
+function buildRepairOrderDetailSectionsMarkup(repairOrder = {}) {
+  const estimateLines = Array.isArray(repairOrder.estimateLines) ? repairOrder.estimateLines : [];
+  const partLines = Array.isArray(repairOrder.partLines) ? repairOrder.partLines : [];
+  const clockEvents = Array.isArray(repairOrder.technicianClockEvents) ? repairOrder.technicianClockEvents : [];
+  const accountingEntries = Array.isArray(repairOrder.accountingEntries) ? repairOrder.accountingEntries : [];
+
+  const renderRows = (items, metaBuilder, amountBuilder) => items.length
+    ? items.map((item) => {
+        const meta = metaBuilder(item);
+        return `
+          <div class="customer360-ro-detail-row">
+            <div>
+              <strong>${escapeHtml(meta.title)}</strong>
+              <span>${escapeHtml(meta.body)}</span>
+            </div>
+            <div class="customer360-ro-detail-amount">${escapeHtml(amountBuilder(item))}</div>
+          </div>
+        `;
+      }).join("")
+    : `<div class="customer360-empty">No entries yet.</div>`;
+
+  return `
+    <div class="customer360-ro-detail-groups">
+      <div class="customer360-ro-detail-group">
+        <h4>Estimate Lines</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            estimateLines.slice(0, 4),
+            (item) => ({
+              title: `${item.opCode || item.lineType || "LABOR"} • ${item.description || "Estimate line"}`,
+              body: `${titleCase(item.department || "service")} • Qty ${item.quantity ?? 1} • ${titleCase(item.status || "open")}`
+            }),
+            (item) => formatMoney(item.lineTotal || ((Number(item.quantity || 0) || 1) * Number(item.unitPrice || 0)))
+          )}
+        </div>
+      </div>
+      <div class="customer360-ro-detail-group">
+        <h4>Parts</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            partLines.slice(0, 4),
+            (item) => ({
+              title: `${item.partNumber || "PART"} • ${item.description || "Part line"}`,
+              body: `${titleCase(item.source || "stock")} • Qty ${item.quantity ?? 1} • ${titleCase(item.status || "requested")}`
+            }),
+            (item) => formatMoney(item.lineTotal || ((Number(item.quantity || 0) || 1) * Number(item.unitPrice || 0)))
+          )}
+        </div>
+      </div>
+      <div class="customer360-ro-detail-group">
+        <h4>Technician Clock</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            clockEvents.slice(0, 4),
+            (item) => ({
+              title: `${item.technicianName || "Technician"} • ${titleCase(String(item.eventType || "").replaceAll("_", " "))}`,
+              body: `${item.laborOpCode || "General op"} • ${formatDisplayDateTime(item.occurredAtUtc || item.createdAtUtc)}`
+            }),
+            () => "Time"
+          )}
+        </div>
+      </div>
+      <div class="customer360-ro-detail-group">
+        <h4>Accounting</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            accountingEntries.slice(0, 4),
+            (item) => ({
+              title: `${titleCase(item.entryType || "entry")} • ${item.description || "Accounting entry"}`,
+              body: `${titleCase(item.status || "open")} • ${formatDisplayDateTime(item.updatedAtUtc || item.createdAtUtc)}`
+            }),
+            (item) => formatMoney(item.amount || 0)
+          )}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function buildRepairOrderBoardMarkup(repairOrders = []) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed") || null;
   if (!repairOrders.length) {
     return `
       <div class="customer360-ro-board-head">
@@ -2821,7 +2902,7 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
         No active RO yet. Open the first repair order to start write-up, estimates, parts, technician time, and accounting against the same record.
       </div>
       <div class="customer360-ro-actions">
-        <button type="button" class="customer360-toolbar-btn" onclick="openRepairOrderFrom360()">Open Repair Order</button>
+        <button type="button" class="customer360-toolbar-btn" onclick="openRepairOrderFrom360()">${nextAppointment ? "Open RO from Appointment" : "Open Repair Order"}</button>
         <button type="button" class="customer360-toolbar-btn secondary" onclick="setCustomer360ComposerMode('appointment')">Schedule Appointment</button>
       </div>
     `;
@@ -2864,6 +2945,7 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
             </div>
             <div class="customer360-ro-card-complaint">${escapeHtml(repairOrder.complaint || "Complaint not written yet.")}</div>
             ${buildRepairOrderSnapshotMarkup(customer, vehicle, repairOrder)}
+            ${buildRepairOrderDetailSectionsMarkup(repairOrder)}
             <div class="customer360-ro-kpis">
               <div class="customer360-ro-kpi">
                 <small>Advisor</small>
