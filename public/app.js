@@ -2171,6 +2171,66 @@ function buildStructuredDetailLines(baseText = "", detailMap = {}) {
   return lines.join("\n");
 }
 
+function getRepairOrderQuoteLineCount(repairOrder = null) {
+  return (Array.isArray(repairOrder?.estimateLines) ? repairOrder.estimateLines.length : 0)
+    + (Array.isArray(repairOrder?.partLines) ? repairOrder.partLines.length : 0);
+}
+
+function buildRepairOrderQuoteSummary(repairOrder = null) {
+  if (!repairOrder) return "No active quote lines.";
+  const estimateLines = Array.isArray(repairOrder.estimateLines) ? repairOrder.estimateLines : [];
+  const partLines = Array.isArray(repairOrder.partLines) ? repairOrder.partLines : [];
+  const estimateSummary = estimateLines.slice(0, 3).map((line) => {
+    const amount = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+    return `${line.opCode || "LAB"} • ${line.description || "Labor line"} • ${formatMoney(amount)}`;
+  });
+  const partSummary = partLines.slice(0, 3).map((line) => {
+    const amount = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+    return `${line.partNumber || "PART"} • ${line.description || "Part line"} • ${formatMoney(amount)}`;
+  });
+  return [
+    ...estimateSummary,
+    ...partSummary,
+    `Total quoted: ${formatMoney(getRepairOrderAmounts(repairOrder).total || 0)}`
+  ].join("\n");
+}
+
+function getRepairOrderApprovalTasks(repairOrder = null) {
+  if (!repairOrder) return [];
+  return (currentTasks || []).filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    const roNumber = String(repairOrder.repairOrderNumber || "").toLowerCase();
+    return roNumber && haystack.includes(roNumber) && (haystack.includes("approval") || haystack.includes("e-signature") || haystack.includes("declined"));
+  }).slice().sort((a, b) => new Date(b.updatedAtUtc || b.createdAtUtc || 0) - new Date(a.updatedAtUtc || a.createdAtUtc || 0));
+}
+
+function getRepairOrderApprovalNotes(repairOrder = null) {
+  if (!repairOrder) return [];
+  return (currentCustomerNotes || []).filter((note) => {
+    const body = String(note.body || "").toLowerCase();
+    const roNumber = String(repairOrder.repairOrderNumber || "").toLowerCase();
+    return roNumber && body.includes(roNumber) && body.includes("[approval]");
+  }).slice().sort((a, b) => new Date(b.updatedAtUtc || b.createdAtUtc || 0) - new Date(a.updatedAtUtc || a.createdAtUtc || 0));
+}
+
+function getRepairOrderApprovalSummary(repairOrder = null) {
+  const notes = getRepairOrderApprovalNotes(repairOrder);
+  const tasks = getRepairOrderApprovalTasks(repairOrder);
+  const latestNote = notes[0] || null;
+  const latestTask = tasks[0] || null;
+  const haystack = `${latestNote?.body || ""} ${latestTask?.title || ""} ${latestTask?.description || ""}`.toLowerCase();
+  if (haystack.includes("declined")) {
+    return { state: "declined", label: "Declined", detail: "Customer declined quoted work.", tone: "danger" };
+  }
+  if (haystack.includes("approved") || haystack.includes("wet signature")) {
+    return { state: "approved", label: "Approved", detail: "Customer approved the quote.", tone: "good" };
+  }
+  if (haystack.includes("e-signature") || haystack.includes("sent") || haystack.includes("sms") || haystack.includes("email")) {
+    return { state: "sent", label: "Sent", detail: "Approval is out with the customer.", tone: "warn" };
+  }
+  return { state: "pending", label: "Pending", detail: "Approval has not been sent yet.", tone: "info" };
+}
+
 function createLineItemRowDefaults(columns = [], row = {}) {
   const next = {};
   (columns || []).forEach((column) => {
@@ -3035,11 +3095,23 @@ function buildServiceAdvisorApprovalRailMarkup(customer, vehicle, appointments =
   const amounts = getRepairOrderAmounts(activeRepairOrder);
   const warrantyClaims = Array.isArray(activeRepairOrder?.warrantyClaims) ? activeRepairOrder.warrantyClaims : [];
   const estimateLines = Array.isArray(activeRepairOrder?.estimateLines) ? activeRepairOrder.estimateLines : [];
-  const approvedCount = estimateLines.filter((item) => String(item.status || "").toLowerCase().includes("approve") || String(item.status || "").toLowerCase().includes("progress")).length;
-  const pendingCount = estimateLines.filter((item) => {
+  const approvalSummary = getRepairOrderApprovalSummary(activeRepairOrder);
+  const totalQuoteLines = getRepairOrderQuoteLineCount(activeRepairOrder);
+  let approvedCount = estimateLines.filter((item) => String(item.status || "").toLowerCase().includes("approve") || String(item.status || "").toLowerCase().includes("progress")).length;
+  let pendingCount = estimateLines.filter((item) => {
     const status = String(item.status || "").toLowerCase();
     return !status.includes("approve") && !status.includes("declin");
   }).length;
+  let declinedCount = estimateLines.filter((item) => String(item.status || "").toLowerCase().includes("declin")).length;
+  if (approvalSummary.state === "approved" && totalQuoteLines) {
+    approvedCount = totalQuoteLines;
+    pendingCount = 0;
+    declinedCount = 0;
+  } else if (approvalSummary.state === "declined" && totalQuoteLines) {
+    approvedCount = 0;
+    pendingCount = 0;
+    declinedCount = totalQuoteLines;
+  }
   const paymentMethod = activeRepairOrder?.paymentMethod || activeRepairOrder?.paymentMethodOnFile || (activeRepairOrder?.accountingEntries?.length ? "Card on file" : "Verify at cashier");
 
   return `
@@ -3056,6 +3128,7 @@ function buildServiceAdvisorApprovalRailMarkup(customer, vehicle, appointments =
         <div class="service-advisor-financial-card">
           <small>Approved vs Pending</small>
           <strong>${escapeHtml(`${approvedCount} / ${pendingCount}`)}</strong>
+          <span>${escapeHtml(approvalSummary.label)}</span>
         </div>
         <div class="service-advisor-financial-card">
           <small>Warranty Coverage</small>
@@ -3068,9 +3141,12 @@ function buildServiceAdvisorApprovalRailMarkup(customer, vehicle, appointments =
       </div>
       <div class="service-advisor-approval-actions">
         <button type="button" class="customer360-toolbar-btn" onclick="sendServiceEstimateSms()">✅ Send estimate via SMS</button>
+        <button type="button" class="customer360-toolbar-btn" onclick="sendServiceEstimateEmail()">📧 Send via Email</button>
         <button type="button" class="customer360-toolbar-btn" onclick="requestServiceEsignature()">✍️ E-signature</button>
+        <button type="button" class="customer360-toolbar-btn" onclick="recordServiceWetSignatureApproval()">🖊️ Wet signature</button>
         <button type="button" class="customer360-toolbar-btn secondary" onclick="markServiceWorkDeclined()">❌ Mark declined</button>
       </div>
+      <div class="customer360-meta" style="margin-top:10px;">${escapeHtml(approvalSummary.detail)}${declinedCount ? ` • ${declinedCount} line${declinedCount === 1 ? "" : "s"} declined` : ""}</div>
       <div class="service-advisor-floating-actions">
         <button type="button" class="service-advisor-float-btn" onclick="checkInServiceCustomer()">Check-in customer</button>
         <button type="button" class="service-advisor-float-btn" onclick="startServiceRepairFlow()">Start repair</button>
@@ -4389,13 +4465,89 @@ function markRepairOrderReady() {
 }
 
 function sendServiceEstimateSms() {
+  const repairOrder = getActiveRepairOrderRecord();
   const phone = getSelectedCustomerPrimaryPhone();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before sending estimate approval.", "error");
+    return;
+  }
   if (!phone) {
     setCustomer360ComposerStatus("No customer phone on file for SMS delivery.", "error");
     return;
   }
-  openSmsForPhone(phone);
-  setCustomer360ComposerStatus("SMS workspace opened for estimate approval.", "success");
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Quote Approval",
+    title: "Send Estimate via SMS",
+    subtitle: "Create a paper trail and open the SMS workspace with quote context.",
+    submitLabel: "Send SMS",
+    summaryItems: [
+      { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${getRepairOrderQuoteLineCount(repairOrder)} quote lines ready` },
+      { label: "Delivery method", value: "SMS", detail: formatPhonePretty(phone) }
+    ],
+    fields: [
+      { name: "message", label: "Approval message", type: "textarea", required: true, full: true, value: `Please review and approve the estimate for ${repairOrder.repairOrderNumber || "your repair order"}.\n\n${buildRepairOrderQuoteSummary(repairOrder)}` }
+    ],
+    onSubmit: async (values) => {
+      const noteBody = `[APPROVAL] Estimate sent via SMS for ${repairOrder.repairOrderNumber || "active repair order"}.\n${String(values.message || "").trim()}`;
+      await createQuickNoteRecord({
+        noteType: "internal",
+        body: noteBody
+      });
+      await createQuickTaskRecord({
+        assignedDepartment: "service",
+        title: `[SERVICE] Approval sent • ${repairOrder.repairOrderNumber || "RO"}`,
+        description: noteBody,
+        dueAt: toLocalDateInputValue(new Date())
+      });
+      commsState.smsDraft = String(values.message || "").trim();
+      openSmsForPhone(phone);
+      setCustomer360ComposerStatus("SMS workspace opened with estimate approval context.", "success");
+    }
+  });
+}
+
+function sendServiceEstimateEmail() {
+  const repairOrder = getActiveRepairOrderRecord();
+  const customer = getSelectedCustomerRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before emailing estimate approval.", "error");
+    return;
+  }
+  if (!customer?.email) {
+    setCustomer360ComposerStatus("No customer email on file for estimate delivery.", "error");
+    return;
+  }
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Quote Approval",
+    title: "Send Estimate via Email",
+    subtitle: "Create the approval paper trail and launch an email draft for the customer.",
+    submitLabel: "Draft Email",
+    summaryItems: [
+      { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${getRepairOrderQuoteLineCount(repairOrder)} quote lines ready` },
+      { label: "Delivery method", value: "Email", detail: customer.email }
+    ],
+    fields: [
+      { name: "subject", label: "Email subject", type: "text", required: true, value: `Estimate approval for ${repairOrder.repairOrderNumber || "your repair order"}` },
+      { name: "message", label: "Email body", type: "textarea", required: true, full: true, value: `Please review the attached estimate for ${repairOrder.repairOrderNumber || "your repair order"}.\n\n${buildRepairOrderQuoteSummary(repairOrder)}` }
+    ],
+    onSubmit: async (values) => {
+      const noteBody = `[APPROVAL] Estimate sent via email for ${repairOrder.repairOrderNumber || "active repair order"}.\nSubject: ${values.subject}\n${String(values.message || "").trim()}`;
+      await createQuickNoteRecord({
+        noteType: "internal",
+        body: noteBody
+      });
+      await createQuickTaskRecord({
+        assignedDepartment: "service",
+        title: `[SERVICE] Approval sent • ${repairOrder.repairOrderNumber || "RO"}`,
+        description: noteBody,
+        dueAt: toLocalDateInputValue(new Date())
+      });
+      window.location.href = `mailto:${encodeURIComponent(customer.email)}?subject=${encodeURIComponent(values.subject || "")}&body=${encodeURIComponent(values.message || "")}`;
+      setCustomer360ComposerStatus("Email draft opened with estimate approval context.", "success");
+    }
+  });
 }
 
 async function requestServiceEsignature() {
@@ -4404,17 +4556,72 @@ async function requestServiceEsignature() {
     setCustomer360ComposerStatus("Open an RO before requesting e-signature.", "error");
     return;
   }
-  try {
-    await createQuickTaskRecord({
-      assignedDepartment: "service",
-      title: `E-signature request for ${repairOrder.repairOrderNumber || "RO"}`,
-      description: `[SERVICE] Customer approval required for estimate on ${repairOrder.repairOrderNumber || "active repair order"}.`
-    });
-    setCustomer360ComposerStatus("E-signature request queued.", "success");
-  } catch (err) {
-    console.error("requestServiceEsignature error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to queue e-signature request.", "error");
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Quote Approval",
+    title: "Request E-Signature",
+    subtitle: "Queue a tracked approval request for digital signature.",
+    submitLabel: "Queue E-Signature",
+    summaryItems: [
+      { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${getRepairOrderQuoteLineCount(repairOrder)} quote lines ready` },
+      { label: "Method", value: "E-signature", detail: "Digital approval request" }
+    ],
+    fields: [
+      { name: "recipient", label: "Recipient", type: "text", required: true, value: getSelectedCustomerRecord()?.email || getSelectedCustomerPrimaryPhone() || "" },
+      { name: "message", label: "Approval request", type: "textarea", required: true, full: true, value: `Customer approval required for estimate on ${repairOrder.repairOrderNumber || "active repair order"}.\n\n${buildRepairOrderQuoteSummary(repairOrder)}` }
+    ],
+    onSubmit: async (values) => {
+      const noteBody = `[APPROVAL] E-signature requested for ${repairOrder.repairOrderNumber || "active repair order"}.\nRecipient: ${values.recipient}\n${String(values.message || "").trim()}`;
+      await createQuickTaskRecord({
+        assignedDepartment: "service",
+        title: `E-signature request for ${repairOrder.repairOrderNumber || "RO"}`,
+        description: noteBody
+      });
+      await createQuickNoteRecord({
+        noteType: "internal",
+        body: noteBody
+      });
+      setCustomer360ComposerStatus("E-signature request queued.", "success");
+    }
+  });
+}
+
+function recordServiceWetSignatureApproval() {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before recording wet signature approval.", "error");
+    return;
   }
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Quote Approval",
+    title: "Record Wet Signature Approval",
+    subtitle: "Capture the in-person approval so the RO has a visible paper trail.",
+    submitLabel: "Record Approval",
+    summaryItems: [
+      { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${getRepairOrderQuoteLineCount(repairOrder)} quote lines ready` },
+      { label: "Method", value: "Wet signature", detail: "In-person signed approval" }
+    ],
+    fields: [
+      { name: "signerName", label: "Signer name", type: "text", required: true, value: customerDisplayName(getSelectedCustomerRecord()) },
+      { name: "location", label: "Signed at", type: "text", value: "Service drive" },
+      { name: "notes", label: "Approval notes", type: "textarea", full: true, value: buildRepairOrderQuoteSummary(repairOrder) }
+    ],
+    onSubmit: async (values) => {
+      const noteBody = `[APPROVAL] Wet signature approval recorded for ${repairOrder.repairOrderNumber || "active repair order"}.\nSigner: ${values.signerName}\nLocation: ${values.location}\n${String(values.notes || "").trim()}`;
+      await createQuickNoteRecord({
+        noteType: "internal",
+        body: noteBody
+      });
+      await createQuickTaskRecord({
+        assignedDepartment: "service",
+        title: `[SERVICE] Approval recorded • ${repairOrder.repairOrderNumber || "RO"}`,
+        description: noteBody,
+        dueAt: toLocalDateInputValue(new Date())
+      });
+      setCustomer360ComposerStatus("Wet signature approval recorded.", "success");
+    }
+  });
 }
 
 async function markServiceWorkDeclined() {
@@ -4423,16 +4630,35 @@ async function markServiceWorkDeclined() {
     setCustomer360ComposerStatus("Open an RO before marking work declined.", "error");
     return;
   }
-  try {
-    await createQuickNoteRecord({
-      noteType: "internal",
-      body: `[SERVICE] Customer declined current estimate on ${repairOrder.repairOrderNumber || "active repair order"}.`
-    });
-    setCustomer360ComposerStatus("Declined work noted on the record.", "success");
-  } catch (err) {
-    console.error("markServiceWorkDeclined error:", err);
-    setCustomer360ComposerStatus(err.message || "Unable to record declined work.", "error");
-  }
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Quote Approval",
+    title: "Mark Work Declined",
+    subtitle: "Record the decline reason so it feeds the advisor paper trail and declined-work queue.",
+    submitLabel: "Mark Declined",
+    summaryItems: [
+      { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${getRepairOrderQuoteLineCount(repairOrder)} quoted lines` },
+      { label: "Method", value: "Declined", detail: "This will create a paper trail and queue item." }
+    ],
+    fields: [
+      { name: "declineMethod", label: "Declined via", type: "select", value: "sms", options: ["sms", "email", "phone", "in_person"] },
+      { name: "reason", label: "Reason", type: "textarea", required: true, full: true, value: "Customer declined current estimate because:" }
+    ],
+    onSubmit: async (values) => {
+      const declineCopy = `[APPROVAL] Customer declined current estimate on ${repairOrder.repairOrderNumber || "active repair order"}.\nMethod: ${titleCase(String(values.declineMethod || "").replaceAll("_", " "))}\n${String(values.reason || "").trim()}\n\n${buildRepairOrderQuoteSummary(repairOrder)}`;
+      await createQuickNoteRecord({
+        noteType: "internal",
+        body: declineCopy
+      });
+      await createQuickTaskRecord({
+        assignedDepartment: "service",
+        title: `[SERVICE] Declined work • ${repairOrder.repairOrderNumber || "RO"}`,
+        description: declineCopy,
+        dueAt: toLocalDateInputValue(new Date())
+      });
+      setCustomer360ComposerStatus("Declined work recorded and queued.", "success");
+    }
+  });
 }
 
 async function captureTechnicianMedia(contextType = "repair_order", preferredMediaType = "photo", payload = null) {
@@ -6086,23 +6312,50 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       });
     });
   const serviceApprovalRows = allRepairOrders
-    .filter((repairOrder) => (repairOrder.estimateLines || []).length && getRepairOrderAmounts(repairOrder).balance > 0)
+    .filter((repairOrder) => {
+      const approval = getRepairOrderApprovalSummary(repairOrder);
+      return (repairOrder.estimateLines || []).length && getRepairOrderAmounts(repairOrder).balance > 0 && approval.state !== "approved" && approval.state !== "declined";
+    })
     .slice(0, 8)
     .map((repairOrder) => {
       const rowCustomer = getCustomerById(repairOrder.customerId);
       const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const approval = getRepairOrderApprovalSummary(repairOrder);
       return buildDepartmentQueueRow({
         customer: rowCustomer,
         vehicle: rowVehicle,
         title: `${repairOrder.repairOrderNumber || "RO"} • Approval needed`,
         meta: `${(repairOrder.estimateLines || []).length} estimate lines • ${formatMoney(getRepairOrderAmounts(repairOrder).balance)} pending`,
         owner: getRepairOrderAdvisorName(repairOrder),
-        status: "Waiting approval",
+        status: approval.state === "sent" ? "Approval sent" : "Waiting approval",
         dueAt: getRepairOrderPromisedAt(repairOrder) || "",
         updatedAt: repairOrder.updatedAtUtc || repairOrder.createdAtUtc || "",
-        badges: [getRepairOrderAdvisorName(repairOrder), getJourneyArtifactSla(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc).label],
+        badges: [getRepairOrderAdvisorName(repairOrder), approval.label],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
         cta: "Open Approval"
+      });
+    });
+  const serviceDeclinedRows = allOpenTasks
+    .filter((task) => {
+      const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+      return getTaskAssignedDepartment(task) === "service" && haystack.includes("declined work");
+    })
+    .slice(0, 8)
+    .map((task) => {
+      const rowCustomer = getCustomerById(task.customerId);
+      const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: task.title || "Declined work",
+        meta: task.description || "Customer declined quoted work",
+        owner: task.assignedUser || "Service queue",
+        status: "Declined",
+        dueAt: task.dueAtUtc || "",
+        updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
+        badges: ["Declined", getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','service','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+        cta: "Open Declined"
       });
     });
   const transportQueueRows = allOpenTasks
@@ -6419,6 +6672,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         { label: "Write-Ups", value: `${allServiceReceptions.length}`, meta: serviceReceptionRows[0] ? "Advisor write-ups are waiting to convert into live ROs." : "No advisor write-ups waiting", tone: allServiceReceptions.length ? "warn" : "good", action: "setDepartmentLens('service')", cta: allServiceReceptions.length ? "View Write-Ups" : "Create Write-Up" },
         { label: "Open ROs", value: `${allRepairOrders.length}`, meta: openRoRows[0] ? "Every open repair order is available below." : "No open repair order yet", tone: allRepairOrders.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "View Open ROs" },
         { label: "Appointments", value: `${allAppointments.length}`, meta: upcomingServiceRows[0] ? "Storewide advisor appointment queue." : "No service visit booked", tone: allAppointments.length ? "good" : "warn", action: "setDepartmentLens('service')", cta: "View Appointments" },
+        { label: "Declined Work", value: `${serviceDeclinedRows.length}`, meta: serviceDeclinedRows[0] ? "Declined work is waiting for follow-up and save attempts." : "No declined work currently in queue", tone: serviceDeclinedRows.length ? "warn" : "good", action: "setDepartmentLens('service')", cta: serviceDeclinedRows.length ? "View Declined" : "Open Service" },
         { label: "Open Balance", value: formatMoney(totalOpenRoBalance || 0), meta: `${totalArInvoices} AR invoice(s) and ${totalApBills} AP bill(s) linked`, tone: totalOpenRoBalance > 0 ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting" }
       ]
     },
@@ -6499,6 +6753,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       buildDepartmentQueueSection("Tomorrow's Appointments", tomorrowServiceRows, "No appointments booked for tomorrow."),
       buildDepartmentQueueSection("All Open Repair Orders", openRoRows, "No open repair orders in fixed ops."),
       buildDepartmentQueueSection("Waiting Approval", serviceApprovalRows, "No repair orders are waiting on estimate approval."),
+      buildDepartmentQueueSection("Declined Work", serviceDeclinedRows, "No declined-work follow-up is active."),
       buildDepartmentQueueSection("Transport / Loaner Queue", transportQueueRows, "No transport or loaner work is active.")
     ],
     technicians: [
