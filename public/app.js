@@ -2091,6 +2091,7 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
       detail: activeRepairOrder
         ? (latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} • ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Technician has not clocked onto the RO yet")
         : "Technician assignment starts after the repair order is opened",
+      extraHtml: activeRepairOrder ? buildLaborDispatchControls(activeRepairOrder) : "",
       actionLabel: activeRepairOrder ? (technicianClockedIn ? "Clock Out" : "Clock In") : "Open RO",
       action: activeRepairOrder ? (technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()",
       task: serviceTasks[0] || null
@@ -2120,6 +2121,7 @@ function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
     {
       label: "Customer Concern",
       detail: activeRepairOrder?.complaint || latestNote?.body?.slice(0, 90) || "No advisor concern note recorded yet",
+      extraHtml: nextAppointment ? buildAppointmentAdvisorControls(nextAppointment) : "",
       actionLabel: latestNote ? "Open" : "Add",
       action: latestNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestNote)}','service')` : "startAdvisorJourneyNote()"
     },
@@ -2138,6 +2140,7 @@ function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
       detail: activeRepairOrder
         ? `${formatCountLabel((activeRepairOrder.accountingEntries || []).length, "payment or auth entry")} tied to the RO`
         : "No approval / payment trail until the RO is active",
+      extraHtml: activeRepairOrder ? buildAccountingHandoffControls(activeRepairOrder) : "",
       actionLabel: activeRepairOrder ? "Split" : "Prep",
       action: activeRepairOrder ? "addRepairOrderPaySplit('customer')" : "openRepairOrderFrom360()"
     }
@@ -2145,9 +2148,10 @@ function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
 
   return rows.map((row) => `
     <div class="customer360-panel-item">
-      <div>
+      <div class="customer360-panel-item-body">
         <strong>${escapeHtml(row.label)}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail)}</div>
+        ${row.extraHtml || ""}
       </div>
       <button class="customer360-panel-action" onclick="${row.action}">${escapeHtml(row.actionLabel)}</button>
     </div>
@@ -5447,11 +5451,149 @@ function buildTaskWorkflowRow(row = {}, fallbackDepartment = currentDepartmentLe
       <div class="customer360-panel-item-body">
         <strong>${escapeHtml(row.title || row.label || "Task")}</strong>
         <div class="customer360-meta">${escapeHtml(row.detail || "")}</div>
+        ${row.extraHtml || ""}
         ${row.task ? buildTaskAssignmentControls(row.task, fallbackDepartment) : ""}
       </div>
       <button class="customer360-panel-action" onclick="${row.action || ""}">${escapeHtml(row.actionLabel || "Open")}</button>
     </div>
   `;
+}
+
+function getActiveServiceAdvisorRoster() {
+  return (configCache?.advisors || DEFAULT_CONFIG.advisors || [])
+    .filter((advisor) => advisor.active !== false)
+    .map((advisor) => advisor.name)
+    .filter(Boolean);
+}
+
+function buildAppointmentAdvisorControls(appointment = {}) {
+  const appointmentId = escapeHtml(String(appointment.id || appointment.appointmentId || ""));
+  if (!appointmentId) return "";
+  const selectId = `apptAdvisor-${appointmentId}`;
+  const currentAdvisor = String(appointment.advisor || "");
+  const options = getActiveServiceAdvisorRoster()
+    .map((name) => `<option value="${escapeHtml(name)}" ${currentAdvisor === name ? "selected" : ""}>${escapeHtml(name)}</option>`)
+    .join("");
+  return `
+    <div class="customer360-task-routing">
+      <span class="customer360-task-routing-tag">Advisor</span>
+      <select id="${selectId}">${options}</select>
+      <button type="button" onclick="assignAppointmentAdvisor('${appointmentId}','${selectId}')">Assign</button>
+    </div>
+  `;
+}
+
+async function assignAppointmentAdvisor(appointmentId, selectId) {
+  try {
+    const select = document.getElementById(selectId);
+    const advisor = select?.value || "";
+    const res = await fetch("/.netlify/functions/appointments-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        appointmentId,
+        advisor,
+        notes: advisor ? `Advisor assigned to ${advisor}.` : ""
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to assign advisor");
+    await loadAppointments();
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+  } catch (err) {
+    console.error("assignAppointmentAdvisor error:", err);
+  }
+}
+
+function buildLaborDispatchControls(repairOrder = {}) {
+  const repairOrderId = escapeHtml(String(repairOrder.id || repairOrder.repairOrderId || ""));
+  if (!repairOrderId) return "";
+  const selectId = `laborTech-${repairOrderId}`;
+  const roster = getDepartmentRoster("technicians");
+  return `
+    <div class="customer360-task-routing">
+      <span class="customer360-task-routing-tag">Dispatch</span>
+      <select id="${selectId}">
+        ${roster.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
+      </select>
+      <button type="button" onclick="dispatchRepairOrderLabor('${repairOrderId}','${selectId}')">Dispatch</button>
+    </div>
+  `;
+}
+
+async function dispatchRepairOrderLabor(repairOrderId, selectId) {
+  try {
+    const select = document.getElementById(selectId);
+    const technicianName = select?.value || "";
+    const activeRepairOrder = getActiveRepairOrderRecord();
+    const res = await fetch("/.netlify/functions/service-repair-order-labor-op", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId,
+        opCode: "DISPATCH",
+        description: activeRepairOrder?.complaint || "Advisor-dispatched labor operation",
+        technicianName,
+        dispatchStatus: "dispatched",
+        payType: "customer",
+        soldHours: 1
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to dispatch labor op");
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+  } catch (err) {
+    console.error("dispatchRepairOrderLabor error:", err);
+  }
+}
+
+function buildAccountingHandoffControls(repairOrder = {}) {
+  const repairOrderId = escapeHtml(String(repairOrder.id || repairOrder.repairOrderId || ""));
+  if (!repairOrderId) return "";
+  const selectId = `accountingOwner-${repairOrderId}`;
+  const roster = getDepartmentRoster("accounting");
+  return `
+    <div class="customer360-task-routing">
+      <span class="customer360-task-routing-tag">Accounting</span>
+      <select id="${selectId}">
+        ${roster.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
+      </select>
+      <button type="button" onclick="sendRepairOrderToAccounting('${repairOrderId}','${selectId}')">Send Review</button>
+    </div>
+  `;
+}
+
+async function sendRepairOrderToAccounting(repairOrderId, selectId) {
+  try {
+    const owner = document.getElementById(selectId)?.value || "";
+    const customer = getSelectedCustomerRecord();
+    const vehicle = getSelectedVehicleRecord();
+    const activeRepairOrder = getActiveRepairOrderRecord();
+    if (!customer) return;
+    const res = await fetch("/.netlify/functions/tasks-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: customer.id,
+        vehicleId: vehicle?.id || null,
+        assignedDepartment: "accounting",
+        assignedUser: owner,
+        title: `[ACCOUNTING] ${activeRepairOrder?.repairOrderNumber || "RO"} balance review`,
+        description: `[ACCOUNTING] Review ${activeRepairOrder?.repairOrderNumber || "repair order"} for posting, balance due, and closeout.`,
+        priority: "high",
+        dueAtUtc: new Date().toISOString()
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to hand off to accounting");
+    await loadTasks();
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+  } catch (err) {
+    console.error("sendRepairOrderToAccounting error:", err);
+  }
 }
 
 function syncInlineTaskAssignmentUsers(departmentSelectId, userSelectId, selectedUser = "") {
