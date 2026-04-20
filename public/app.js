@@ -4723,6 +4723,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
   const roMedia = activeRepairOrder ? getRepairOrderMediaAssets(activeRepairOrder) : [];
   const allOpenTasks = (currentTasks || []).filter((task) => String(task.status || "").toLowerCase() !== "completed");
   const allAppointments = (currentAppointments || []).filter((item) => String(item.status || "").toLowerCase() !== "completed");
+  const allServiceReceptions = (currentServiceReceptions || []).filter((item) => !["closed", "completed", "converted_to_ro"].includes(String(item.status || "").toLowerCase()));
   const allRepairOrders = (currentRepairOrders || []).filter((item) => !["closed", "completed"].includes(String(item.status || "").toLowerCase()));
   const allServiceTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "service");
   const allBdcTasks = allOpenTasks.filter((task) => getTaskAssignedDepartment(task) === "bdc");
@@ -4787,6 +4788,27 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         badges: ["Tomorrow", appointment.transport || "Standard"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(appointment.customerId || ""))}','service','appointments','${escapeHtml(String(appointment.id || appointment.appointmentId || ""))}')`,
         cta: "Open Tomorrow"
+      });
+    });
+  const serviceReceptionRows = allServiceReceptions
+    .slice()
+    .sort((a, b) => new Date(b.checkedInAtUtc || b.updatedAtUtc || b.createdAtUtc || 0) - new Date(a.checkedInAtUtc || a.updatedAtUtc || a.createdAtUtc || 0))
+    .slice(0, 8)
+    .map((serviceReception) => {
+      const rowCustomer = getCustomerById(serviceReception.customerId);
+      const rowVehicle = getVehicleById(serviceReception.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${serviceReception.receptionNumber || "Write-Up"} • ${serviceReception.concern || "Advisor write-up"}`,
+        meta: `${serviceReception.advisor || "Advisor queue"} • Checked in ${formatDisplayDateTime(serviceReception.checkedInAtUtc || serviceReception.updatedAtUtc || serviceReception.createdAtUtc)}`,
+        owner: serviceReception.advisor || "Advisor queue",
+        status: titleCase(serviceReception.status || "open"),
+        dueAt: serviceReception.promiseAtUtc || "",
+        updatedAt: serviceReception.updatedAtUtc || serviceReception.createdAtUtc || "",
+        badges: [titleCase(serviceReception.status || "open"), serviceReception.transportOption || "Standard"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(serviceReception.customerId || ""))}','service')`,
+        cta: "Open Write-Up"
       });
     });
   const openRoRows = allRepairOrders
@@ -5096,6 +5118,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       title: "Service Dashboard",
       copy: "Advisor tools and live fixed-ops state across the store.",
       cards: [
+        { label: "Write-Ups", value: `${allServiceReceptions.length}`, meta: serviceReceptionRows[0] ? "Advisor write-ups are waiting to convert into live ROs." : "No advisor write-ups waiting", tone: allServiceReceptions.length ? "warn" : "good", action: "setDepartmentLens('service')", cta: allServiceReceptions.length ? "View Write-Ups" : "Create Write-Up" },
         { label: "Open ROs", value: `${allRepairOrders.length}`, meta: openRoRows[0] ? "Every open repair order is available below." : "No open repair order yet", tone: allRepairOrders.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "View Open ROs" },
         { label: "Appointments", value: `${allAppointments.length}`, meta: upcomingServiceRows[0] ? "Storewide advisor appointment queue." : "No service visit booked", tone: allAppointments.length ? "good" : "warn", action: "setDepartmentLens('service')", cta: "View Appointments" },
         { label: "Tomorrow", value: `${tomorrowAppointments.length}`, meta: tomorrowServiceRows[0] ? "Tomorrow's drive opens are below." : "No appointments booked for tomorrow", tone: tomorrowAppointments.length ? "info" : "good", action: "setDepartmentLens('service')", cta: "View Tomorrow" },
@@ -5170,6 +5193,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No open repair orders across the store.")
     ],
     service: [
+      buildDepartmentQueueSection("Write-Ups Waiting", serviceReceptionRows, "No service write-ups are waiting to open into an RO."),
       buildDepartmentQueueSection("All Upcoming Appointments", upcomingServiceRows, "No service appointments scheduled."),
       buildDepartmentQueueSection("Tomorrow's Appointments", tomorrowServiceRows, "No appointments booked for tomorrow."),
       buildDepartmentQueueSection("All Open Repair Orders", openRoRows, "No open repair orders in fixed ops."),
@@ -5378,7 +5402,7 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
   `;
 }
 
-async function loadRepairOrders(customerId = selectedCustomerId, vehicleId = getSelectedVehicleRecord()?.id || "") {
+async function loadRepairOrders(customerId = "", vehicleId = "") {
   try {
     const params = new URLSearchParams();
     if (customerId) params.set("customerId", customerId);
@@ -5393,7 +5417,7 @@ async function loadRepairOrders(customerId = selectedCustomerId, vehicleId = get
   }
 }
 
-async function loadServiceReceptions(customerId = selectedCustomerId, vehicleId = getSelectedVehicleRecord()?.id || "") {
+async function loadServiceReceptions(customerId = "", vehicleId = "") {
   try {
     const params = new URLSearchParams();
     if (customerId) params.set("customerId", customerId);
@@ -6509,8 +6533,8 @@ async function refreshSelectedCustomer360() {
 
   currentCustomerTimeline = Array.isArray(timelineData.events) ? timelineData.events : [];
   currentCustomerNotes = Array.isArray(notesData.notes) ? notesData.notes : [];
-  await loadServiceReceptions(customer.id, vehicle?.id || "");
-  await loadRepairOrders(customer.id, vehicle?.id || "");
+  await loadServiceReceptions();
+  await loadRepairOrders();
   const activeRepairOrderId = getActiveRepairOrderRecord()?.id || "";
   await Promise.all([
     loadMediaAssets(customer.id, vehicle?.id || "", activeRepairOrderId),
