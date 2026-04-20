@@ -2475,6 +2475,13 @@ function setCustomer360ManagerQueueSort(mode = "urgent") {
   renderCustomer360Detail();
 }
 
+function getManagerQueueSortCopy(mode = "urgent", count = 0) {
+  const laneLabel = `${count} lane${count === 1 ? "" : "s"}`;
+  if (mode === "recent") return `Showing ${laneLabel} by recent movement.`;
+  if (mode === "stale") return `Showing ${laneLabel} by oldest touch first.`;
+  return `Showing ${laneLabel} by urgency.`;
+}
+
 function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "", focused = false, priorityReason = "", freshness = "" } = {}) {
   const ownerAge = [ownerLabel || "", freshness || ""].filter(Boolean).join(" • ");
   return `
@@ -4537,6 +4544,7 @@ function renderCustomer360Detail() {
     const managerSubtitle = focusedManagerLens
       ? `Focused ${titleCase(focusedManagerLens)} view with the live queue, owner posture, and next actionable item.`
       : `${queueHeadline}. ${queueCopy}`;
+    const managerSortCopy = getManagerQueueSortCopy(currentManagerQueueSort, visibleManagerCards.length);
 
     managerQueueEl.innerHTML = `
       <div class="customer360-manager-head">
@@ -4551,10 +4559,13 @@ function renderCustomer360Detail() {
             <span class="customer360-manager-pill good">${escapeHtml(`${appointments.length} visits`)}</span>
           </div>
           ${focusedManagerLens ? "" : `
-            <div class="customer360-manager-sort">
-              <button type="button" class="${currentManagerQueueSort === "urgent" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('urgent')">Most urgent</button>
-              <button type="button" class="${currentManagerQueueSort === "recent" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('recent')">Recently moved</button>
-              <button type="button" class="${currentManagerQueueSort === "stale" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('stale')">Least touched</button>
+            <div>
+              <div class="customer360-manager-sort">
+                <button type="button" class="${currentManagerQueueSort === "urgent" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('urgent')">Most urgent</button>
+                <button type="button" class="${currentManagerQueueSort === "recent" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('recent')">Recently moved</button>
+                <button type="button" class="${currentManagerQueueSort === "stale" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('stale')">Least touched</button>
+              </div>
+              <span class="customer360-manager-sort-copy">${escapeHtml(managerSortCopy)}</span>
             </div>
           `}
         </div>
