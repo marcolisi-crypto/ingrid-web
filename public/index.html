@@ -202,7 +202,16 @@
     .scheduler-available{background:#f8fafc;color:#6b7280}
     .scheduler-booked{background:#dbeafe}
     .customer360-shell{background:#111827;border-radius:26px;border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 70px rgba(0,0,0,.28);overflow:hidden}
-    .customer360-topbar{display:grid;grid-template-columns:260px minmax(340px,1fr) auto auto auto;align-items:center;gap:14px;padding:14px 18px;background:radial-gradient(circle at top left, rgba(61,120,255,.28), transparent 30%),linear-gradient(180deg,#15213d 0%,#10182a 100%);border-bottom:1px solid rgba(82,135,255,.32)}
+    .customer360-topbar{display:grid;grid-template-columns:260px minmax(280px,1fr) auto;align-items:center;gap:14px;padding:14px 18px;background:radial-gradient(circle at top left, rgba(61,120,255,.28), transparent 30%),linear-gradient(180deg,#15213d 0%,#10182a 100%);border-bottom:1px solid rgba(82,135,255,.32)}
+    .customer360-topbar > .customer360-toolbar-btn,
+    .customer360-topbar > .customer360-toolbar-icons,
+    .customer360-title-tools,
+    .customer360-quick-actions,
+    #customer360RoleTools,
+    #customer360SummaryCard,
+    #customer360JourneyCard,
+    #customer360ManagerQueue,
+    .customer360-rail{display:none}
     .customer360-brand-lockup{display:flex;align-items:center;gap:14px}
     .customer360-brand-logo{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 10px 26px rgba(55,122,255,.32))}
     .customer360-brand-stack{display:flex;flex-direction:column;line-height:1}
@@ -218,7 +227,7 @@
     .customer360-toolbar-profile{display:flex;align-items:center;gap:10px;color:#fff}
     .customer360-toolbar-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(180deg,#f2d1b0,#76584b);border:2px solid rgba(255,255,255,.18)}
     .customer360-toolbar-profile small{display:block;color:#9fb6de;font-size:11px}
-    .customer360-layout{display:grid;grid-template-columns:260px minmax(0,1fr) 300px;gap:16px;padding:16px;background:radial-gradient(circle at top center, rgba(55,102,214,.08), transparent 28%),linear-gradient(180deg,#111827 0%,#151d2a 100%)}
+    .customer360-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;padding:16px;background:radial-gradient(circle at top center, rgba(55,102,214,.08), transparent 28%),linear-gradient(180deg,#111827 0%,#151d2a 100%)}
     .customer360-sidebar,.customer360-main,.customer360-rail{min-width:0}
     .customer360-sidebar{display:flex;flex-direction:column;gap:12px}
     .customer360-sidebar-block,.customer360-panel,.customer360-rail-card{background:linear-gradient(180deg,#161f30 0%,#121a29 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
@@ -249,7 +258,10 @@
     .customer360-item-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
     .customer360-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#22304b;color:#dfe8f7;font-size:11px;font-weight:700}
     .customer360-main{display:flex;flex-direction:column;gap:12px}
-    .customer360-main-title{font-size:34px;color:#f5f8fd;font-weight:800;margin:0 0 2px}
+    .customer360-main-title{font-size:28px;color:#f5f8fd;font-weight:800;margin:0 0 2px}
+    .customer360-department-hub{padding:16px;background:linear-gradient(180deg,#16233a 0%,#111b2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px}
+    .customer360-department-hub .customer360-role-tools{padding:0;display:grid;gap:12px}
+    .customer360-department-hub .customer360-role-tool-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .customer360-title-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
     .customer360-title-tools{display:flex;gap:8px}
     .customer360-mini-btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#18243b;color:#dfe7f7;font-weight:700;font-size:12px}
@@ -330,7 +342,7 @@
     .customer360-manager-pill.warn{background:rgba(241,187,81,.14);color:#ffe0a1}
     .customer360-manager-pill.danger{background:rgba(228,99,120,.14);color:#ffc0ca}
     .customer360-manager-pill.info{background:rgba(59,130,246,.16);color:#b7d1ff}
-    .customer360-main-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px}
+    .customer360-main-grid{display:grid;grid-template-columns:1fr;gap:12px}
     .customer360-customer-card{padding:16px;background:linear-gradient(180deg,#172234 0%,#141d2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px;color:#fff}
     .customer360-customer-top{display:flex;gap:14px;align-items:flex-start}
     .customer360-avatar{width:76px;height:76px;border-radius:16px;background:linear-gradient(180deg,#d9b79a,#6f5649);flex:0 0 auto}
@@ -402,8 +414,8 @@
     .customer360-journey-btn.active{background:linear-gradient(180deg,#2b5ecb 0%,#214ca8 100%);color:#fff}
     .customer360-journey-stage-status.feedback{background:linear-gradient(180deg,#4c7ff0 0%,#315ec6 100%);color:#fff;border-color:rgba(160,191,255,.42);box-shadow:0 8px 18px rgba(34,79,173,.28)}
     @keyframes journeyStagePulse{0%{transform:scale(.985);box-shadow:0 0 0 0 rgba(117,164,255,.0)}50%{transform:scale(1.01);box-shadow:0 0 0 1px rgba(117,164,255,.28),0 18px 32px rgba(0,0,0,.2)}100%{transform:scale(1);box-shadow:0 0 0 1px rgba(117,164,255,.18),0 16px 28px rgba(0,0,0,.18)}}
-    .customer360-lower-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px}
-    .customer360-stack{display:flex;flex-direction:column;gap:12px}
+    .customer360-lower-grid{display:grid;grid-template-columns:1fr;gap:12px}
+    .customer360-stack{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     .customer360-panel{padding:14px}
     .customer360-panel h3{margin:0 0 12px;color:#f2f5fa;font-size:18px}
     .customer360-panel-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);color:#d8e2f0;transition:background .12s ease,border-color .12s ease,box-shadow .12s ease,transform .12s ease}
@@ -579,6 +591,7 @@
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
       .customer360-layout,.customer360-main-grid,.customer360-lower-grid{grid-template-columns:1fr}
+      .customer360-stack,.customer360-department-hub .customer360-role-tool-grid{grid-template-columns:1fr}
       .customer360-journey-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width: 960px){
@@ -997,7 +1010,6 @@
                 <h2 id="customer360MainTitle" class="customer360-main-title">Customer 360° Dashboard</h2>
                 <div id="customer360OpsStrip" class="customer360-ops-strip"></div>
                 <section id="customer360ManagerQueue" class="customer360-manager-queue"></section>
-                <section id="customer360RoBoard" class="customer360-ro-board"></section>
               </div>
               <div class="customer360-title-tools">
                 <button class="customer360-mini-btn">Hire</button>
@@ -1006,12 +1018,14 @@
               </div>
             </div>
 
+            <section id="customer360DepartmentHub" class="customer360-department-hub"></section>
+
             <div class="customer360-main-grid">
               <section id="customer360CustomerCard" class="customer360-customer-card">
                 <div class="customer360-profile-name">Select a customer</div>
               </section>
 
-              <section class="customer360-summary-card">
+              <section id="customer360SummaryCard" class="customer360-summary-card">
                 <div class="customer360-summary-title">
                   <span class="customer360-summary-icon">✦</span>
                   <span id="customer360SummaryTitle">AI Summary</span>
@@ -1020,6 +1034,8 @@
                 <div id="customer360SummaryActions" class="customer360-summary-actions"></div>
               </section>
             </div>
+
+            <section id="customer360RoBoard" class="customer360-ro-board"></section>
 
             <section id="customer360JourneyCard" class="customer360-journey-card">
               <div class="customer360-journey-head">
@@ -1053,7 +1069,7 @@
                 </section>
               </div>
 
-                <section>
+              <section id="customer360TimelineSection">
                 <div class="customer360-timeline-toolbar">
                   <span id="customer360TimelineLens" class="customer360-filter-chip active" data-filter="all">All departments</span>
                   <span class="customer360-filter-chip" data-filter="calls">Calls</span>

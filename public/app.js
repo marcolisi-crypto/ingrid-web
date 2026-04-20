@@ -5616,9 +5616,11 @@ function renderCustomer360Detail() {
   const serviceLaneEl = document.getElementById("customer360ServiceLane");
   const filesPanelEl = document.getElementById("customer360FilesPanel");
   const timelineEl = document.getElementById("customer360Timeline");
+  const timelineSectionEl = document.getElementById("customer360TimelineSection");
   const opsStripEl = document.getElementById("customer360OpsStrip");
   const managerQueueEl = document.getElementById("customer360ManagerQueue");
   const roBoardEl = document.getElementById("customer360RoBoard");
+  const departmentHubEl = document.getElementById("customer360DepartmentHub");
   const roleToolsEl = document.getElementById("customer360RoleTools");
   const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
   const urgentTasks = openTasks.filter((task) => {
@@ -5647,12 +5649,18 @@ function renderCustomer360Detail() {
     if (serviceLaneEl) serviceLaneEl.innerHTML = `<div class="customer360-empty">Service lane, appointment, and loaner signals will appear here.</div>`;
     if (filesPanelEl) filesPanelEl.innerHTML = `<div class="customer360-empty">VIN files will appear here.</div>`;
     if (timelineEl) timelineEl.innerHTML = `<div class="customer360-empty">Choose a customer to load the unified timeline.</div>`;
+    if (timelineSectionEl) timelineSectionEl.style.display = "none";
     if (opsStripEl) opsStripEl.innerHTML = "";
     if (managerQueueEl) managerQueueEl.innerHTML = "";
     if (roBoardEl) roBoardEl.innerHTML = "";
+    if (departmentHubEl) departmentHubEl.innerHTML = `<div class="customer360-empty">Choose a customer to load department actions.</div>`;
     if (roleToolsEl) roleToolsEl.innerHTML = `<div class="customer360-empty">Choose a customer to load role-specific workspace tools.</div>`;
     return;
   }
+
+  const roFocusedLenses = new Set(["service", "technicians", "parts", "accounting"]);
+  if (timelineSectionEl) timelineSectionEl.style.display = "none";
+  if (roBoardEl) roBoardEl.style.display = roFocusedLenses.has(currentDepartmentLens) ? "" : "none";
 
   if (opsStripEl) {
     const serviceTasks = openTasks.filter((task) => {
@@ -5912,6 +5920,10 @@ function renderCustomer360Detail() {
 
   if (roBoardEl) {
     roBoardEl.innerHTML = buildRepairOrderBoardMarkup(getSelectedCustomerRepairOrders());
+  }
+
+  if (departmentHubEl) {
+    departmentHubEl.innerHTML = buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks, appointments, calls);
   }
 
   if (roleToolsEl) {
