@@ -2159,6 +2159,18 @@ function renderDmsActionNotes(items = []) {
   `).join("");
 }
 
+function buildStructuredDetailLines(baseText = "", detailMap = {}) {
+  const lines = [];
+  const base = String(baseText || "").trim();
+  if (base) lines.push(base);
+  Object.entries(detailMap || {}).forEach(([label, value]) => {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) return;
+    lines.push(`${label}: ${normalized}`);
+  });
+  return lines.join("\n");
+}
+
 function renderDmsActionField(field = {}) {
   if (field.type === "section") {
     return `<div class="dms-action-modal-section-title">${escapeHtml(field.label || "")}</div>`;
@@ -3206,8 +3218,11 @@ async function startServiceReceptionCreate(payload = null) {
         { name: "concern", label: "Customer concern", type: "textarea", required: true, full: true, value: nextAppointment?.service || "Customer concern captured from advisor write-up" },
         { type: "section", label: "Arrival details" },
         { name: "advisor", label: "Advisor", type: "text", required: true, value: nextAppointment?.advisor || getDefaultAdvisorForLens() },
+        { name: "tagNumber", label: "Tag / key tag", type: "text", value: "" },
         { name: "odometerIn", label: "Mileage in", type: "number", value: vehicle?.mileage ? String(vehicle.mileage) : "", min: 0 },
+        { name: "payType", label: "Pay type", type: "select", value: "customer", options: ["customer", "warranty", "internal", "maintenance"] },
         { name: "transportOption", label: "Transport", type: "select", value: nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
+        { name: "promiseWindow", label: "Promise window", type: "select", value: "same_day", options: ["same_day", "overnight", "2_day", "pending_parts"] },
         { type: "section", label: "Advisor notes" },
         { name: "notes", label: "Write-up notes", type: "textarea", full: true, value: nextAppointment?.notes || "" }
       ],
@@ -3228,7 +3243,11 @@ async function startServiceReceptionCreate(payload = null) {
         concern: payload.concern,
         odometerIn: payload.odometerIn ? Number(payload.odometerIn) : null,
         transportOption: payload.transportOption || "",
-        notes: payload.notes || "",
+        notes: buildStructuredDetailLines(payload.notes, {
+          "Tag": payload.tagNumber,
+          "Pay Type": titleCase(payload.payType || ""),
+          "Promise Window": titleCase(String(payload.promiseWindow || "").replaceAll("_", " "))
+        }),
         promiseAtUtc: nextAppointment?.scheduledStartUtc || null
       })
     });
@@ -3280,11 +3299,14 @@ async function openRepairOrderFrom360(payload = null) {
         { name: "advisor", label: "Advisor", type: "text", required: true, value: serviceReception?.advisor || nextAppointment?.advisor || getDefaultAdvisorForLens() },
         { name: "complaint", label: "Complaint / concern", type: "textarea", required: true, full: true, value: serviceReception?.concern || nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from service lane" },
         { type: "section", label: "Vehicle arrival" },
+        { name: "tagNumber", label: "Tag / key tag", type: "text", value: "" },
         { name: "odometerIn", label: "Mileage in", type: "number", value: serviceReception?.odometerIn ?? vehicle?.mileage ?? "", min: 0 },
+        { name: "payType", label: "Pay type", type: "select", value: "customer", options: ["customer", "warranty", "internal", "maintenance"] },
         { name: "transportOption", label: "Transport", type: "select", value: serviceReception?.transportOption || nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
         { type: "section", label: "Promise details" },
         { name: "promiseAtDate", label: "Promised date", type: "date", value: nextAppointment?.date || "" },
         { name: "promiseAtTime", label: "Promised time", type: "text", value: nextAppointment?.time || "", placeholder: "4:30 PM" },
+        { name: "priority", label: "RO priority", type: "select", value: "normal", options: ["normal", "waiter", "comeback", "down_vehicle", "emergency"] },
         { type: "section", label: "Advisor notes" },
         { name: "notes", label: "Advisor notes", type: "textarea", full: true, value: serviceReception?.notes || nextAppointment?.notes || "" }
       ],
@@ -3306,7 +3328,12 @@ async function openRepairOrderFrom360(payload = null) {
         complaint: payload.complaint,
         odometerIn: payload.odometerIn ? Number(payload.odometerIn) : (serviceReception?.odometerIn ?? vehicle?.mileage ?? null),
         transportOption: payload.transportOption || "",
-        notes: payload.notes || "",
+        notes: buildStructuredDetailLines(payload.notes, {
+          "Tag": payload.tagNumber,
+          "Pay Type": titleCase(payload.payType || ""),
+          "Priority": titleCase(String(payload.priority || "").replaceAll("_", " ")),
+          "Promised Time": payload.promiseAtDate ? `${payload.promiseAtDate} ${payload.promiseAtTime || ""}`.trim() : ""
+        }),
         promiseAtUtc: payload.promiseAtDate
           ? new Date(`${payload.promiseAtDate}T${payload.promiseAtTime || "10:00"}`).toISOString()
           : serviceReception?.promiseAtUtc || nextAppointment?.scheduledStartUtc || null
@@ -3419,12 +3446,14 @@ async function createServiceQuote(payload = null) {
       ],
       fields: [
         { type: "section", label: "Operation" },
+        { name: "serviceCategory", label: "Service category", type: "select", value: "diagnostic", options: ["diagnostic", "maintenance", "repair", "warranty", "sublet"] },
         { name: "opCode", label: "Operation code", type: "text", required: true, value: "DIAG" },
         { name: "description", label: "Description", type: "textarea", required: true, full: true, value: "Diagnostic inspection and advisor estimate" },
         { type: "section", label: "Pricing" },
-        { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 0.1 },
-        { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "149", min: 0, step: 0.01 },
+        { name: "quantity", label: "Sold hours", type: "number", required: true, value: "1.0", min: 0, step: 0.1 },
+        { name: "unitPrice", label: "Labor rate", type: "number", required: true, value: "149", min: 0, step: 0.01 },
         { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "pending", "approved", "declined"] }
+        ,{ name: "approvalPath", label: "Approval path", type: "select", value: "advisor_review", options: ["advisor_review", "sms_estimate", "esignature", "walkin_approval"] }
       ],
       onSubmit: async (values) => createServiceQuote({ ...values, __submit: true })
     });
@@ -3439,7 +3468,10 @@ async function createServiceQuote(payload = null) {
         repairOrderId: repairOrder.id,
         lineType: "labor",
         opCode: payload.opCode,
-        description: payload.description,
+        description: buildStructuredDetailLines(payload.description, {
+          "Category": titleCase(payload.serviceCategory || ""),
+          "Approval Path": titleCase(String(payload.approvalPath || "").replaceAll("_", " "))
+        }),
         quantity: Number(payload.quantity || 0),
         unitPrice: Number(payload.unitPrice || 0),
         department: "service",
@@ -3519,7 +3551,9 @@ async function createPartsQuote(payload = null) {
         { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 0, step: 1 },
         { name: "unitPrice", label: "Unit price", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "source", label: "Source", type: "select", value: "stock", options: ["stock", "oem", "aftermarket", "transfer"] },
-        { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "requested", "approved", "declined"] }
+        { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "requested", "approved", "declined"] },
+        { name: "binLocation", label: "Bin location", type: "text", value: "" },
+        { name: "etaDate", label: "ETA date", type: "date", value: "" }
       ],
       onSubmit: async (values) => createPartsQuote({ ...values, __submit: true })
     });
@@ -3533,7 +3567,11 @@ async function createPartsQuote(payload = null) {
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
         partNumber: payload.partNumber,
-        description: payload.description,
+        description: buildStructuredDetailLines(payload.description, {
+          "Source": titleCase(payload.source || ""),
+          "Bin": payload.binLocation,
+          "ETA": payload.etaDate
+        }),
         quantity: Number(payload.quantity || 0),
         unitPrice: Number(payload.unitPrice || 0),
         status: payload.status || "quoted",
@@ -3773,7 +3811,8 @@ async function createSpecialPartOrder(payload = null) {
         { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 1, step: 1 },
         { name: "unitCost", label: "Unit cost", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "etaDate", label: "ETA date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 3)) },
-        { name: "status", label: "Status", type: "select", value: "ordered", options: ["ordered", "backorder", "arrived"] }
+        { name: "status", label: "Status", type: "select", value: "ordered", options: ["ordered", "backorder", "arrived"] },
+        { name: "vendorReference", label: "Vendor reference", type: "text", value: "" }
       ],
       onSubmit: async (values) => createSpecialPartOrder({ ...values, __submit: true })
     });
@@ -3786,7 +3825,9 @@ async function createSpecialPartOrder(payload = null) {
       body: JSON.stringify({
         repairOrderId: repairOrder?.id || null,
         partNumber: payload.partNumber,
-        vendor: payload.vendor,
+        vendor: buildStructuredDetailLines(payload.vendor, {
+          "Vendor Ref": payload.vendorReference
+        }),
         orderType: payload.orderType || "special_order",
         quantity: Number(payload.quantity || 1),
         unitCost: Number(payload.unitCost || 0),
@@ -3828,6 +3869,8 @@ async function createAccountsPayableBill(payload = null) {
         { name: "vendorName", label: "Vendor", type: "text", required: true, value: "OEM Parts Vendor" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `AP-${Date.now().toString().slice(-6)}` },
         { type: "section", label: "Posting details" },
+        { name: "payableType", label: "Payable type", type: "select", value: "parts", options: ["parts", "service_body_paint", "other_supplier"] },
+        { name: "profitCentre", label: "Profit centre", type: "select", value: "parts", options: ["service", "parts", "body_paint", "admin"] },
         { name: "amount", label: "Amount", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 14)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "approved", "paid"] }
@@ -3851,6 +3894,10 @@ async function createAccountsPayableBill(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create AP bill");
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ACCOUNTING] AP Bill ${payload.invoiceNumber}\nVendor: ${payload.vendorName}\nPayable Type: ${titleCase(String(payload.payableType || "").replaceAll("_", " "))}\nProfit Centre: ${titleCase(String(payload.profitCentre || "").replaceAll("_", " "))}`
+    });
     await refreshSelectedCustomer360();
     renderCustomer360();
     setCustomer360ComposerStatus(`AP bill ${data.invoiceNumber || "created"} added.`, "success");
@@ -3888,6 +3935,8 @@ async function createAccountsReceivableInvoice(payload = null) {
         { type: "section", label: "Invoice header" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `AR-${Date.now().toString().slice(-6)}` },
         { type: "section", label: "Amounts and timing" },
+        { name: "receivableType", label: "Receivable type", type: "select", value: "aftersales", options: ["aftersales", "warranty", "vehicle", "fi"] },
+        { name: "profitCentre", label: "Profit centre", type: "select", value: "service", options: ["service", "parts", "body_paint", "new_vehicle", "used_vehicle", "fi"] },
         { name: "amount", label: "Amount", type: "number", required: true, value: String(total), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
@@ -3913,6 +3962,10 @@ async function createAccountsReceivableInvoice(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create AR invoice");
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ACCOUNTING] AR Invoice ${payload.invoiceNumber}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nProfit Centre: ${titleCase(String(payload.profitCentre || "").replaceAll("_", " "))}`
+    });
     await refreshSelectedCustomer360();
     renderCustomer360();
     setCustomer360ComposerStatus(`AR invoice ${data.invoiceNumber || "created"} posted.`, "success");
@@ -3950,6 +4003,8 @@ async function createServiceInvoice(payload = null) {
         { type: "section", label: "Invoice header" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `SVC-${Date.now().toString().slice(-6)}` },
         { type: "section", label: "Cashier details" },
+        { name: "paymentMethod", label: "Payment method", type: "select", value: "card_on_file", options: ["card_on_file", "cash", "debit", "finance", "invoice_me"] },
+        { name: "receivableType", label: "Receivable type", type: "select", value: "aftersales", options: ["aftersales", "warranty", "maintenance"] },
         { name: "amount", label: "Amount", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
@@ -3975,6 +4030,10 @@ async function createServiceInvoice(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create service invoice");
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ACCOUNTING] Service Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}`
+    });
     await refreshSelectedCustomer360();
     renderCustomer360();
     setCustomer360ComposerStatus(`Service invoice ${data.invoiceNumber || "created"} posted.`, "success");
@@ -4013,6 +4072,8 @@ async function createPartsInvoice(payload = null) {
         { type: "section", label: "Invoice header" },
         { name: "invoiceNumber", label: "Invoice number", type: "text", required: true, value: `PART-${Date.now().toString().slice(-6)}` },
         { type: "section", label: "Amount and due date" },
+        { name: "paymentMethod", label: "Payment method", type: "select", value: "card_on_file", options: ["card_on_file", "cash", "debit", "counter_charge"] },
+        { name: "receivableType", label: "Receivable type", type: "select", value: "aftersales", options: ["aftersales", "warranty", "maintenance"] },
         { name: "amount", label: "Amount", type: "number", required: true, value: String(partsTotal > 0 ? partsTotal : fallbackTotal), min: 0, step: 0.01 },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
@@ -4038,6 +4099,10 @@ async function createPartsInvoice(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create parts invoice");
+    await createQuickNoteRecord({
+      noteType: "internal",
+      body: `[ACCOUNTING] Parts Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}`
+    });
     await refreshSelectedCustomer360();
     renderCustomer360();
     setCustomer360ComposerStatus(`Parts invoice ${data.invoiceNumber || "created"} posted.`, "success");
