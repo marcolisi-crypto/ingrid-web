@@ -4,6 +4,7 @@ let currentRows = [];
 let currentInboxConversations = [];
 let currentTasks = [];
 let currentAppointments = [];
+let currentServiceReceptions = [];
 let currentRepairOrders = [];
 let currentMediaAssets = [];
 let currentPartOrders = [];
@@ -2638,13 +2639,64 @@ function inferJourneyHandoffTarget(...values) {
 }
 
 function startServiceWriteUp() {
-  startDepartmentAppointmentCreate();
+  startServiceReceptionCreate();
+}
+
+async function startServiceReceptionCreate() {
+  const customer = getSelectedCustomerRecord();
+  if (!customer) {
+    setCustomer360ComposerStatus("Select or create a customer before starting a write-up.", "error");
+    return;
+  }
+
+  const vehicle = getSelectedVehicleRecord();
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === customer.id && String(item.status || "").toLowerCase() !== "completed") || null;
+
+  try {
+    const concern = readPromptText("Write-up concern", nextAppointment?.service || "Customer concern captured from advisor write-up");
+    if (concern === null) return;
+    const advisor = readPromptText("Advisor", nextAppointment?.advisor || "Rachel Smith");
+    if (advisor === null) return;
+    const odometerValue = readPromptText("Mileage in", vehicle?.mileage ? String(vehicle.mileage) : "");
+    if (odometerValue === null) return;
+    const transportOption = readPromptText("Transport option", nextAppointment?.transport || "");
+    if (transportOption === null) return;
+    const notes = readPromptText("Write-up notes", nextAppointment?.notes || "");
+    if (notes === null) return;
+
+    const res = await fetch("/.netlify/functions/service-receptions-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: customer.id,
+        vehicleId: vehicle?.id || null,
+        appointmentId: nextAppointment?.id || null,
+        advisor,
+        concern,
+        odometerIn: odometerValue ? Number(odometerValue) : null,
+        transportOption,
+        notes,
+        promiseAtUtc: nextAppointment?.scheduledStartUtc || null
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create service reception");
+    await loadAppointments();
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    setDepartmentLens("service");
+    setCustomer360ComposerStatus(`Write-up ${data.receptionNumber || data.serviceReception?.receptionNumber || "created"} is ready.`, "success");
+  } catch (err) {
+    console.error("startServiceReceptionCreate error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create service write-up.", "error");
+  }
 }
 
 async function openRepairOrderFrom360() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   const existing = getActiveRepairOrderRecord();
+  const serviceReception = getActiveServiceReceptionRecord();
   if (!customer || existing) {
     if (existing) {
       setCustomer360ComposerStatus(`RO ${existing.repairOrderNumber || "open"} is already active.`, "success");
@@ -2663,12 +2715,13 @@ async function openRepairOrderFrom360() {
         customerId: customer.id,
         vehicleId: vehicle?.id || null,
         appointmentId: nextAppointment?.id || null,
-        advisor: nextAppointment?.advisor || "Rachel Smith",
-        complaint: nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from 360 service lane",
-        odometerIn: vehicle?.mileage || null,
-        transportOption: nextAppointment?.transport || "",
-        notes: nextAppointment?.notes || "",
-        promiseAtUtc: nextAppointment?.scheduledStartUtc || null
+        serviceReceptionId: serviceReception?.id || null,
+        advisor: serviceReception?.advisor || nextAppointment?.advisor || "Rachel Smith",
+        complaint: serviceReception?.concern || nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from 360 service lane",
+        odometerIn: serviceReception?.odometerIn ?? vehicle?.mileage ?? null,
+        transportOption: serviceReception?.transportOption || nextAppointment?.transport || "",
+        notes: serviceReception?.notes || nextAppointment?.notes || "",
+        promiseAtUtc: serviceReception?.promiseAtUtc || nextAppointment?.scheduledStartUtc || null
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -3698,6 +3751,20 @@ function getSelectedCustomerRepairOrders() {
   return (currentRepairOrders || []).filter((item) => item.customerId === selectedCustomerId);
 }
 
+function getSelectedCustomerServiceReceptions() {
+  return (currentServiceReceptions || []).filter((item) => item.customerId === selectedCustomerId);
+}
+
+function getActiveServiceReceptionRecord() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  return getSelectedCustomerServiceReceptions().find((item) => {
+    const status = String(item.status || "").toLowerCase();
+    const matchesVehicle = !vehicle?.id || !item.vehicleId || item.vehicleId === vehicle.id;
+    return matchesVehicle && status !== "closed" && status !== "completed";
+  }) || getSelectedCustomerServiceReceptions()[0] || null;
+}
+
 function getActiveRepairOrderRecord() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -4037,6 +4104,7 @@ function buildRepairOrderDetailSectionsMarkup(repairOrder = {}) {
 
 function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointments = [], calls = []) {
   const activeRepairOrder = getActiveRepairOrderRecord();
+  const serviceReception = getActiveServiceReceptionRecord();
   const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
   const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
   const primaryPhone = getSelectedCustomerPrimaryPhone();
@@ -4065,10 +4133,10 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       title: "Advisor Tools",
       copy: "Everything an advisor needs to receive, write up, price, and close the visit from one place.",
       tools: [
-        { label: activeRepairOrder ? "RO Is Open" : "Open RO from Visit", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is the live working file.` : nextAppointment ? "Convert the booked visit into a live repair order." : "Open the first repair order for this visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
-        { label: activeRepairOrder ? "Create Service Quote" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "createServiceQuote()" : "startDepartmentAppointmentCreate()", tone: "good" },
+        { label: activeRepairOrder ? "RO Is Open" : serviceReception ? "Open RO from Write-Up" : "Open RO from Visit", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is the live working file.` : serviceReception ? `${serviceReception.receptionNumber || "Write-up"} is ready to convert into a live repair order.` : nextAppointment ? "Convert the booked visit into a live repair order." : "Open the first repair order for this visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
+        { label: activeRepairOrder ? "Create Service Quote" : serviceReception ? "Open Write-Up" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : serviceReception ? "Advisor write-up is open and ready for quote or RO conversion." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "createServiceQuote()" : serviceReception ? "setDepartmentLens('service')" : "startDepartmentAppointmentCreate()", tone: "good" },
         { label: activeRepairOrder ? "Warranty Claim" : "Prepare Loaner", detail: activeRepairOrder ? "Start warranty processing and pay-type posture from the advisor lane." : "Transportation and loaner coordination before the write-up.", action: activeRepairOrder ? "addRepairOrderWarrantyClaim()" : "startLoanerTask()", tone: "warn" },
-        { label: activeRepairOrder ? "Set Pay Split" : "Add Advisor Note", detail: activeRepairOrder ? "Stage customer, warranty, or internal pay against the live RO." : "Capture concern, approvals, and promised time context.", action: activeRepairOrder ? "addRepairOrderPaySplit('customer')" : "startAdvisorJourneyNote()", tone: activeRepairOrder ? "good" : "info" }
+        { label: activeRepairOrder ? "Set Pay Split" : serviceReception ? "Continue Write-Up" : "Add Advisor Note", detail: activeRepairOrder ? "Stage customer, warranty, or internal pay against the live RO." : serviceReception ? "Use the active write-up to capture concern, mileage, and promised-time context." : "Capture concern, approvals, and promised time context.", action: activeRepairOrder ? "addRepairOrderPaySplit('customer')" : serviceReception ? "setDepartmentLens('service')" : "startAdvisorJourneyNote()", tone: activeRepairOrder ? "good" : "info" }
       ]
     },
     bdc: {
@@ -4208,6 +4276,7 @@ function getDepartmentCreateActions(lens = "home") {
     ],
     service: [
       { label: "Create Appointment", detail: "Book a service visit from the advisor dashboard.", action: "startDepartmentAppointmentCreate()" },
+      { label: "Create Write-Up", detail: "Start the advisor service reception before opening the RO.", action: "startServiceReceptionCreate()" },
       { label: "Create RO", detail: "Open a live repair order from the service desk.", action: "startDepartmentRepairOrderCreate()" },
       { label: "Create Service Quote", detail: "Write a labor or diagnostic quote into the active RO.", action: "startServiceQuoteCreate()" },
       { label: "Create Service Invoice", detail: "Post a customer-facing service invoice from the live RO.", action: "startServiceInvoiceCreate()" }
@@ -5324,6 +5393,21 @@ async function loadRepairOrders(customerId = selectedCustomerId, vehicleId = get
   }
 }
 
+async function loadServiceReceptions(customerId = selectedCustomerId, vehicleId = getSelectedVehicleRecord()?.id || "") {
+  try {
+    const params = new URLSearchParams();
+    if (customerId) params.set("customerId", customerId);
+    if (vehicleId) params.set("vehicleId", vehicleId);
+    const res = await fetch(`/.netlify/functions/service-receptions-list?${params.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to load service receptions");
+    currentServiceReceptions = Array.isArray(data.serviceReceptions) ? data.serviceReceptions : [];
+  } catch (err) {
+    console.error("loadServiceReceptions error:", err);
+    currentServiceReceptions = [];
+  }
+}
+
 async function loadMediaAssets(customerId = selectedCustomerId, vehicleId = getSelectedVehicleRecord()?.id || "", repairOrderId = "") {
   try {
     const params = new URLSearchParams();
@@ -6400,6 +6484,7 @@ async function refreshSelectedCustomer360() {
   if (!customer) {
     currentCustomerNotes = [];
     currentCustomerTimeline = [];
+    currentServiceReceptions = [];
     currentRepairOrders = [];
     currentMediaAssets = [];
     currentPartOrders = [];
@@ -6424,6 +6509,7 @@ async function refreshSelectedCustomer360() {
 
   currentCustomerTimeline = Array.isArray(timelineData.events) ? timelineData.events : [];
   currentCustomerNotes = Array.isArray(notesData.notes) ? notesData.notes : [];
+  await loadServiceReceptions(customer.id, vehicle?.id || "");
   await loadRepairOrders(customer.id, vehicle?.id || "");
   const activeRepairOrderId = getActiveRepairOrderRecord()?.id || "";
   await Promise.all([
