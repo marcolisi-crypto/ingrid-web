@@ -8472,12 +8472,12 @@ function renderCustomer360Detail() {
   if (opsStripEl) opsStripEl.style.display = isServiceWorkspace ? "none" : "";
   if (managerQueueEl) managerQueueEl.style.display = isServiceWorkspace ? "none" : "";
   if (departmentHubEl) departmentHubEl.style.display = isServiceWorkspace ? "none" : "";
-  if (departmentDashboardEl) departmentDashboardEl.style.display = isServiceWorkspace ? "none" : "";
+  if (departmentDashboardEl) departmentDashboardEl.style.display = "";
   if (vehicleRailCardEl) vehicleRailCardEl.style.display = isServiceWorkspace ? "none" : "";
   if (archiveRailCardEl) archiveRailCardEl.style.display = isServiceWorkspace ? "none" : "";
   if (serviceRailCardEl) serviceRailCardEl.style.display = "";
-  if (mainTitleEl && isServiceWorkspace) mainTitleEl.textContent = "Service Advisor Workspace";
-  if (mainSubtitleEl && isServiceWorkspace) mainSubtitleEl.textContent = "Simple, advisor-first view for write-up, work order, approvals, and next-step scheduling.";
+  if (mainTitleEl && isServiceWorkspace) mainTitleEl.textContent = "Service Advisor Dashboard + Workspace";
+  if (mainSubtitleEl && isServiceWorkspace) mainSubtitleEl.textContent = "Use the storewide service dashboards to drill into the right customer, then work the live write-up, RO, approvals, and next steps below.";
 
   if (opsStripEl) {
     const serviceTasks = openTasks.filter((task) => {
