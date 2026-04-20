@@ -443,6 +443,19 @@
     .customer360-quick-action{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#1b2740 0%,#152238 100%);color:#f1f6ff;font-weight:700;cursor:pointer}
     .customer360-quick-action span{display:flex;align-items:center;gap:12px}
     .customer360-action-icon{color:#8cb9ff}
+    .customer360-role-tools{padding:12px;display:grid;gap:10px}
+    .customer360-role-tools-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+    .customer360-role-tools-head h3{margin:0;color:#f4f8ff;font-size:16px}
+    .customer360-role-tools-head span{display:block;margin-top:4px;color:#91a8ca;font-size:12px;line-height:1.45}
+    .customer360-role-tool-grid{display:grid;gap:8px}
+    .customer360-role-tool-btn{display:grid;gap:6px;width:100%;padding:12px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#18243a 0%,#121e31 100%);color:#eef4ff;text-align:left;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+    .customer360-role-tool-btn:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.28);box-shadow:0 12px 20px rgba(0,0,0,.16)}
+    .customer360-role-tool-btn strong{font-size:13px;color:#f7faff}
+    .customer360-role-tool-btn span{font-size:11px;color:#91a7c8;line-height:1.4}
+    .customer360-role-tool-btn.good{border-color:rgba(92,198,138,.18)}
+    .customer360-role-tool-btn.warn{border-color:rgba(241,187,81,.18)}
+    .customer360-role-tool-btn.danger{border-color:rgba(228,99,120,.18)}
+    .customer360-role-tool-btn.info{border-color:rgba(117,164,255,.18)}
     .customer360-composer{padding:12px 14px;border-radius:14px;background:linear-gradient(180deg,#182338 0%,#131d2f 100%);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;color:#97abc8}
     .customer360-composer-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(180deg,#d9b79a,#6f5649)}
     .customer360-composer-actions{margin-left:auto;display:flex;gap:8px}
@@ -967,6 +980,8 @@
               <button id="customer360ActionTwo" class="customer360-quick-action" type="button"><span><span class="customer360-action-icon">✚</span>Create Appointment</span><span>›</span></button>
               <button id="customer360ActionThree" class="customer360-quick-action" type="button"><span><span class="customer360-action-icon">✎</span>Add Note</span><span>›</span></button>
             </div>
+
+            <div id="customer360RoleTools" class="customer360-sidebar-block customer360-role-tools"></div>
 
             <div class="customer360-sidebar-block customer360-picker-card">
               <div class="customer360-eyebrow">Customer Records</div>

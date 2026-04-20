@@ -2886,6 +2886,144 @@ function buildRepairOrderDetailSectionsMarkup(repairOrder = {}) {
   `;
 }
 
+function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointments = [], calls = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
+  const primaryPhone = getSelectedCustomerPrimaryPhone();
+  const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const missedCall = calls.find((call) => String(call.status || "").toLowerCase().includes("miss"));
+  const nextAppointment = appointments[0] || null;
+  const salesTask = openTasks.find((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[sales]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("deal"));
+  const bdcTask = openTasks.find((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[bdc]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("callback"));
+  const technicianTask = openTasks.find((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[technician]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("inspection"));
+  const partsTask = openTasks.find((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[parts]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("parts"));
+  const accountingTask = openTasks.find((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[accounting]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("invoice"));
+  const fiTask = openTasks.find((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[fi]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("finance"));
+
+  const byLens = {
+    home: {
+      title: "Core Workspace",
+      copy: "Fast access to the main tools that keep the shared customer and vehicle record moving.",
+      tools: [
+        { label: activeRepairOrder ? "Open Live RO" : "Open Repair Order", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is active for ${vehicleDisplayName(vehicle)}.` : "Start the advisor write-up and attach all service work to one RO.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
+        { label: nextAppointment ? "Open Appointment" : "Create Appointment", detail: nextAppointment ? `${nextAppointment.service || "Visit"} is already booked.` : "Book the next visit without leaving the 360.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "setCustomer360ComposerMode('appointment')", tone: nextAppointment ? "good" : "info" },
+        { label: "Open Inbox", detail: primaryPhone ? `Continue communications with ${formatPhonePretty(primaryPhone)}.` : "Jump into calls and SMS for this customer.", action: primaryPhone ? "openSmsForPhone(getSelectedCustomerPrimaryPhone())" : "setDepartmentLens('bdc')", tone: "info" },
+        { label: "VIN Archive", detail: `Work from ${vehicle?.vin || "the VIN"} evidence, media, and health history.`, action: "openVehicleOpsContext('archive')", tone: "good" }
+      ]
+    },
+    service: {
+      title: "Advisor Tools",
+      copy: "Everything an advisor needs to receive, write up, price, and close the visit from one place.",
+      tools: [
+        { label: activeRepairOrder ? "RO Is Open" : "Open RO from Visit", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is the live working file.` : nextAppointment ? "Convert the booked visit into a live repair order." : "Open the first repair order for this visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
+        { label: activeRepairOrder ? "Add Estimate Line" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "setCustomer360ComposerMode('appointment')", tone: "good" },
+        { label: activeRepairOrder ? "Request Part on RO" : "Prepare Loaner", detail: activeRepairOrder ? "Push required parts into the same service record." : "Transportation and loaner coordination before the write-up.", action: activeRepairOrder ? "addRepairOrderPartRequest()" : "startLoanerTask()", tone: "warn" },
+        { label: activeRepairOrder ? "Collect / Post Payment" : "Add Advisor Note", detail: activeRepairOrder ? "Close out the visit financially from the advisor desk." : "Capture concern, approvals, and promised time context.", action: activeRepairOrder ? "addAccountingRepairOrderEntry()" : "startAdvisorJourneyNote()", tone: activeRepairOrder ? "good" : "info" }
+      ]
+    },
+    bdc: {
+      title: "BDC Tools",
+      copy: "Keep rescue calls, callbacks, texts, and appointment conversion right in front of the agent.",
+      tools: [
+        { label: missedCall ? "Rescue Missed Call" : "Open SMS Dock", detail: missedCall ? "Highest-priority missed contact needs immediate recovery." : "Continue the active conversation thread.", action: missedCall ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCall.id || missedCall.callId || missedCall.createdAtUtc || missedCall.from || ""))}','bdc')` : "openSmsForPhone(getSelectedCustomerPrimaryPhone())", tone: missedCall ? "danger" : "info" },
+        { label: bdcTask ? "Open Callback Task" : "Queue Callback", detail: bdcTask ? "A live callback task is already in motion." : "Create the next follow-up task for the BDC queue.", action: bdcTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTask.id || bdcTask.taskId || bdcTask.createdAtUtc || bdcTask.title || ""))}','bdc')` : "startBdcCallbackTask()", tone: bdcTask ? "warn" : "info" },
+        { label: nextAppointment ? "Open Booked Visit" : "Book Appointment", detail: nextAppointment ? "Commitment is captured and ready for handoff." : "Turn conversation into an actual store visit.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','bdc')` : "setCustomer360ComposerMode('appointment')", tone: nextAppointment ? "good" : "warn" },
+        { label: "Handoff to Sales", detail: "Move the thread cleanly when the customer is ready for deal work.", action: "setDepartmentLens('sales')", tone: "good" }
+      ]
+    },
+    sales: {
+      title: "Sales Tools",
+      copy: "Deals, visits, trade steps, and delivery prep should be the first actions a sales user sees.",
+      tools: [
+        { label: salesTask ? "Open Deal Desk" : "Start Deal Task", detail: salesTask ? "There is already a live sales task on this record." : "Open the opportunity and pricing workflow.", action: salesTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTask.id || salesTask.taskId || salesTask.createdAtUtc || salesTask.title || ""))}','sales')` : "startSalesDealTask()", tone: salesTask ? "warn" : "info" },
+        { label: nextAppointment ? "Open Test Drive / Visit" : "Schedule Test Drive", detail: nextAppointment ? "A visit is already booked for this shopper." : "Set the next showroom commitment.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','sales')` : "setCustomer360ComposerMode('appointment')", tone: nextAppointment ? "good" : "info" },
+        { label: "Move to F&I", detail: "Advance the customer into finance and delivery prep when the desk is ready.", action: "setDepartmentLens('fi')", tone: "good" },
+        { label: "Customer Timeline", detail: "Review full communications and service history before desking the deal.", action: "setCustomer360TimelineFilter('all')", tone: "info" }
+      ]
+    },
+    technicians: {
+      title: "Technician Tools",
+      copy: "Clocking, findings, parts requests, and inspection documentation should be immediate.",
+      tools: [
+        { label: activeRepairOrder ? (technicianClockedIn ? "Clock Out of RO" : "Clock In to RO") : "Open RO First", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is the active job card.` : "A technician should always work against an open RO.", action: activeRepairOrder ? (technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "danger" },
+        { label: technicianTask ? "Open Work Step" : "Log Finding", detail: technicianTask ? "Inspection or repair work is already live." : "Capture the next diagnostic or inspection result.", action: technicianTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(technicianTask.id || technicianTask.taskId || technicianTask.createdAtUtc || technicianTask.title || ""))}','technicians')` : "startTechnicianInspectionNote()", tone: "info" },
+        { label: activeRepairOrder ? "Request Parts on RO" : "Queue Parts Request", detail: activeRepairOrder ? "Attach required parts directly to the live repair order." : "Create the next parts handoff.", action: activeRepairOrder ? "addRepairOrderPartRequest()" : "createTechnicianPartsRequest()", tone: "warn" },
+        { label: "Capture Vehicle Evidence", detail: "Add health events, photos, and VIN evidence from the bay.", action: "startVehicleHealthEventNote()", tone: "good" }
+      ]
+    },
+    parts: {
+      title: "Parts Tools",
+      copy: "Parts staff should have pick, source, ETA, and runner actions immediately available.",
+      tools: [
+        { label: activeRepairOrder ? "Add Parts to RO" : "Create Pick Task", detail: activeRepairOrder ? "Post requested parts to the live RO." : "No active RO, so work from a pick or source task.", action: activeRepairOrder ? "addRepairOrderPartRequest()" : "createPartsPickTask()", tone: activeRepairOrder ? "warn" : "info" },
+        { label: partsTask ? "Open Parts Task" : "Log ETA / Source", detail: partsTask ? "A live parts workflow is already assigned." : "Document source decision, ETA, or special order status.", action: partsTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')` : "startPartsEtaNote()", tone: "info" },
+        { label: "Runner Dispatch", detail: "Use the same vehicle and technician context to coordinate delivery to the bay.", action: "setDepartmentLens('technicians')", tone: "good" },
+        { label: "VIN Archive Reference", detail: "Review service and vehicle evidence before finalizing a part decision.", action: "openVehicleOpsContext('archive')", tone: "info" }
+      ]
+    },
+    accounting: {
+      title: "Accounting Tools",
+      copy: "Post payments, review invoice posture, and keep the back office attached to the same RO.",
+      tools: [
+        { label: activeRepairOrder ? "Post Payment / Entry" : "Queue Invoice Review", detail: activeRepairOrder ? "Apply an accounting entry against the live RO balance." : "No live RO, so work the invoice queue first.", action: activeRepairOrder ? "addAccountingRepairOrderEntry()" : "queueAccountingInvoiceReview()", tone: activeRepairOrder ? "good" : "warn" },
+        { label: accountingTask ? "Open Invoice Task" : "Add Ledger Note", detail: accountingTask ? "There is already a live review or collection item." : "Capture statement, reconciliation, or note context.", action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTask.id || accountingTask.taskId || accountingTask.createdAtUtc || accountingTask.title || ""))}','accounting')` : "startLedgerNote()", tone: "info" },
+        { label: activeRepairOrder ? "Review RO Balance" : "Open Service Context", detail: activeRepairOrder ? `${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} remaining on the RO.` : "Return to the advisor lane to resolve the source visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "setDepartmentLens('service')", tone: "warn" },
+        { label: "Customer Financial File", detail: "Use the unified timeline and notes before closing the back-office loop.", action: "setCustomer360TimelineFilter('activity')", tone: "good" }
+      ]
+    },
+    fi: {
+      title: "F&I Tools",
+      copy: "Finance users should see funding, products, delivery, and handoff actions first.",
+      tools: [
+        { label: fiTask ? "Open F&I Work" : "Start F&I Review", detail: fiTask ? "Funding or menu work is already live." : "Open the finance workflow for this deal.", action: fiTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(fiTask.id || fiTask.taskId || fiTask.createdAtUtc || fiTask.title || ""))}','fi')` : "startFiReviewNote()", tone: fiTask ? "warn" : "info" },
+        { label: nextAppointment ? "Open Delivery Visit" : "Prep Delivery", detail: nextAppointment ? "A timed handoff is already available." : "Create the delivery handoff anchor.", action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','fi')` : "startDeliveryHandoffAppointment()", tone: nextAppointment ? "good" : "info" },
+        { label: "Return to Sales", detail: "Jump back to the desk if quoting or approvals still need work.", action: "setDepartmentLens('sales')", tone: "good" },
+        { label: "Deal Jacket", detail: "Use the same customer and vehicle record for documents and funding notes.", action: "setCustomer360TimelineFilter('tasks')", tone: "info" }
+      ]
+    },
+    executive: {
+      title: "Executive Tools",
+      copy: "Leaders need fast drill-in to pressure, ownership, and open work across the record.",
+      tools: [
+        { label: "Open Manager Queue", detail: "Jump into the highest-pressure department lane from the 360.", action: "setCustomer360ManagerQueueSort('urgent')", tone: "warn" },
+        { label: "Review Service Journey", detail: "Track ownership and bottlenecks across service operations.", action: "setDepartmentLens('service')", tone: "info" },
+        { label: "Review Revenue Journey", detail: "Drill into BDC, sales, and F&I handoffs.", action: "setDepartmentLens('sales')", tone: "good" },
+        { label: "Open VIN Intelligence", detail: "See whether vehicle signals or archive evidence are driving the record.", action: "setCustomer360TimelineFilter('vin')", tone: "info" }
+      ]
+    },
+    settings: {
+      title: "Settings Tools",
+      copy: "Configuration users need role, access, and workflow-entry actions, not day-to-day store tools.",
+      tools: [
+        { label: "Department Roles", detail: "Later this will lock each lane down to the right users.", action: "setDepartmentLens('settings')", tone: "info" },
+        { label: "Workflow Defaults", detail: "Review appointment, RO, and queue defaults for the store.", action: "setDepartmentLens('settings')", tone: "good" },
+        { label: "Communications Setup", detail: "Phone, Twilio, and inbox routing all start from one customer spine.", action: "setDepartmentLens('bdc')", tone: "warn" },
+        { label: "Service Ops Setup", detail: "Open the advisor workspace to validate the actual job flow.", action: "setDepartmentLens('service')", tone: "info" }
+      ]
+    }
+  };
+
+  const config = byLens[currentDepartmentLens] || byLens.home;
+  return `
+    <div class="customer360-role-tools-head">
+      <div>
+        <h3>${escapeHtml(config.title)}</h3>
+        <span>${escapeHtml(config.copy)}</span>
+      </div>
+      <span class="customer360-status-pill info">${escapeHtml(titleCase(currentDepartmentLens || "home"))}</span>
+    </div>
+    <div class="customer360-role-tool-grid">
+      ${config.tools.map((tool) => `
+        <button type="button" class="customer360-role-tool-btn ${escapeHtml(tool.tone || "info")}" onclick="${tool.action}">
+          <strong>${escapeHtml(tool.label)}</strong>
+          <span>${escapeHtml(tool.detail)}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
 function buildRepairOrderBoardMarkup(repairOrders = []) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -4811,6 +4949,7 @@ function renderCustomer360Detail() {
   const opsStripEl = document.getElementById("customer360OpsStrip");
   const managerQueueEl = document.getElementById("customer360ManagerQueue");
   const roBoardEl = document.getElementById("customer360RoBoard");
+  const roleToolsEl = document.getElementById("customer360RoleTools");
   const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
   const urgentTasks = openTasks.filter((task) => {
     const tone = getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone;
@@ -4841,6 +4980,7 @@ function renderCustomer360Detail() {
     if (opsStripEl) opsStripEl.innerHTML = "";
     if (managerQueueEl) managerQueueEl.innerHTML = "";
     if (roBoardEl) roBoardEl.innerHTML = "";
+    if (roleToolsEl) roleToolsEl.innerHTML = `<div class="customer360-empty">Choose a customer to load role-specific workspace tools.</div>`;
     return;
   }
 
@@ -5102,6 +5242,10 @@ function renderCustomer360Detail() {
 
   if (roBoardEl) {
     roBoardEl.innerHTML = buildRepairOrderBoardMarkup(getSelectedCustomerRepairOrders());
+  }
+
+  if (roleToolsEl) {
+    roleToolsEl.innerHTML = buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks, appointments, calls);
   }
 
   if (summaryTitleEl) {
