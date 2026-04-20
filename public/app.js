@@ -1228,6 +1228,10 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
   const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
 
   if (currentDepartmentLens === "service") {
+    const roAmounts = getRepairOrderAmounts(activeRepairOrder || {});
+    const roPartOrders = activeRepairOrder ? getRepairOrderPartOrders(activeRepairOrder) : [];
+    const roArInvoices = activeRepairOrder ? getRepairOrderArInvoices(activeRepairOrder) : [];
+    const roApBills = activeRepairOrder ? getRepairOrderApBills(activeRepairOrder) : [];
     return `
       <div class="customer360-lens-card">
         <div class="customer360-lens-row">
@@ -1248,12 +1252,22 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
             <strong>${loanerTask ? "In progress" : appointments.length ? "Review eligibility" : "Standby"}</strong>
             <span>${loanerTask ? escapeHtml((loanerTask.description || loanerTask.title || "Loaner coordination is active.").slice(0, 120)) : appointments.length ? "Transportation should be confirmed before diagnostics turn into all-day work." : "No transportation request has been captured yet."}</span>
           </div>
+          <div class="customer360-lens-stat">
+            <small>RO Totals</small>
+            <strong>${activeRepairOrder ? `${formatMoney(roAmounts.total)} total • ${formatMoney(roAmounts.balance)} due` : "Open RO first"}</strong>
+            <span>${activeRepairOrder ? `${(activeRepairOrder.laborOps || []).length} labor ops • ${(activeRepairOrder.multiPointInspections || []).length} MPI • ${roPartOrders.length} special order${roPartOrders.length === 1 ? "" : "s"}` : "Advisor totals, approvals, and pay posture show up here once the RO is live."}</span>
+          </div>
+          <div class="customer360-lens-stat">
+            <small>Back Office</small>
+            <strong>${activeRepairOrder ? `${roArInvoices.length} AR • ${roApBills.length} AP` : "No AR/AP yet"}</strong>
+            <span>${activeRepairOrder ? `${(activeRepairOrder.accountingEntries || []).length} accounting entr${(activeRepairOrder.accountingEntries || []).length === 1 ? "y" : "ies"} tied to this RO.` : "As soon as the RO is open, receivable and vendor payable posture should be accessible here."}</span>
+          </div>
         </div>
         ${buildLaneSignalMarkup(serviceSignals)}
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="${nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"}"><span>🛠</span>${nextAppointment ? "Open Visit" : "Schedule Service"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"}"><span>🚗</span>${loanerTask ? "Open Loaner" : "Create Loaner"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${latestMovementNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestMovementNote)}','service')` : "startVehicleGeoMovementNote()"}"><span>🧭</span>${latestMovementNote ? "Open Movement" : "Log Movement"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "addRepairOrderEstimateLine()" : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"}"><span>🛠</span>${activeRepairOrder ? "Add Estimate" : nextAppointment ? "Open Visit" : "Schedule Service"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "addRepairOrderLaborOp()" : loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"}"><span>🔧</span>${activeRepairOrder ? "Dispatch Labor" : loanerTask ? "Open Loaner" : "Create Loaner"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createAccountsReceivableInvoice()" : latestMovementNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestMovementNote)}','service')` : "startVehicleGeoMovementNote()"}"><span>💳</span>${activeRepairOrder ? "Post AR" : latestMovementNote ? "Open Movement" : "Log Movement"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
@@ -1279,8 +1293,10 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Close Repair Order" : "Open Repair Order"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Add Estimate Line" : "Open RO First"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderPartRequest()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Add Part Line" : "Open RO First"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createSpecialPartOrder()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Place Special Order" : "Open RO First"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? (technicianClockedIn ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`) : "openRepairOrderFrom360()"}">${activeRepairOrder ? (technicianClockedIn ? "Clock Technician Out" : "Clock Technician In") : "Open RO First"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="startAdvisorJourneyNote()">Add Advisor Note</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsPayableBill()" : "startAdvisorJourneyNote()"}">${activeRepairOrder ? "Add AP Bill" : "Add Advisor Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsReceivableInvoice()" : "startAdvisorJourneyNote()"}">${activeRepairOrder ? "Post AR Invoice" : "Add Advisor Note"}</button>
         </div>
       </div>
     `;
@@ -3182,6 +3198,39 @@ function getRepairOrderAdvisorName(repairOrder = {}) {
   return repairOrder.advisor || repairOrder.advisorName || repairOrder.assignedAdvisor || "Rachel Smith";
 }
 
+function getRepairOrderPartOrders(repairOrder = {}) {
+  const repairOrderId = String(repairOrder?.id || "");
+  return (currentPartOrders || []).filter((item) => String(item.repairOrderId || "") === repairOrderId);
+}
+
+function getRepairOrderArInvoices(repairOrder = {}) {
+  const repairOrderId = String(repairOrder?.id || "");
+  return (currentAccountsReceivableInvoices || []).filter((item) => String(item.repairOrderId || "") === repairOrderId);
+}
+
+function getRepairOrderApBills(repairOrder = {}) {
+  const repairOrderId = String(repairOrder?.id || "");
+  return (currentAccountsPayableBills || []).filter((item) => String(item.repairOrderId || "") === repairOrderId);
+}
+
+function buildRepairOrderOperationsMarkup(repairOrder = {}) {
+  const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
+  const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
+  return `
+    <div class="customer360-ro-actions" style="margin-top:14px;">
+      <button type="button" class="customer360-toolbar-btn" onclick="addRepairOrderEstimateLine()">Add Estimate</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="addRepairOrderLaborOp()">Dispatch Labor</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="addRepairOrderInspection()">Complete MPI</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="createSpecialPartOrder()">Special Order</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="${technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')"}">${technicianClockedIn ? "Clock Out" : "Clock In"}</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="createAccountsReceivableInvoice()">Post AR</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="createAccountsPayableBill()">Add AP</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="captureTechnicianMedia('repair_order','photo')">Add Media</button>
+      <button type="button" class="customer360-toolbar-btn" onclick="closeActiveRepairOrder()">Close RO</button>
+    </div>
+  `;
+}
+
 function buildRepairOrderSnapshotMarkup(customer, vehicle, repairOrder = {}) {
   const { labor, parts, fees, total, balance, paid } = getRepairOrderAmounts(repairOrder);
   const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
@@ -3243,6 +3292,7 @@ function buildRepairOrderSnapshotMarkup(customer, vehicle, repairOrder = {}) {
         <div class="customer360-ro-kpi"><small>Total</small><strong>${escapeHtml(formatMoney(total))}</strong></div>
         <div class="customer360-ro-kpi"><small>Balance</small><strong>${escapeHtml(formatMoney(balance))}</strong></div>
       </div>
+      ${buildRepairOrderOperationsMarkup(repairOrder)}
     </div>
   `;
 }
@@ -3257,6 +3307,9 @@ function buildRepairOrderDetailSectionsMarkup(repairOrder = {}) {
   const clockEvents = Array.isArray(repairOrder.technicianClockEvents) ? repairOrder.technicianClockEvents : [];
   const accountingEntries = Array.isArray(repairOrder.accountingEntries) ? repairOrder.accountingEntries : [];
   const mediaAssets = getRepairOrderMediaAssets(repairOrder);
+  const partOrders = getRepairOrderPartOrders(repairOrder);
+  const arInvoices = getRepairOrderArInvoices(repairOrder);
+  const apBills = getRepairOrderApBills(repairOrder);
 
   const renderRows = (items, metaBuilder, amountBuilder) => items.length
     ? items.map((item) => {
@@ -3365,6 +3418,45 @@ function buildRepairOrderDetailSectionsMarkup(repairOrder = {}) {
             (item) => ({
               title: `${titleCase(item.entryType || "entry")} • ${item.description || "Accounting entry"}`,
               body: `${titleCase(item.status || "open")} • ${formatDisplayDateTime(item.updatedAtUtc || item.createdAtUtc)}`
+            }),
+            (item) => formatMoney(item.amount || 0)
+          )}
+        </div>
+      </div>
+      <div class="customer360-ro-detail-group">
+        <h4>Special Orders</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            partOrders.slice(0, 4),
+            (item) => ({
+              title: `${item.partNumber || "ORDER"} • ${titleCase(item.orderType || "special_order")}`,
+              body: `${titleCase(item.vendor || "vendor")} • ${titleCase(item.status || "ordered")} • Qty ${item.quantity ?? 1}`
+            }),
+            (item) => formatDisplayDateTime(item.etaAtUtc || item.updatedAtUtc || item.createdAtUtc)
+          )}
+        </div>
+      </div>
+      <div class="customer360-ro-detail-group">
+        <h4>Accounts Receivable</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            arInvoices.slice(0, 4),
+            (item) => ({
+              title: `${item.invoiceNumber || "AR"} • ${titleCase(item.status || "open")}`,
+              body: `${item.customerName || "Customer receivable"} • Due ${formatDisplayDateTime(item.dueAtUtc || item.updatedAtUtc || item.createdAtUtc)}`
+            }),
+            (item) => formatMoney(item.balanceDue || item.amount || 0)
+          )}
+        </div>
+      </div>
+      <div class="customer360-ro-detail-group">
+        <h4>Accounts Payable</h4>
+        <div class="customer360-ro-detail-list">
+          ${renderRows(
+            apBills.slice(0, 4),
+            (item) => ({
+              title: `${item.invoiceNumber || "AP"} • ${titleCase(item.status || "open")}`,
+              body: `${item.vendorName || "Vendor payable"} • Due ${formatDisplayDateTime(item.dueAtUtc || item.updatedAtUtc || item.createdAtUtc)}`
             }),
             (item) => formatMoney(item.amount || 0)
           )}
