@@ -2030,6 +2030,124 @@ function getNextBusinessDateValue() {
   return toLocalDateInputValue(probe);
 }
 
+async function ensureCustomerContext(onReady = null, options = {}) {
+  const existingCustomer = getSelectedCustomerRecord();
+  if (existingCustomer) {
+    if (typeof onReady === "function") {
+      return onReady(existingCustomer);
+    }
+    return existingCustomer;
+  }
+
+  if (!currentCustomers.length) {
+    try {
+      await loadCustomer360();
+    } catch (err) {
+      console.error("ensureCustomerContext loadCustomer360 error:", err);
+    }
+  }
+
+  const loadedCustomer = getSelectedCustomerRecord();
+  if (loadedCustomer) {
+    if (typeof onReady === "function") {
+      return onReady(loadedCustomer);
+    }
+    return loadedCustomer;
+  }
+
+  const availableCustomers = Array.isArray(currentCustomers) ? currentCustomers.slice() : [];
+  if (!availableCustomers.length) {
+    startCreateCustomerRecord();
+    setCustomer360ComposerStatus("Create a customer first, then continue the workflow.", "error");
+    return null;
+  }
+
+  openDmsActionModal({
+    theme: options.theme || "crm",
+    eyebrow: options.eyebrow || "Customer Context",
+    title: options.title || "Select Customer",
+    subtitle: options.subtitle || "Choose the customer record before continuing this DMS action.",
+    submitLabel: options.submitLabel || "Continue",
+    summaryItems: [
+      { label: "Required", value: "Customer record", detail: options.detail || "This action needs an active customer so the record can be saved correctly." },
+      { label: "Available", value: `${availableCustomers.length} customer${availableCustomers.length === 1 ? "" : "s"}`, detail: "Pick one record to continue." }
+    ],
+    notes: [
+      { label: "Dashboard workflow", body: "Department actions can start from the storewide dashboard, but they still need a customer spine before appointments, vehicles, quotes, and ROs can be created." }
+    ],
+    fields: [
+      {
+        name: "customerId",
+        label: "Customer",
+        type: "select",
+        required: true,
+        value: availableCustomers[0]?.id || "",
+        options: availableCustomers.map((customer) => ({
+          value: customer.id,
+          label: `${customerDisplayName(customer)}${customer?.primaryPhone ? ` • ${formatPhonePretty(customer.primaryPhone)}` : ""}`
+        }))
+      }
+    ],
+    onSubmit: async (values) => {
+      selectedCustomerId = values.customerId || "";
+      await refreshSelectedCustomer360();
+      renderCustomer360();
+      const customer = getSelectedCustomerRecord();
+      if (typeof onReady === "function" && customer) {
+        return onReady(customer);
+      }
+      return customer;
+    }
+  });
+  return null;
+}
+
+async function ensureRepairOrderContext(onReady = null, options = {}) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  if (activeRepairOrder) {
+    if (typeof onReady === "function") {
+      return onReady(activeRepairOrder);
+    }
+    return activeRepairOrder;
+  }
+
+  const selectedCustomer = getSelectedCustomerRecord();
+  if (!selectedCustomer) {
+    await ensureCustomerContext(() => ensureRepairOrderContext(onReady, options), {
+      theme: "service",
+      eyebrow: "Repair Order Context",
+      title: options.customerTitle || "Select Customer for RO",
+      subtitle: options.customerSubtitle || "Choose the customer record first, then open or create the repair order.",
+      submitLabel: "Continue to RO",
+      detail: options.customerDetail || "Quotes, labor, parts, and invoices all need a customer + repair order context."
+    });
+    return null;
+  }
+
+  const serviceReception = getActiveServiceReceptionRecord();
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed") || null;
+  openDmsActionModal({
+    theme: options.theme || "service",
+    eyebrow: options.eyebrow || "Repair Order Context",
+    title: options.title || "Open Repair Order First",
+    subtitle: options.subtitle || "This action needs an active repair order. Open one now and then continue the workflow.",
+    submitLabel: serviceReception ? "Open RO from Write-Up" : nextAppointment ? "Open RO from Appointment" : "Open Repair Order",
+    summaryItems: [
+      { label: "Customer", value: customerDisplayName(selectedCustomer), detail: selectedCustomer?.primaryPhone || selectedCustomer?.email || "Selected customer" },
+      { label: "Write-Up", value: serviceReception?.receptionNumber || "No write-up linked", detail: serviceReception ? "Advisor intake is ready to convert." : "You can still open an RO directly." },
+      { label: "Appointment", value: nextAppointment?.service || "No appointment linked", detail: nextAppointment?.date ? `${nextAppointment.date} • ${nextAppointment.time || "Time pending"}` : "No visit is attached yet." }
+    ],
+    notes: [
+      { label: "Required next step", body: options.detail || "The dashboard action you clicked needs a live RO so the record can save against the correct service job." }
+    ],
+    fields: [],
+    onSubmit: async () => {
+      openRepairOrderFrom360();
+    }
+  });
+  return null;
+}
+
 async function createQuickTaskRecord({ assignedDepartment = currentDepartmentLens, title = "", description = "", dueAt = "", assignedUser = "" } = {}) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -3588,7 +3706,17 @@ async function openRepairOrderFrom360(payload = null) {
   const vehicle = getSelectedVehicleRecord();
   const existing = getActiveRepairOrderRecord();
   const serviceReception = getActiveServiceReceptionRecord();
-  if (!customer || existing) {
+  if (!customer) {
+    await ensureCustomerContext(() => openRepairOrderFrom360(payload), {
+      theme: "service",
+      eyebrow: "Repair Order Control",
+      title: "Select Customer for RO",
+      subtitle: "Choose the customer first so the repair order opens on the correct record.",
+      submitLabel: "Continue to RO"
+    });
+    return;
+  }
+  if (existing) {
     if (existing) {
       setCustomer360ComposerStatus(`RO ${existing.repairOrderNumber || "open"} is already active.`, "success");
     }
@@ -3744,7 +3872,13 @@ function sumRepairOrderPartLines(repairOrder = null) {
 async function createServiceQuote(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open an RO before creating a service quote.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "service",
+      eyebrow: "Service Quoting",
+      title: "Open RO Before Service Quote",
+      subtitle: "Service quotes need an active repair order so labor lines save against the right job.",
+      detail: "Open the repair order now, then return to create the quote."
+    });
     return;
   }
 
@@ -3831,7 +3965,12 @@ async function createServiceQuote(payload = null) {
 async function addRepairOrderPartRequest() {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before adding parts.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Request",
+      title: "Open RO Before Adding Parts",
+      subtitle: "Part requests need an active repair order so sourcing work stays tied to the correct job."
+    });
     return;
   }
 
@@ -3863,7 +4002,13 @@ async function addRepairOrderPartRequest() {
 async function createPartsQuote(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open an RO before creating a parts quote.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Open RO Before Parts Quote",
+      subtitle: "Parts quotes need an active repair order so the quoted lines save to the correct job.",
+      detail: "Open the repair order now, then return to quote parts."
+    });
     return;
   }
 
@@ -3953,7 +4098,12 @@ async function createPartsQuote(payload = null) {
 async function addTechnicianClockEvent(eventType = "clock_in") {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before clocking a technician.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "operations",
+      eyebrow: "Technician Dispatch",
+      title: "Open RO Before Clocking",
+      subtitle: "Technician clock events need an active repair order."
+    });
     return;
   }
 
@@ -3983,7 +4133,12 @@ async function addTechnicianClockEvent(eventType = "clock_in") {
 async function addAccountingRepairOrderEntry() {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before posting accounting.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Accounting Entry",
+      title: "Open RO Before Posting",
+      subtitle: "Accounting entries need an active repair order."
+    });
     return;
   }
 
@@ -4013,7 +4168,12 @@ async function addAccountingRepairOrderEntry() {
 async function addRepairOrderLaborOp() {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before dispatching labor.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "operations",
+      eyebrow: "Labor Dispatch",
+      title: "Open RO Before Labor Dispatch",
+      subtitle: "Labor operations need an active repair order."
+    });
     return;
   }
 
@@ -4048,7 +4208,12 @@ async function addRepairOrderLaborOp() {
 async function addRepairOrderInspection() {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before recording MPI items.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "operations",
+      eyebrow: "MPI Workflow",
+      title: "Open RO Before MPI",
+      subtitle: "Inspection items need an active repair order."
+    });
     return;
   }
 
@@ -4081,7 +4246,12 @@ async function addRepairOrderInspection() {
 async function addRepairOrderWarrantyClaim() {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before starting a warranty claim.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "service",
+      eyebrow: "Warranty Claim",
+      title: "Open RO Before Warranty Claim",
+      subtitle: "Warranty claims need an active repair order."
+    });
     return;
   }
 
@@ -4115,7 +4285,12 @@ async function addRepairOrderWarrantyClaim() {
 async function addRepairOrderPaySplit(payType = "customer") {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
-    setCustomer360ComposerStatus("Open a repair order before setting pay splits.", "error");
+    await ensureRepairOrderContext(null, {
+      theme: "service",
+      eyebrow: "Pay Split",
+      title: "Open RO Before Pay Split",
+      subtitle: "Pay splits need an active repair order."
+    });
     return;
   }
 
@@ -4210,6 +4385,15 @@ async function createSpecialPartOrder(payload = null) {
 
 async function createAccountsPayableBill(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder && payload?.__submit) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Accounts Payable",
+      title: "Open RO Before AP Bill",
+      subtitle: "AP bills in this workflow need an active repair order."
+    });
+    return;
+  }
   if (!payload?.__submit) {
     openDmsActionModal({
       theme: "accounting",
@@ -4271,8 +4455,23 @@ async function createAccountsPayableBill(payload = null) {
 async function createAccountsReceivableInvoice(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   const customer = getSelectedCustomerRecord();
-  if (!repairOrder || !customer) {
-    setCustomer360ComposerStatus("Open a repair order before posting an AR invoice.", "error");
+  if (!customer) {
+    await ensureCustomerContext(() => createAccountsReceivableInvoice(payload), {
+      theme: "accounting",
+      eyebrow: "Accounts Receivable",
+      title: "Select Customer for AR Invoice",
+      subtitle: "Choose the customer first so the receivable posts to the correct account.",
+      submitLabel: "Continue to AR"
+    });
+    return;
+  }
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Accounts Receivable",
+      title: "Open RO Before AR Invoice",
+      subtitle: "AR invoices in this workflow need an active repair order."
+    });
     return;
   }
 
@@ -4339,8 +4538,23 @@ async function createAccountsReceivableInvoice(payload = null) {
 async function createServiceInvoice(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   const customer = getSelectedCustomerRecord();
-  if (!repairOrder || !customer) {
-    setCustomer360ComposerStatus("Open an RO before creating a service invoice.", "error");
+  if (!customer) {
+    await ensureCustomerContext(() => createServiceInvoice(payload), {
+      theme: "service",
+      eyebrow: "Service Billing",
+      title: "Select Customer for Service Invoice",
+      subtitle: "Choose the customer record first so the service invoice posts correctly.",
+      submitLabel: "Continue to Billing"
+    });
+    return;
+  }
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "service",
+      eyebrow: "Service Billing",
+      title: "Open RO Before Service Invoice",
+      subtitle: "Service invoices need an active repair order."
+    });
     return;
   }
 
@@ -4416,8 +4630,23 @@ async function createServiceInvoice(payload = null) {
 async function createPartsInvoice(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   const customer = getSelectedCustomerRecord();
-  if (!repairOrder || !customer) {
-    setCustomer360ComposerStatus("Open an RO before creating a parts invoice.", "error");
+  if (!customer) {
+    await ensureCustomerContext(() => createPartsInvoice(payload), {
+      theme: "parts",
+      eyebrow: "Parts Billing",
+      title: "Select Customer for Parts Invoice",
+      subtitle: "Choose the customer record first so the parts invoice posts correctly.",
+      submitLabel: "Continue to Billing"
+    });
+    return;
+  }
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Billing",
+      title: "Open RO Before Parts Invoice",
+      subtitle: "Parts invoices need an active repair order."
+    });
     return;
   }
 
@@ -5984,7 +6213,13 @@ async function startCreateCustomerRecord(payload = null) {
 async function startCreateVehicleRecord(payload = null) {
   const customer = getSelectedCustomerRecord();
   if (!customer) {
-    setCustomer360ComposerStatus("Select or create a customer before adding a vehicle.", "error");
+    await ensureCustomerContext(() => startCreateVehicleRecord(payload), {
+      theme: "crm",
+      eyebrow: "Vehicle Master",
+      title: "Select Customer for Vehicle",
+      subtitle: "Choose the customer record before creating the vehicle file.",
+      submitLabel: "Continue to Vehicle"
+    });
     return;
   }
 
@@ -6044,7 +6279,13 @@ async function startCreateVehicleRecord(payload = null) {
 
 function startDepartmentAppointmentCreate(payload = null) {
   if (!getSelectedCustomerRecord()) {
-    setCustomer360ComposerStatus("Select or create a customer before scheduling an appointment.", "error");
+    ensureCustomerContext(() => startDepartmentAppointmentCreate(payload), {
+      theme: currentDepartmentLens === "sales" ? "crm" : "service",
+      eyebrow: currentDepartmentLens === "sales" ? "Showroom Scheduling" : "Advisor Scheduling",
+      title: currentDepartmentLens === "sales" ? "Select Customer for Visit" : "Select Customer for Appointment",
+      subtitle: "Choose the customer record first so the appointment saves into the right DMS record.",
+      submitLabel: "Continue to Booking"
+    });
     return;
   }
   const defaultService = getDefaultQuickAppointmentService();
@@ -6094,90 +6335,46 @@ function startDepartmentAppointmentCreate(payload = null) {
 }
 
 function startDepartmentRepairOrderCreate() {
-  if (!getSelectedCustomerRecord()) {
-    setCustomer360ComposerStatus("Select or create a customer before opening an RO.", "error");
-    return;
-  }
   openRepairOrderFrom360();
 }
 
 function startDepartmentLaborOpCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before dispatching labor.", "error");
-    return;
-  }
   addRepairOrderLaborOp();
 }
 
 function startDepartmentMpiCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before adding MPI items.", "error");
-    return;
-  }
   addRepairOrderInspection();
 }
 
 function startDepartmentPartCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before adding parts.", "error");
-    return;
-  }
   addRepairOrderPartRequest();
 }
 
 function startServiceQuoteCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before creating a service quote.", "error");
-    return;
-  }
   createServiceQuote();
 }
 
 function startPartsQuoteCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before creating a parts quote.", "error");
-    return;
-  }
   createPartsQuote();
 }
 
 function startDepartmentSpecialOrderCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before placing a special order.", "error");
-    return;
-  }
   createSpecialPartOrder();
 }
 
 function startAccountingReceivableCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before posting AR.", "error");
-    return;
-  }
   createAccountsReceivableInvoice();
 }
 
 function startServiceInvoiceCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before creating a service invoice.", "error");
-    return;
-  }
   createServiceInvoice();
 }
 
 function startPartsInvoiceCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before creating a parts invoice.", "error");
-    return;
-  }
   createPartsInvoice();
 }
 
 function startAccountingPayableCreate() {
-  if (!getActiveRepairOrderRecord()) {
-    setCustomer360ComposerStatus("Open an RO before adding AP.", "error");
-    return;
-  }
   createAccountsPayableBill();
 }
 
