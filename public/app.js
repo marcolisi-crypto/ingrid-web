@@ -3672,7 +3672,7 @@ async function openDepartmentQueueRecord(customerId = "", lens = "home", kind = 
 
 function buildDepartmentQueueSection(title = "", rows = [], emptyCopy = "No queue items.") {
   const sectionKey = `${normalizeDepartmentKey(currentDepartmentLens || "home")}:${String(title || "queue").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  const filters = customer360QueueFilters[sectionKey] || { owner: "all", status: "all" };
+  const filters = customer360QueueFilters[sectionKey] || { owner: "all", status: "all", preset: "all" };
   const ownerOptions = ["all"].concat([...new Set(rows.map((row) => row?.owner).filter(Boolean))]);
   const statusOptions = ["all"].concat([...new Set(rows.map((row) => row?.status).filter(Boolean))]);
   const preferredOwner = getDepartmentQueuePreferredOwner(sectionKey, ownerOptions);
@@ -3680,7 +3680,8 @@ function buildDepartmentQueueSection(title = "", rows = [], emptyCopy = "No queu
   const filteredRows = rows.filter((row) => {
     const ownerMatch = filters.owner === "all" || !filters.owner || (row?.owner || "") === filters.owner;
     const statusMatch = filters.status === "all" || !filters.status || (row?.status || "") === filters.status;
-    return ownerMatch && statusMatch;
+    const presetMatch = matchesDepartmentQueuePreset(row, filters.preset, preferredOwner, focusStatus);
+    return ownerMatch && statusMatch && presetMatch;
   });
   return `
     <div class="customer360-department-queue" data-queue-section="${escapeHtml(sectionKey)}">
@@ -3691,9 +3692,12 @@ function buildDepartmentQueueSection(title = "", rows = [], emptyCopy = "No queu
         </div>
         <div class="customer360-department-queue-filters">
           <div class="customer360-department-queue-presets">
-            <button type="button" class="customer360-department-queue-preset ${filters.owner === "all" && filters.status === "all" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','all','','')">All</button>
-            <button type="button" class="customer360-department-queue-preset ${preferredOwner && filters.owner === preferredOwner ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','mine','${escapeHtml(preferredOwner || "")}','')">Mine</button>
-            <button type="button" class="customer360-department-queue-preset ${focusStatus && filters.status === focusStatus ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','focus','','${escapeHtml(focusStatus || "")}')">Focus</button>
+            <button type="button" class="customer360-department-queue-preset ${filters.preset === "all" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','all','${escapeHtml(preferredOwner || "")}','${escapeHtml(focusStatus || "")}')">All</button>
+            <button type="button" class="customer360-department-queue-preset ${filters.preset === "mine" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','mine','${escapeHtml(preferredOwner || "")}','${escapeHtml(focusStatus || "")}')">Mine</button>
+            <button type="button" class="customer360-department-queue-preset ${filters.preset === "focus" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','focus','${escapeHtml(preferredOwner || "")}','${escapeHtml(focusStatus || "")}')">Focus</button>
+            <button type="button" class="customer360-department-queue-preset ${filters.preset === "overdue" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','overdue','${escapeHtml(preferredOwner || "")}','${escapeHtml(focusStatus || "")}')">Overdue</button>
+            <button type="button" class="customer360-department-queue-preset ${filters.preset === "today" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','today','${escapeHtml(preferredOwner || "")}','${escapeHtml(focusStatus || "")}')">Due Today</button>
+            <button type="button" class="customer360-department-queue-preset ${filters.preset === "unassigned" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','unassigned','${escapeHtml(preferredOwner || "")}','${escapeHtml(focusStatus || "")}')">Unassigned</button>
           </div>
           <select onchange="setDepartmentQueueFilter('${escapeHtml(sectionKey)}','owner',this.value)">
             ${ownerOptions.map((option) => `<option value="${escapeHtml(option)}" ${filters.owner === option ? "selected" : ""}>${escapeHtml(option === "all" ? "All owners" : option)}</option>`).join("")}
@@ -3718,12 +3722,18 @@ function buildDepartmentQueueRow({
   badges = [],
   owner = "",
   status = "",
+  priority = "",
+  dueAt = "",
+  updatedAt = "",
   action = "",
   cta = "Open"
 } = {}) {
   return {
     owner: owner || "",
     status: status || String(badges?.[0] || ""),
+    priority: priority || "",
+    dueAt: dueAt || "",
+    updatedAt: updatedAt || "",
     searchText: [title, meta, customerDisplayName(customer), vehicleDisplayName(vehicle), ...(badges || [])].join(" ").toLowerCase(),
     html: `
     <button type="button" class="customer360-department-queue-row" ${action ? `onclick="${action}"` : ""}>
@@ -3748,9 +3758,30 @@ function buildDepartmentQueueRow({
 
 function setDepartmentQueueFilter(sectionKey = "", field = "owner", value = "all") {
   const next = { ...(customer360QueueFilters || {}) };
-  next[sectionKey] = { ...(next[sectionKey] || { owner: "all", status: "all" }), [field]: value || "all" };
+  next[sectionKey] = { ...(next[sectionKey] || { owner: "all", status: "all", preset: "all" }), [field]: value || "all" };
   saveCustomer360QueueFilters(next);
   renderCustomer360();
+}
+
+function isDepartmentQueueDateToday(value = "") {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+}
+
+function matchesDepartmentQueuePreset(row = {}, preset = "all", preferredOwner = "all", focusStatus = "all") {
+  if (!preset || preset === "all") return true;
+  if (preset === "mine") return preferredOwner && preferredOwner !== "all" ? row.owner === preferredOwner : true;
+  if (preset === "focus") return focusStatus && focusStatus !== "all" ? row.status === focusStatus : true;
+  if (preset === "overdue") return getJourneyArtifactSla(row.dueAt || row.updatedAt).tone === "danger";
+  if (preset === "today") return isDepartmentQueueDateToday(row.dueAt);
+  if (preset === "unassigned") {
+    const owner = String(row.owner || "").toLowerCase();
+    return !owner || owner.includes("queue") || owner.includes("desk");
+  }
+  return true;
 }
 
 function getDepartmentQueuePreferredOwner(sectionKey = "", ownerOptions = []) {
@@ -3785,11 +3816,13 @@ function getDepartmentQueueFocusStatus(title = "", statusOptions = []) {
 function setDepartmentQueuePreset(sectionKey = "", preset = "all", owner = "", status = "") {
   const next = { ...(customer360QueueFilters || {}) };
   if (preset === "mine") {
-    next[sectionKey] = { owner: owner || "all", status: "all" };
+    next[sectionKey] = { owner: owner || "all", status: "all", preset };
   } else if (preset === "focus") {
-    next[sectionKey] = { owner: "all", status: status || "all" };
+    next[sectionKey] = { owner: "all", status: status || "all", preset };
+  } else if (preset === "overdue" || preset === "today" || preset === "unassigned") {
+    next[sectionKey] = { owner: "all", status: "all", preset };
   } else {
-    next[sectionKey] = { owner: "all", status: "all" };
+    next[sectionKey] = { owner: "all", status: "all", preset: "all" };
   }
   saveCustomer360QueueFilters(next);
   renderCustomer360();
@@ -3857,6 +3890,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${formatDisplayDateTime(appointment.startAtUtc || `${appointment.date || ""}T${appointment.time || "00:00"}`)} • ${appointment.advisor || "Advisor queue"}`,
         owner: appointment.advisor || "Advisor queue",
         status: titleCase(appointment.status || "scheduled"),
+        dueAt: appointment.startAtUtc || `${appointment.date || ""}T${appointment.time || "00:00"}`,
+        updatedAt: appointment.updatedAtUtc || appointment.createdAtUtc || "",
         badges: [titleCase(appointment.status || "scheduled"), appointment.transport || "Standard"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(appointment.customerId || ""))}','service','appointments','${escapeHtml(String(appointment.id || appointment.appointmentId || ""))}')`,
         cta: "Open Visit"
@@ -3874,6 +3909,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${appointment.time || "Time pending"} • ${appointment.advisor || "Advisor queue"}`,
         owner: appointment.advisor || "Advisor queue",
         status: "Tomorrow",
+        dueAt: appointment.startAtUtc || `${appointment.date || ""}T${appointment.time || "00:00"}`,
+        updatedAt: appointment.updatedAtUtc || appointment.createdAtUtc || "",
         badges: ["Tomorrow", appointment.transport || "Standard"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(appointment.customerId || ""))}','service','appointments','${escapeHtml(String(appointment.id || appointment.appointmentId || ""))}')`,
         cta: "Open Tomorrow"
@@ -3894,6 +3931,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${getRepairOrderAdvisorName(repairOrder)} • Promise ${formatDisplayDateTime(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc || repairOrder.createdAtUtc)}`,
         owner: getRepairOrderAdvisorName(repairOrder),
         status: titleCase(repairOrder.status || "open"),
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: repairOrder.updatedAtUtc || repairOrder.createdAtUtc || "",
         badges: [titleCase(repairOrder.status || "open"), formatMoney(amounts.balance || 0)],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
         cta: "Open RO"
@@ -3913,6 +3952,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${latestLabor?.technicianName || "Tech queue"} • ${latestLabor?.dispatchStatus ? titleCase(latestLabor.dispatchStatus) : "Awaiting dispatch"}`,
         owner: latestLabor?.technicianName || "Tech queue",
         status: latestLabor?.dispatchStatus ? titleCase(latestLabor.dispatchStatus) : "Awaiting dispatch",
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: latestLabor?.updatedAtUtc || latestLabor?.createdAtUtc || repairOrder.updatedAtUtc || "",
         badges: [`MPI ${(repairOrder.multiPointInspections || []).length}`, latestLabor?.technicianName || "Queue"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','technicians')`,
         cta: "Open Job"
@@ -3932,6 +3973,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${specialOrders.length} special order${specialOrders.length === 1 ? "" : "s"} • ${formatMoney(getRepairOrderAmounts(repairOrder).parts || 0)} parts`,
         owner: "Parts Queue",
         status: specialOrders[0]?.status ? titleCase(specialOrders[0].status) : "Stock",
+        updatedAt: specialOrders[0]?.updatedAtUtc || specialOrders[0]?.createdAtUtc || repairOrder.updatedAtUtc || "",
         badges: [specialOrders[0]?.status ? titleCase(specialOrders[0].status) : "Stock", specialOrders[0]?.partNumber || "RO parts"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','parts')`,
         cta: "Open Parts"
@@ -3951,6 +3993,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${reviewTask?.assignedUser || "Accounting queue"} • ${(repairOrder.accountingEntries || []).length} entries posted`,
         owner: reviewTask?.assignedUser || "Accounting queue",
         status: reviewTask ? "Review live" : "Needs review",
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        priority: reviewTask?.priority || "high",
+        updatedAt: reviewTask?.updatedAtUtc || reviewTask?.createdAtUtc || repairOrder.updatedAtUtc || "",
         badges: [reviewTask ? "Review live" : "Needs review", titleCase(repairOrder.status || "open")],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','accounting')`,
         cta: "Open Review"
@@ -3969,6 +4014,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${(repairOrder.estimateLines || []).length} estimate lines • ${formatMoney(getRepairOrderAmounts(repairOrder).balance)} pending`,
         owner: getRepairOrderAdvisorName(repairOrder),
         status: "Waiting approval",
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: repairOrder.updatedAtUtc || repairOrder.createdAtUtc || "",
         badges: [getRepairOrderAdvisorName(repairOrder), getJourneyArtifactSla(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc).label],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
         cta: "Open Approval"
@@ -3990,6 +4037,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${task.assignedUser || "Service queue"} • ${task.description || "Transport workflow"}`,
         owner: task.assignedUser || "Service queue",
         status: titleCase(task.priority || "normal"),
+        dueAt: task.dueAtUtc || "",
+        priority: task.priority || "",
+        updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
         badges: [titleCase(task.priority || "normal"), getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
         action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','service','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
         cta: "Open Transport"
@@ -4013,6 +4063,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${liveOrders.length} order${liveOrders.length === 1 ? "" : "s"} • ETA ${formatDisplayDateTime(liveOrders[0]?.etaAtUtc || liveOrders[0]?.updatedAtUtc || liveOrders[0]?.createdAtUtc)}`,
         owner: latestLabor?.technicianName || "Tech queue",
         status: liveOrders[0]?.status ? titleCase(liveOrders[0].status) : "Ordered",
+        dueAt: liveOrders[0]?.etaAtUtc || getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: liveOrders[0]?.updatedAtUtc || liveOrders[0]?.createdAtUtc || "",
         badges: [liveOrders[0]?.partNumber || "Parts", liveOrders[0]?.status ? titleCase(liveOrders[0].status) : "Ordered"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','technicians')`,
         cta: "Open Job"
@@ -4032,6 +4084,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${flagged.length} MPI item${flagged.length === 1 ? "" : "s"} need advisor decision`,
         owner: flagged[0]?.technicianName || "Tech queue",
         status: "Waiting approval",
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: flagged[0]?.updatedAtUtc || flagged[0]?.createdAtUtc || repairOrder.updatedAtUtc || "",
         badges: [flagged[0]?.result ? titleCase(flagged[0].result) : "Flagged", flagged[0]?.technicianName || "Tech"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','technicians')`,
         cta: "Open MPI"
@@ -4051,6 +4105,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${titleCase(order.vendor || "vendor")} • ETA ${formatDisplayDateTime(order.etaAtUtc || order.updatedAtUtc || order.createdAtUtc)}`,
         owner: "Parts Queue",
         status: titleCase(order.status || "ordered"),
+        dueAt: order.etaAtUtc || "",
+        updatedAt: order.updatedAtUtc || order.createdAtUtc || "",
         badges: [titleCase(order.status || "ordered"), repairOrder?.repairOrderNumber || "RO"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','parts')`,
         cta: "Open Order"
@@ -4070,6 +4126,8 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${titleCase(order.status || "arrived")} • ${repairOrder?.repairOrderNumber || "RO queue"}`,
         owner: "Parts Queue",
         status: titleCase(order.status || "arrived"),
+        dueAt: order.etaAtUtc || "",
+        updatedAt: order.updatedAtUtc || order.createdAtUtc || "",
         badges: [titleCase(order.vendor || "vendor"), "Deliver to bay"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','parts')`,
         cta: "Open Delivery"
@@ -4088,6 +4146,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${formatMoney(getRepairOrderAmounts(repairOrder).balance)} due • ${getRepairOrderAdvisorName(repairOrder)}`,
         owner: getRepairOrderAccountingReviewTask(repairOrder)?.assignedUser || "Accounting queue",
         status: titleCase(repairOrder.status || "open"),
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        priority: "high",
+        updatedAt: repairOrder.updatedAtUtc || repairOrder.createdAtUtc || "",
         badges: [titleCase(repairOrder.status || "open"), getJourneyArtifactSla(getRepairOrderPromisedAt(repairOrder) || repairOrder.updatedAtUtc).label],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','accounting')`,
         cta: "Open Balance"
@@ -4109,6 +4170,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${formatMoney(invoice.balanceDue || invoice.amount || 0)} • Due ${formatDisplayDateTime(invoice.dueAtUtc || invoice.updatedAtUtc || invoice.createdAtUtc)}`,
         owner: "Accounting queue",
         status: titleCase(invoice.status || "open"),
+        dueAt: invoice.dueAtUtc || "",
+        priority: "high",
+        updatedAt: invoice.updatedAtUtc || invoice.createdAtUtc || "",
         badges: [titleCase(invoice.status || "open"), getJourneyArtifactSla(invoice.dueAtUtc || invoice.updatedAtUtc || invoice.createdAtUtc).label],
         action: `openDepartmentQueueRecord('${escapeHtml(String((invoice.customerId || repairOrder?.customerId || "")))}','accounting')`,
         cta: "Open AR"
@@ -4130,6 +4194,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         meta: `${formatMoney(bill.amount || 0)} • Due ${formatDisplayDateTime(bill.dueAtUtc || bill.updatedAtUtc || bill.createdAtUtc)}`,
         owner: "Accounting queue",
         status: titleCase(bill.status || "open"),
+        dueAt: bill.dueAtUtc || "",
+        priority: "high",
+        updatedAt: bill.updatedAtUtc || bill.createdAtUtc || "",
         badges: [titleCase(bill.status || "open"), bill.vendorName || "Vendor"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','accounting')`,
         cta: "Open AP"
@@ -4262,6 +4329,11 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
           vehicle: rowVehicle,
           title: task.title || "BDC follow-up",
           meta: `${task.assignedUser || "BDC queue"} • ${task.description || "Follow-up task"}`,
+          owner: task.assignedUser || "BDC queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          priority: task.priority || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
           badges: [titleCase(task.priority || "normal"), titleCase(task.status || "open")],
           action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','bdc','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
           cta: "Open Task"
@@ -4277,6 +4349,11 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
           vehicle: rowVehicle,
           title: task.title || "Sales task",
           meta: `${task.assignedUser || "Sales queue"} • ${task.description || "Deal workflow"}`,
+          owner: task.assignedUser || "Sales queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          priority: task.priority || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
           badges: [titleCase(task.priority || "normal"), titleCase(task.status || "open")],
           action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','sales','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
           cta: "Open Deal"
@@ -4293,6 +4370,11 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
           vehicle: rowVehicle,
           title: task.title || "F&I task",
           meta: `${task.assignedUser || "F&I queue"} • ${task.description || "Finance workflow"}`,
+          owner: task.assignedUser || "F&I queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          priority: task.priority || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
           badges: [titleCase(task.priority || "normal"), titleCase(task.status || "open")],
           action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','fi','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
           cta: "Open Review"
