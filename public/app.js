@@ -3675,6 +3675,8 @@ function buildDepartmentQueueSection(title = "", rows = [], emptyCopy = "No queu
   const filters = customer360QueueFilters[sectionKey] || { owner: "all", status: "all" };
   const ownerOptions = ["all"].concat([...new Set(rows.map((row) => row?.owner).filter(Boolean))]);
   const statusOptions = ["all"].concat([...new Set(rows.map((row) => row?.status).filter(Boolean))]);
+  const preferredOwner = getDepartmentQueuePreferredOwner(sectionKey, ownerOptions);
+  const focusStatus = getDepartmentQueueFocusStatus(title, statusOptions);
   const filteredRows = rows.filter((row) => {
     const ownerMatch = filters.owner === "all" || !filters.owner || (row?.owner || "") === filters.owner;
     const statusMatch = filters.status === "all" || !filters.status || (row?.status || "") === filters.status;
@@ -3688,6 +3690,11 @@ function buildDepartmentQueueSection(title = "", rows = [], emptyCopy = "No queu
           <span>${escapeHtml(rows.length ? `${rows.length} live` : "0 live")}</span>
         </div>
         <div class="customer360-department-queue-filters">
+          <div class="customer360-department-queue-presets">
+            <button type="button" class="customer360-department-queue-preset ${filters.owner === "all" && filters.status === "all" ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','all','','')">All</button>
+            <button type="button" class="customer360-department-queue-preset ${preferredOwner && filters.owner === preferredOwner ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','mine','${escapeHtml(preferredOwner || "")}','')">Mine</button>
+            <button type="button" class="customer360-department-queue-preset ${focusStatus && filters.status === focusStatus ? "active" : ""}" onclick="setDepartmentQueuePreset('${escapeHtml(sectionKey)}','focus','','${escapeHtml(focusStatus || "")}')">Focus</button>
+          </div>
           <select onchange="setDepartmentQueueFilter('${escapeHtml(sectionKey)}','owner',this.value)">
             ${ownerOptions.map((option) => `<option value="${escapeHtml(option)}" ${filters.owner === option ? "selected" : ""}>${escapeHtml(option === "all" ? "All owners" : option)}</option>`).join("")}
           </select>
@@ -3742,6 +3749,48 @@ function buildDepartmentQueueRow({
 function setDepartmentQueueFilter(sectionKey = "", field = "owner", value = "all") {
   const next = { ...(customer360QueueFilters || {}) };
   next[sectionKey] = { ...(next[sectionKey] || { owner: "all", status: "all" }), [field]: value || "all" };
+  saveCustomer360QueueFilters(next);
+  renderCustomer360();
+}
+
+function getDepartmentQueuePreferredOwner(sectionKey = "", ownerOptions = []) {
+  const lensDepartment = normalizeDepartmentKey(String(sectionKey || "").split(":")[0] || currentDepartmentLens);
+  const currentOwner = customer360TaskQueueOwners[lensDepartment];
+  if (currentOwner && ownerOptions.includes(currentOwner)) return currentOwner;
+  const rosterMatch = getDepartmentRoster(lensDepartment).find((name) => ownerOptions.includes(name));
+  if (rosterMatch) return rosterMatch;
+  return ownerOptions.find((name) => name && name !== "all" && !String(name).toLowerCase().includes("queue") && !String(name).toLowerCase().includes("desk")) || "all";
+}
+
+function getDepartmentQueueFocusStatus(title = "", statusOptions = []) {
+  const titleKey = String(title || "").toLowerCase();
+  const preferredOrder = [
+    "Overdue",
+    "Attention",
+    "Waiting approval",
+    "Needs review",
+    "Awaiting dispatch",
+    "Ordered",
+    "Tomorrow",
+    "Scheduled",
+    "Open"
+  ];
+  if (titleKey.includes("approval")) return statusOptions.find((item) => String(item).toLowerCase() === "waiting approval") || statusOptions.find((item) => item !== "all") || "all";
+  if (titleKey.includes("transport")) return statusOptions.find((item) => String(item).toLowerCase() === "attention") || statusOptions.find((item) => item !== "all") || "all";
+  if (titleKey.includes("special order")) return statusOptions.find((item) => String(item).toLowerCase() === "ordered") || statusOptions.find((item) => item !== "all") || "all";
+  if (titleKey.includes("ar") || titleKey.includes("ap") || titleKey.includes("balance")) return statusOptions.find((item) => String(item).toLowerCase() === "open") || statusOptions.find((item) => item !== "all") || "all";
+  return preferredOrder.find((candidate) => statusOptions.includes(candidate)) || statusOptions.find((item) => item !== "all") || "all";
+}
+
+function setDepartmentQueuePreset(sectionKey = "", preset = "all", owner = "", status = "") {
+  const next = { ...(customer360QueueFilters || {}) };
+  if (preset === "mine") {
+    next[sectionKey] = { owner: owner || "all", status: "all" };
+  } else if (preset === "focus") {
+    next[sectionKey] = { owner: "all", status: status || "all" };
+  } else {
+    next[sectionKey] = { owner: "all", status: "all" };
+  }
   saveCustomer360QueueFilters(next);
   renderCustomer360();
 }
