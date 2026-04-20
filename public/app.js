@@ -4833,6 +4833,17 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         cta: "Open RO"
       });
     });
+  const serviceOwnerOptions = ["all"].concat([...new Set(serviceReceptionRows.concat(upcomingServiceRows, openRoRows).map((row) => row?.owner).filter(Boolean))]);
+  const preferredServiceOwner = getDepartmentQueuePreferredOwner("service:dashboard", serviceOwnerOptions);
+  const myServiceReceptionRows = preferredServiceOwner && preferredServiceOwner !== "all"
+    ? serviceReceptionRows.filter((row) => row.owner === preferredServiceOwner)
+    : [];
+  const myUpcomingServiceRows = preferredServiceOwner && preferredServiceOwner !== "all"
+    ? upcomingServiceRows.filter((row) => row.owner === preferredServiceOwner)
+    : [];
+  const myOpenRoRows = preferredServiceOwner && preferredServiceOwner !== "all"
+    ? openRoRows.filter((row) => row.owner === preferredServiceOwner)
+    : [];
   const technicianQueueRows = allRepairOrders
     .filter((repairOrder) => (repairOrder.laborOps || []).length || (repairOrder.multiPointInspections || []).length)
     .slice(0, 8)
@@ -5118,10 +5129,10 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       title: "Service Dashboard",
       copy: "Advisor tools and live fixed-ops state across the store.",
       cards: [
+        { label: "My Queue", value: `${myServiceReceptionRows.length + myUpcomingServiceRows.length + myOpenRoRows.length}`, meta: preferredServiceOwner && preferredServiceOwner !== "all" ? `${preferredServiceOwner} personal advisor queue.` : "Pick an advisor in the queue filters to personalize this board.", tone: myServiceReceptionRows.length + myUpcomingServiceRows.length + myOpenRoRows.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: preferredServiceOwner && preferredServiceOwner !== "all" ? "View My Queue" : "Set Advisor" },
         { label: "Write-Ups", value: `${allServiceReceptions.length}`, meta: serviceReceptionRows[0] ? "Advisor write-ups are waiting to convert into live ROs." : "No advisor write-ups waiting", tone: allServiceReceptions.length ? "warn" : "good", action: "setDepartmentLens('service')", cta: allServiceReceptions.length ? "View Write-Ups" : "Create Write-Up" },
         { label: "Open ROs", value: `${allRepairOrders.length}`, meta: openRoRows[0] ? "Every open repair order is available below." : "No open repair order yet", tone: allRepairOrders.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "View Open ROs" },
         { label: "Appointments", value: `${allAppointments.length}`, meta: upcomingServiceRows[0] ? "Storewide advisor appointment queue." : "No service visit booked", tone: allAppointments.length ? "good" : "warn", action: "setDepartmentLens('service')", cta: "View Appointments" },
-        { label: "Tomorrow", value: `${tomorrowAppointments.length}`, meta: tomorrowServiceRows[0] ? "Tomorrow's drive opens are below." : "No appointments booked for tomorrow", tone: tomorrowAppointments.length ? "info" : "good", action: "setDepartmentLens('service')", cta: "View Tomorrow" },
         { label: "Open Balance", value: formatMoney(totalOpenRoBalance || 0), meta: `${totalArInvoices} AR invoice(s) and ${totalApBills} AP bill(s) linked`, tone: totalOpenRoBalance > 0 ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting" }
       ]
     },
@@ -5193,6 +5204,9 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       buildDepartmentQueueSection("Open Repair Orders", openRoRows, "No open repair orders across the store.")
     ],
     service: [
+      buildDepartmentQueueSection(`My Write-Ups${preferredServiceOwner && preferredServiceOwner !== "all" ? ` • ${preferredServiceOwner}` : ""}`, myServiceReceptionRows, "No active advisor write-ups in your queue."),
+      buildDepartmentQueueSection(`My Appointments${preferredServiceOwner && preferredServiceOwner !== "all" ? ` • ${preferredServiceOwner}` : ""}`, myUpcomingServiceRows, "No booked advisor appointments in your queue."),
+      buildDepartmentQueueSection(`My Open ROs${preferredServiceOwner && preferredServiceOwner !== "all" ? ` • ${preferredServiceOwner}` : ""}`, myOpenRoRows, "No open repair orders in your advisor queue."),
       buildDepartmentQueueSection("Write-Ups Waiting", serviceReceptionRows, "No service write-ups are waiting to open into an RO."),
       buildDepartmentQueueSection("All Upcoming Appointments", upcomingServiceRows, "No service appointments scheduled."),
       buildDepartmentQueueSection("Tomorrow's Appointments", tomorrowServiceRows, "No appointments booked for tomorrow."),
