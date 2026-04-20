@@ -32,7 +32,11 @@ export default async (req) => {
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
-      body: JSON.stringify({ status: body.status || "completed" })
+      body: JSON.stringify({
+        status: body.status || "completed",
+        assignedDepartment: body.assignedDepartment || "",
+        assignedUser: body.assignedUser || ""
+      })
     });
 
     const rawText = await apiRes.text();

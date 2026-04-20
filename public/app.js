@@ -34,6 +34,7 @@ let currentJourneyFeedbackStage = "";
 let currentJourneyFeedbackTimer = null;
 let customer360AssigneeMap = JSON.parse(localStorage.getItem("customer360Assignees") || "{}");
 let currentManagerQueueSort = localStorage.getItem("customer360ManagerQueueSort") || "urgent";
+let customer360TaskQueueOwners = JSON.parse(localStorage.getItem("customer360TaskQueueOwners") || "{}");
 
 const JOURNEY_ASSIGNEE_DIRECTORY = {
   bdc: ["Rachel Smith", "Nicole Adams", "BDC Queue"],
@@ -45,6 +46,33 @@ const JOURNEY_ASSIGNEE_DIRECTORY = {
   parts: ["Marcus Reed", "Inventory Desk", "Runner Dispatch"],
   accounting: ["Priya Shah", "Back Office", "Finance Desk"]
 };
+
+function normalizeDepartmentKey(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "f&i" || normalized === "fi" || normalized === "finance") return "fi";
+  if (normalized === "service advisor") return "service";
+  if (normalized === "technician") return "technicians";
+  return normalized;
+}
+
+function getDepartmentRoster(department = "") {
+  return JOURNEY_ASSIGNEE_DIRECTORY[normalizeDepartmentKey(department)] || [];
+}
+
+function saveCustomer360TaskQueueOwners(map) {
+  customer360TaskQueueOwners = map || {};
+  localStorage.setItem("customer360TaskQueueOwners", JSON.stringify(customer360TaskQueueOwners));
+}
+
+function getTaskAssignedDepartment(task = {}) {
+  const explicit = normalizeDepartmentKey(task.assignedDepartment || "");
+  if (explicit) return explicit;
+  return normalizeDepartmentKey(inferJourneyHandoffTarget(task.title || "", task.description || "") || "");
+}
+
+function getTaskAssignedUser(task = {}) {
+  return String(task.assignedUser || "").trim();
+}
 
 const DEPARTMENT_LENSES = {
   home: { name: "DMS Home", copy: "Customer + Vehicle 360 remains the core operating screen for every department.", summaryTitle: "AI Summary", timelineLabel: "All departments", actions: ["New Deal", "Create Appointment", "Add Note"], dashboardTitle: "Customer 360° Dashboard", lensPanelTitle: "Work Queue", primaryPanelTitle: "Tasks", secondaryPanelTitle: "Notes", railTitle: "Service + Loaner", archiveTitle: "VIN Archive", defaultFilter: "all", composerMode: "note" },
@@ -5312,8 +5340,11 @@ function seedCustomer360ComposerDefaults() {
   const serviceSelect = document.getElementById("customer360AppointmentService");
   const taskTitle = document.getElementById("customer360TaskTitle");
   const taskDue = document.getElementById("customer360TaskDueAt");
+  const taskDepartment = document.getElementById("customer360TaskDepartment");
+  const taskUser = document.getElementById("customer360TaskAssignedUser");
 
   hydrateCustomer360AppointmentFields();
+  hydrateCustomer360TaskAssignmentFields();
 
   if (dateInput && !dateInput.value) {
     dateInput.value = toDateInputValue(addDays(new Date(), 1));
@@ -5334,6 +5365,74 @@ function seedCustomer360ComposerDefaults() {
   if (taskDue && !taskDue.value) {
     taskDue.value = toLocalDateInputValue(addDays(new Date(), 1));
   }
+
+  if (taskDepartment && !taskDepartment.value) {
+    taskDepartment.value = currentDepartmentLens === "home" ? "service" : normalizeDepartmentKey(currentDepartmentLens);
+  }
+
+  hydrateCustomer360TaskAssignmentFields(taskDepartment?.value || currentDepartmentLens);
+
+  if (taskUser && !taskUser.value) {
+    const roster = getDepartmentRoster(taskDepartment?.value || currentDepartmentLens);
+    taskUser.value = roster[0] || "";
+  }
+}
+
+function hydrateCustomer360TaskAssignmentFields(department = currentDepartmentLens) {
+  const taskDepartment = document.getElementById("customer360TaskDepartment");
+  const taskUser = document.getElementById("customer360TaskAssignedUser");
+  if (!taskDepartment || !taskUser) return;
+
+  const targetDepartment = normalizeDepartmentKey(taskDepartment.value || department || currentDepartmentLens || "service") || "service";
+  const previousDepartment = taskDepartment.value;
+  const previousUser = taskUser.value;
+
+  if (!taskDepartment.options.length) {
+    ["service", "bdc", "sales", "technicians", "fi", "parts", "accounting"].forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item;
+      option.textContent = DEPARTMENT_LENSES[item]?.name || titleCase(item);
+      taskDepartment.appendChild(option);
+    });
+  }
+
+  taskDepartment.value = normalizeDepartmentKey(previousDepartment || targetDepartment) || "service";
+  taskUser.innerHTML = `<option value="">Department queue</option>`;
+  getDepartmentRoster(taskDepartment.value).forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    taskUser.appendChild(option);
+  });
+  taskUser.value = previousUser || customer360TaskQueueOwners[taskDepartment.value] || "";
+}
+
+function setCustomer360TaskQueueOwner(department = currentDepartmentLens, owner = "") {
+  const normalizedDepartment = normalizeDepartmentKey(department);
+  const next = { ...customer360TaskQueueOwners, [normalizedDepartment]: owner };
+  saveCustomer360TaskQueueOwners(next);
+  renderCustomer360Detail();
+}
+
+function buildDepartmentTaskQueueToolbar(department = currentDepartmentLens, tasks = []) {
+  const normalizedDepartment = normalizeDepartmentKey(department);
+  const roster = getDepartmentRoster(normalizedDepartment);
+  const selectedOwner = customer360TaskQueueOwners[normalizedDepartment] || "";
+  const visibleTasks = selectedOwner
+    ? tasks.filter((task) => getTaskAssignedUser(task) === selectedOwner)
+    : tasks;
+  return `
+    <div class="customer360-panel-item" style="align-items:center;">
+      <div>
+        <strong>${escapeHtml((DEPARTMENT_LENSES[normalizedDepartment]?.name || titleCase(normalizedDepartment)) + " To-Do List")}</strong>
+        <div class="customer360-meta">${escapeHtml(selectedOwner ? `${selectedOwner} has ${visibleTasks.length} assigned task${visibleTasks.length === 1 ? "" : "s"}.` : `Showing the full ${DEPARTMENT_LENSES[normalizedDepartment]?.name || titleCase(normalizedDepartment)} queue.`)}</div>
+      </div>
+      <select class="customer360-panel-action" onchange="setCustomer360TaskQueueOwner('${escapeHtml(normalizedDepartment)}', this.value)">
+        <option value="" ${selectedOwner ? "" : "selected"}>All users</option>
+        ${roster.map((name) => `<option value="${escapeHtml(name)}" ${selectedOwner === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}
+      </select>
+    </div>
+  `;
 }
 
 function setCustomer360ComposerStatus(message = "", tone = "default") {
@@ -5371,6 +5470,7 @@ function inferComposerModeFromActionLabel(label = "") {
 
 function initCustomer360Composer() {
   hydrateCustomer360AppointmentFields();
+  hydrateCustomer360TaskAssignmentFields();
   setCustomer360ComposerMode(currentCustomer360ComposerMode);
 
   document.querySelectorAll("[data-composer-mode]").forEach((button) => {
@@ -5386,6 +5486,9 @@ function initCustomer360Composer() {
   });
 
   document.getElementById("customer360ComposerSubmit")?.addEventListener("click", submitCustomer360Composer);
+  document.getElementById("customer360TaskDepartment")?.addEventListener("change", (event) => {
+    hydrateCustomer360TaskAssignmentFields(event.target?.value || currentDepartmentLens);
+  });
 }
 
 function renderCustomer360Timeline() {
@@ -5523,6 +5626,8 @@ async function createCustomer360Task() {
   const vehicle = getSelectedVehicleRecord();
   const body = stampJourneyArtifact(getValue("customer360ComposerBody").trim());
   const title = stampJourneyArtifact(getValue("customer360TaskTitle").trim());
+  const assignedDepartment = normalizeDepartmentKey(getValue("customer360TaskDepartment") || currentDepartmentLens || "service");
+  const assignedUser = getValue("customer360TaskAssignedUser").trim();
   if (!customer) throw new Error("Select a customer before creating a task.");
 
   const res = await fetch("/.netlify/functions/tasks-create", {
@@ -5531,6 +5636,8 @@ async function createCustomer360Task() {
     body: JSON.stringify({
       customerId: customer.id,
       vehicleId: vehicle?.id || null,
+      assignedDepartment,
+      assignedUser,
       title: title || "Customer follow-up",
       description: body,
       priority: "normal",
@@ -5579,13 +5686,15 @@ async function createCustomer360Appointment() {
   return data;
 }
 
-async function createAutomaticJourneyTask({ customer, vehicle, title, description, dueAtUtc = null }) {
+async function createAutomaticJourneyTask({ customer, vehicle, title, description, dueAtUtc = null, assignedDepartment = "", assignedUser = "" }) {
   const res = await fetch("/.netlify/functions/tasks-create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       customerId: customer.id,
       vehicleId: vehicle?.id || null,
+      assignedDepartment,
+      assignedUser,
       title,
       description,
       priority: "normal",
@@ -5699,6 +5808,8 @@ async function maybeCreateAutomaticJourneyHandoff({ mode = "note", lens = "home"
   await createAutomaticJourneyTask({
     customer,
     vehicle,
+    assignedDepartment: target,
+    assignedUser: getDepartmentRoster(target)[0] || "",
     title: payload.title,
     description: payload.description,
     dueAtUtc: payload.dueAtUtc
@@ -6326,14 +6437,40 @@ function renderCustomer360Detail() {
   }
 
   if (tasksBoardEl) {
+    const lensDepartment = normalizeDepartmentKey(currentDepartmentLens);
+    const selectedOwner = customer360TaskQueueOwners[lensDepartment] || "";
+    const departmentTasks = ["service", "bdc", "sales", "technicians", "fi", "parts", "accounting"].includes(lensDepartment)
+      ? openTasks.filter((task) => {
+          const taskDepartment = getTaskAssignedDepartment(task);
+          const departmentMatches = taskDepartment ? taskDepartment === lensDepartment : true;
+          const ownerMatches = selectedOwner ? getTaskAssignedUser(task) === selectedOwner : true;
+          return departmentMatches && ownerMatches;
+        })
+      : openTasks;
     if (currentDepartmentLens === "service") {
-      tasksBoardEl.innerHTML = buildServiceAdvisorTasksMarkup(openTasks, appointments, vehicle);
+      tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar("service", departmentTasks) + buildServiceAdvisorTasksMarkup(departmentTasks, appointments, vehicle);
     } else if (currentDepartmentLens === "technicians") {
-      tasksBoardEl.innerHTML = buildTechnicianTasksMarkup(openTasks, vehicle);
+      tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar("technicians", departmentTasks) + buildTechnicianTasksMarkup(departmentTasks, vehicle);
     } else if (currentDepartmentLens === "parts") {
-      tasksBoardEl.innerHTML = buildPartsTasksMarkup(openTasks, appointments, vehicle);
+      tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar("parts", departmentTasks) + buildPartsTasksMarkup(departmentTasks, appointments, vehicle);
     } else if (currentDepartmentLens === "accounting") {
-      tasksBoardEl.innerHTML = buildAccountingTasksMarkup(openTasks, vehicle);
+      tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar("accounting", departmentTasks) + buildAccountingTasksMarkup(departmentTasks, vehicle);
+    } else if (currentDepartmentLens === "bdc" || currentDepartmentLens === "sales" || currentDepartmentLens === "fi") {
+      const lensTasks = departmentTasks.slice(0, 3);
+      const emptyTaskCopy = currentDepartmentLens === "bdc"
+        ? "No BDC follow-ups queued yet."
+        : currentDepartmentLens === "sales"
+        ? "No deal tasks linked yet."
+        : "No F&I tasks linked yet.";
+      tasksBoardEl.innerHTML = buildDepartmentTaskQueueToolbar(currentDepartmentLens, departmentTasks) + (lensTasks.length ? lensTasks.map((task) => `
+        <div class="customer360-panel-item">
+          <div>
+            <span>${escapeHtml(task.title || "Task")}</span>
+            <div class="customer360-meta">${escapeHtml((task.assignedUser ? `${task.assignedUser} • ` : "") + (task.description || "Open task"))}</div>
+          </div>
+          <button class="customer360-panel-action" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(task.id || task.taskId || task.createdAtUtc || task.title || ""))}','${escapeHtml(String(currentDepartmentLens || "home"))}')">Open</button>
+        </div>
+      `).join("") : `<div class="customer360-empty">${emptyTaskCopy}</div>`);
     } else {
     const lensTasks = currentDepartmentLens === "sales"
       ? [...openTasks, ...tasks.filter((task) => String(task.status || "").toLowerCase() === "completed")].slice(0, 3)
@@ -8414,6 +8551,8 @@ async function createTask() {
     const payload = {
       title: getValue("taskTitle"),
       description: getValue("taskDescription"),
+      assignedDepartment: normalizeDepartmentKey(getValue("taskDepartment") || "service"),
+      assignedUser: getValue("taskAssignedUser"),
       priority: getValue("taskPriority"),
       dueAtUtc: getValue("taskDueAt") ? new Date(getValue("taskDueAt")).toISOString() : null,
     };
@@ -8438,6 +8577,33 @@ async function createTask() {
     console.error("createTask error:", err);
     if (status) status.textContent = err.message || "Create failed";
   }
+}
+
+function hydrateStandaloneTaskAssignmentFields(department = "service") {
+  const departmentEl = document.getElementById("taskDepartment");
+  const userEl = document.getElementById("taskAssignedUser");
+  if (!departmentEl || !userEl) return;
+
+  if (!departmentEl.options.length) {
+    ["service", "bdc", "sales", "technicians", "fi", "parts", "accounting"].forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item;
+      option.textContent = DEPARTMENT_LENSES[item]?.name || titleCase(item);
+      departmentEl.appendChild(option);
+    });
+  }
+
+  const normalizedDepartment = normalizeDepartmentKey(departmentEl.value || department) || "service";
+  departmentEl.value = normalizedDepartment;
+  const previousUser = userEl.value;
+  userEl.innerHTML = `<option value="">Department queue</option>`;
+  getDepartmentRoster(normalizedDepartment).forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    userEl.appendChild(option);
+  });
+  userEl.value = previousUser || "";
 }
 
 async function completeTask(taskId) {
@@ -9334,6 +9500,10 @@ document.getElementById("composeCustomerSearch")?.addEventListener("input", sear
   document.getElementById("bookAppointmentBtn")?.addEventListener("click", bookAppointment);
   document.getElementById("refreshSchedulerBoardBtn")?.addEventListener("click", loadSchedulerBoard);
   document.getElementById("createTaskBtn")?.addEventListener("click", createTask);
+  hydrateStandaloneTaskAssignmentFields("service");
+  document.getElementById("taskDepartment")?.addEventListener("change", (event) => {
+    hydrateStandaloneTaskAssignmentFields(event.target?.value || "service");
+  });
   document.getElementById("refreshTasksBtn")?.addEventListener("click", loadTasks);
 
   document.getElementById("addUserBtn")?.addEventListener("click", () => {

@@ -1137,6 +1137,12 @@
                         <label>Due
                           <input id="customer360TaskDueAt" type="datetime-local" />
                         </label>
+                        <label>Assign Department
+                          <select id="customer360TaskDepartment"></select>
+                        </label>
+                        <label>Assign User
+                          <select id="customer360TaskAssignedUser"></select>
+                        </label>
                       </div>
                       <div id="customer360AppointmentFields" class="customer360-composer-aux customer360-composer-grid">
                         <label>Service
@@ -1281,6 +1287,8 @@
               </select>
             </div>
             <div class="field"><label>Due Date</label><input id="taskDueAt" type="datetime-local" /></div>
+            <div class="field"><label>Department</label><select id="taskDepartment"></select></div>
+            <div class="field"><label>Assign User</label><select id="taskAssignedUser"></select></div>
           </div>
           <div class="section">
             <label class="small muted">Description</label>
