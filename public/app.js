@@ -3617,6 +3617,141 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
   `;
 }
 
+function buildDepartmentDashboardCard({ label = "", value = "", meta = "", tone = "info", action = "", cta = "Open" } = {}) {
+  return `
+    <button type="button" class="customer360-dashboard-card ${escapeHtml(tone)}" ${action ? `onclick="${action}"` : ""}>
+      <div class="customer360-dashboard-label">${escapeHtml(label)}</div>
+      <div class="customer360-dashboard-value">${escapeHtml(value)}</div>
+      <div class="customer360-dashboard-meta">${escapeHtml(meta)}</div>
+      <div class="customer360-dashboard-cta">${escapeHtml(cta)}</div>
+    </button>
+  `;
+}
+
+function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointments = [], calls = []) {
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const roAmounts = getRepairOrderAmounts(activeRepairOrder || {});
+  const serviceTasks = openTasks.filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return haystack.includes("[service]") || haystack.includes("advisor") || haystack.includes("loaner") || haystack.includes("transport");
+  });
+  const bdcTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[bdc]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("callback"));
+  const salesTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[sales]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("deal"));
+  const technicianTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[technician]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("inspection"));
+  const partsTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[parts]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("part"));
+  const accountingTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[accounting]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("invoice"));
+  const fiTasks = openTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("[fi]") || `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("finance"));
+  const missedCalls = calls.filter((call) => String(call.status || "").toLowerCase().includes("miss"));
+  const roPartOrders = activeRepairOrder ? getRepairOrderPartOrders(activeRepairOrder) : [];
+  const roArInvoices = activeRepairOrder ? getRepairOrderArInvoices(activeRepairOrder) : [];
+  const roApBills = activeRepairOrder ? getRepairOrderApBills(activeRepairOrder) : [];
+  const roMedia = activeRepairOrder ? getRepairOrderMediaAssets(activeRepairOrder) : [];
+
+  const homeCards = [
+    { label: "Service", value: `${appointments.length}`, meta: `${getSelectedCustomerRepairOrders().length} repair orders tied to this customer`, tone: appointments.length ? "warn" : "info", action: "setDepartmentLens('service')", cta: "Open Service Dashboard" },
+    { label: "BDC", value: `${missedCalls.length}`, meta: `${bdcTasks.length} callback tasks live`, tone: missedCalls.length ? "danger" : bdcTasks.length ? "warn" : "good", action: "setDepartmentLens('bdc')", cta: "Open BDC Dashboard" },
+    { label: "Sales", value: `${salesTasks.length}`, meta: `${appointments.length ? "Visit booked" : "No showroom visit yet"}`, tone: salesTasks.length ? "warn" : "info", action: "setDepartmentLens('sales')", cta: "Open Sales Dashboard" },
+    { label: "Technicians", value: `${activeRepairOrder?.laborOps?.length || 0}`, meta: `${technicianTasks.length} technician tasks live`, tone: activeRepairOrder ? "warn" : "info", action: "setDepartmentLens('technicians')", cta: "Open Technician Dashboard" },
+    { label: "F&I", value: `${fiTasks.length}`, meta: `${salesTasks.length ? "Deal ready for handoff" : "No deal in finance yet"}`, tone: fiTasks.length ? "warn" : "good", action: "setDepartmentLens('fi')", cta: "Open F&I Dashboard" },
+    { label: "Parts", value: `${roPartOrders.length || partsTasks.length}`, meta: `${(activeRepairOrder?.partLines || []).length || 0} parts tied to the RO`, tone: roPartOrders.length || partsTasks.length ? "warn" : "good", action: "setDepartmentLens('parts')", cta: "Open Parts Dashboard" },
+    { label: "Accounting", value: `${roArInvoices.length + roApBills.length}`, meta: `${formatMoney(roAmounts.balance || 0)} still open on this job`, tone: roArInvoices.length || roApBills.length ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting Dashboard" }
+  ];
+
+  const byLens = {
+    home: {
+      title: "Department Dashboards",
+      copy: "Open each department’s dashboard directly from here.",
+      cards: homeCards
+    },
+    service: {
+      title: "Service Dashboard",
+      copy: "Advisor tools and live fixed-ops state for this customer.",
+      cards: [
+        { label: "Open ROs", value: `${getSelectedCustomerRepairOrders().length}`, meta: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is active` : "No open repair order yet", tone: activeRepairOrder ? "warn" : "info", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Open Active RO" : "Open Repair Order" },
+        { label: "Appointments", value: `${appointments.length}`, meta: appointments[0]?.service || "No service visit booked", tone: appointments.length ? "good" : "warn", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','service')` : "setCustomer360ComposerMode('appointment')", cta: appointments.length ? "Open Appointment" : "Book Appointment" },
+        { label: "Estimate", value: formatMoney(roAmounts.total || 0), meta: `${(activeRepairOrder?.estimateLines || []).length || 0} estimate lines on the RO`, tone: activeRepairOrder ? "info" : "good", action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Add Estimate Line" : "Open RO First" },
+        { label: "Balance", value: formatMoney(roAmounts.balance || 0), meta: `${roArInvoices.length} AR invoice(s) and ${roApBills.length} AP bill(s) linked`, tone: roAmounts.balance > 0 ? "warn" : "good", action: activeRepairOrder ? "createAccountsReceivableInvoice()" : "setDepartmentLens('accounting')", cta: activeRepairOrder ? "Post AR Invoice" : "Open Accounting" }
+      ]
+    },
+    bdc: {
+      title: "BDC Dashboard",
+      copy: "Communication queue, callbacks, and appointment conversion.",
+      cards: [
+        { label: "Missed Calls", value: `${missedCalls.length}`, meta: missedCalls[0]?.from || "No missed calls right now", tone: missedCalls.length ? "danger" : "good", action: missedCalls[0] ? `openCustomer360FocusedArtifact('calls','${escapeHtml(String(missedCalls[0].id || missedCalls[0].callId || missedCalls[0].createdAtUtc || missedCalls[0].from || ""))}','bdc')` : "setDepartmentLens('bdc')", cta: missedCalls.length ? "Rescue Call" : "Open Queue" },
+        { label: "Callbacks", value: `${bdcTasks.length}`, meta: bdcTasks[0]?.title || "No callback tasks live", tone: bdcTasks.length ? "warn" : "good", action: bdcTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(bdcTasks[0].id || bdcTasks[0].taskId || bdcTasks[0].createdAtUtc || bdcTasks[0].title || ""))}','bdc')` : "startBdcCallbackTask()", cta: bdcTasks.length ? "Open Callback" : "Queue Callback" },
+        { label: "Texts", value: `${calls.length}`, meta: "Calls and SMS remain interactive from this customer record", tone: calls.length ? "info" : "good", action: "openSmsForPhone(getSelectedCustomerPrimaryPhone())", cta: "Open Messaging" },
+        { label: "Appointments", value: `${appointments.length}`, meta: appointments[0]?.service || "No booked visit", tone: appointments.length ? "good" : "warn", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','bdc')` : "setCustomer360ComposerMode('appointment')", cta: appointments.length ? "Open Appointment" : "Book Visit" }
+      ]
+    },
+    sales: {
+      title: "Sales Dashboard",
+      copy: "Deal desk, showroom, and handoff actions for the sales team.",
+      cards: [
+        { label: "Open Deals", value: `${salesTasks.length}`, meta: salesTasks[0]?.title || "No active deal task yet", tone: salesTasks.length ? "warn" : "good", action: salesTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(salesTasks[0].id || salesTasks[0].taskId || salesTasks[0].createdAtUtc || salesTasks[0].title || ""))}','sales')` : "startSalesDealTask()", cta: salesTasks.length ? "Open Deal" : "Start Deal" },
+        { label: "Showroom Visits", value: `${appointments.length}`, meta: appointments[0]?.service || "No test drive scheduled", tone: appointments.length ? "good" : "warn", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','sales')` : "setCustomer360ComposerMode('appointment')", cta: appointments.length ? "Open Visit" : "Schedule Visit" },
+        { label: "Customer Context", value: `${calls.length + currentCustomerNotes.length}`, meta: "Communications and notes remain clickable", tone: "info", action: "setCustomer360TimelineFilter('all')", cta: "Open Activity" },
+        { label: "F&I Handoff", value: `${fiTasks.length}`, meta: fiTasks[0]?.title || "No finance handoff yet", tone: fiTasks.length ? "warn" : "good", action: fiTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(fiTasks[0].id || fiTasks[0].taskId || fiTasks[0].createdAtUtc || fiTasks[0].title || ""))}','fi')` : "setDepartmentLens('fi')", cta: fiTasks.length ? "Open F&I" : "Hand Off" }
+      ]
+    },
+    technicians: {
+      title: "Technician Dashboard",
+      copy: "Clocking, labor dispatch, MPI, and media capture in one place.",
+      cards: [
+        { label: "Clock State", value: latestClockEvent ? titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " ")) : "Not Clocked", meta: activeRepairOrder?.repairOrderNumber || "No active repair order", tone: latestClockEvent?.eventType === "clock_in" ? "warn" : activeRepairOrder ? "info" : "good", action: activeRepairOrder ? (latestClockEvent?.eventType === "clock_in" ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')") : "openRepairOrderFrom360()", cta: activeRepairOrder ? (latestClockEvent?.eventType === "clock_in" ? "Clock Out" : "Clock In") : "Open RO First" },
+        { label: "Labor Ops", value: `${(activeRepairOrder?.laborOps || []).length}`, meta: activeRepairOrder?.laborOps?.[0]?.description || "No labor ops dispatched yet", tone: activeRepairOrder?.laborOps?.length ? "warn" : "good", action: activeRepairOrder ? "addRepairOrderLaborOp()" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Dispatch Labor" : "Open RO First" },
+        { label: "MPI Items", value: `${(activeRepairOrder?.multiPointInspections || []).length}`, meta: activeRepairOrder?.multiPointInspections?.[0]?.itemName || "No MPI results on this RO", tone: activeRepairOrder?.multiPointInspections?.length ? "info" : "good", action: activeRepairOrder ? "addRepairOrderInspection()" : "openRepairOrderFrom360()", cta: activeRepairOrder ? "Complete MPI" : "Open RO First" },
+        { label: "Media", value: `${roMedia.length}`, meta: roMedia[0]?.fileName || "No technician photos or videos yet", tone: roMedia.length ? "good" : "info", action: roMedia[0]?.storageUrl ? `window.open('${escapeHtml(String(roMedia[0].storageUrl || ""))}','_blank')` : "captureTechnicianMedia('repair_order','photo')", cta: roMedia.length ? "Open Media" : "Capture Media" }
+      ]
+    },
+    fi: {
+      title: "F&I Dashboard",
+      copy: "Finance review, delivery prep, and funding posture.",
+      cards: [
+        { label: "Finance Tasks", value: `${fiTasks.length}`, meta: fiTasks[0]?.title || "No F&I work active", tone: fiTasks.length ? "warn" : "good", action: fiTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(fiTasks[0].id || fiTasks[0].taskId || fiTasks[0].createdAtUtc || fiTasks[0].title || ""))}','fi')` : "startFiReviewNote()", cta: fiTasks.length ? "Open F&I" : "Start Review" },
+        { label: "Delivery", value: `${appointments.length}`, meta: appointments[0]?.service || "No delivery appointment set", tone: appointments.length ? "good" : "info", action: appointments[0] ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(appointments[0].id || appointments[0].appointmentId || appointments[0].createdAtUtc || appointments[0].date || ""))}','fi')` : "startDeliveryHandoffAppointment()", cta: appointments.length ? "Open Delivery" : "Prep Delivery" },
+        { label: "Sales Handoff", value: `${salesTasks.length}`, meta: salesTasks[0]?.title || "No sales handoff waiting", tone: salesTasks.length ? "info" : "good", action: "setDepartmentLens('sales')", cta: "Open Sales" },
+        { label: "Accounting Sync", value: `${roArInvoices.length + roApBills.length}`, meta: "Finance and accounting stay linked to the same job", tone: roArInvoices.length + roApBills.length ? "warn" : "good", action: "setDepartmentLens('accounting')", cta: "Open Accounting" }
+      ]
+    },
+    parts: {
+      title: "Parts Dashboard",
+      copy: "Inventory demand, special orders, sourcing, and dispatch.",
+      cards: [
+        { label: "Part Lines", value: `${(activeRepairOrder?.partLines || []).length}`, meta: activeRepairOrder?.partLines?.[0]?.description || "No parts attached to the RO", tone: activeRepairOrder?.partLines?.length ? "warn" : "good", action: activeRepairOrder ? "addRepairOrderPartRequest()" : "createPartsPickTask()", cta: activeRepairOrder ? "Add Part Line" : "Create Pick" },
+        { label: "Special Orders", value: `${roPartOrders.length}`, meta: roPartOrders[0]?.partNumber || "No special orders live", tone: roPartOrders.length ? "warn" : "good", action: activeRepairOrder ? "createSpecialPartOrder()" : "setDepartmentLens('parts')", cta: activeRepairOrder ? "Place Special Order" : "Open Parts" },
+        { label: "Open Requests", value: `${partsTasks.length}`, meta: partsTasks[0]?.title || "No parts requests waiting", tone: partsTasks.length ? "info" : "good", action: partsTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTasks[0].id || partsTasks[0].taskId || partsTasks[0].createdAtUtc || partsTasks[0].title || ""))}','parts')` : "createPartsPickTask()", cta: partsTasks.length ? "Open Request" : "Create Request" },
+        { label: "VIN Evidence", value: `${getVinArchiveMediaAssets().length}`, meta: "Use archive evidence before sourcing decisions", tone: "info", action: "openVehicleOpsContext('archive')", cta: "Open VIN Archive" }
+      ]
+    },
+    accounting: {
+      title: "Accounting Dashboard",
+      copy: "AR, AP, balances, and posting queue for the live job.",
+      cards: [
+        { label: "AR Invoices", value: `${roArInvoices.length}`, meta: roArInvoices[0]?.invoiceNumber || "No AR invoices posted", tone: roArInvoices.length ? "warn" : "good", action: activeRepairOrder ? "createAccountsReceivableInvoice()" : "setDepartmentLens('service')", cta: activeRepairOrder ? "Post AR" : "Open Service" },
+        { label: "AP Bills", value: `${roApBills.length}`, meta: roApBills[0]?.invoiceNumber || "No AP bills posted", tone: roApBills.length ? "warn" : "good", action: activeRepairOrder ? "createAccountsPayableBill()" : "setDepartmentLens('parts')", cta: activeRepairOrder ? "Add AP Bill" : "Open Parts" },
+        { label: "RO Balance", value: formatMoney(roAmounts.balance || 0), meta: activeRepairOrder?.repairOrderNumber || "No active repair order", tone: roAmounts.balance > 0 ? "warn" : "good", action: activeRepairOrder ? "setDepartmentLens('service')" : "queueAccountingInvoiceReview()", cta: activeRepairOrder ? "Open RO" : "Queue Review" },
+        { label: "Reviews", value: `${accountingTasks.length}`, meta: accountingTasks[0]?.title || "No accounting tasks live", tone: accountingTasks.length ? "info" : "good", action: accountingTasks[0] ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTasks[0].id || accountingTasks[0].taskId || accountingTasks[0].createdAtUtc || accountingTasks[0].title || ""))}','accounting')` : "queueAccountingInvoiceReview()", cta: accountingTasks.length ? "Open Review" : "Queue Review" }
+      ]
+    }
+  };
+
+  const config = byLens[currentDepartmentLens] || byLens.home;
+  return `
+    <div class="customer360-dashboard-head">
+      <div>
+        <h3>${escapeHtml(config.title)}</h3>
+        <span>${escapeHtml(config.copy)}</span>
+      </div>
+      <span class="customer360-status-pill info">${escapeHtml(getDepartmentLensConfig().name)}</span>
+    </div>
+    <div class="customer360-dashboard-grid">
+      ${config.cards.map((card) => buildDepartmentDashboardCard(card)).join("")}
+    </div>
+  `;
+}
+
 function buildRepairOrderBoardMarkup(repairOrders = []) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
@@ -5621,6 +5756,7 @@ function renderCustomer360Detail() {
   const managerQueueEl = document.getElementById("customer360ManagerQueue");
   const roBoardEl = document.getElementById("customer360RoBoard");
   const departmentHubEl = document.getElementById("customer360DepartmentHub");
+  const departmentDashboardEl = document.getElementById("customer360DepartmentDashboard");
   const roleToolsEl = document.getElementById("customer360RoleTools");
   const overdueTasks = openTasks.filter((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger");
   const urgentTasks = openTasks.filter((task) => {
@@ -5654,6 +5790,7 @@ function renderCustomer360Detail() {
     if (managerQueueEl) managerQueueEl.innerHTML = "";
     if (roBoardEl) roBoardEl.innerHTML = "";
     if (departmentHubEl) departmentHubEl.innerHTML = `<div class="customer360-empty">Choose a customer to load department actions.</div>`;
+    if (departmentDashboardEl) departmentDashboardEl.innerHTML = `<div class="customer360-empty">Choose a customer to load department dashboards.</div>`;
     if (roleToolsEl) roleToolsEl.innerHTML = `<div class="customer360-empty">Choose a customer to load role-specific workspace tools.</div>`;
     return;
   }
@@ -5924,6 +6061,10 @@ function renderCustomer360Detail() {
 
   if (departmentHubEl) {
     departmentHubEl.innerHTML = buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks, appointments, calls);
+  }
+
+  if (departmentDashboardEl) {
+    departmentDashboardEl.innerHTML = buildDepartmentDashboardMarkup(customer, vehicle, tasks, appointments, calls);
   }
 
   if (roleToolsEl) {

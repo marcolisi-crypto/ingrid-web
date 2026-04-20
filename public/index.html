@@ -262,6 +262,21 @@
     .customer360-department-hub{padding:16px;background:linear-gradient(180deg,#16233a 0%,#111b2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px}
     .customer360-department-hub .customer360-role-tools{padding:0;display:grid;gap:12px}
     .customer360-department-hub .customer360-role-tool-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .customer360-department-dashboard{display:grid;gap:12px;padding:16px;background:linear-gradient(180deg,#16233a 0%,#111b2d 100%);border:1px solid rgba(255,255,255,.06);border-radius:14px}
+    .customer360-dashboard-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+    .customer360-dashboard-head h3{margin:0;color:#f4f8ff;font-size:18px}
+    .customer360-dashboard-head span{display:block;margin-top:4px;color:#91a8ca;font-size:12px;line-height:1.45}
+    .customer360-dashboard-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .customer360-dashboard-card{display:grid;gap:8px;width:100%;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#18243a 0%,#121e31 100%);color:#eef4ff;text-align:left;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+    .customer360-dashboard-card:hover{transform:translateY(-1px);border-color:rgba(117,164,255,.28);box-shadow:0 12px 20px rgba(0,0,0,.16)}
+    .customer360-dashboard-card.info{border-color:rgba(117,164,255,.18)}
+    .customer360-dashboard-card.good{border-color:rgba(92,198,138,.18)}
+    .customer360-dashboard-card.warn{border-color:rgba(241,187,81,.18)}
+    .customer360-dashboard-card.danger{border-color:rgba(228,99,120,.18)}
+    .customer360-dashboard-label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#87a6d6;font-weight:700}
+    .customer360-dashboard-value{font-size:22px;font-weight:800;color:#f7fbff}
+    .customer360-dashboard-meta{font-size:12px;color:#9eb2d2;line-height:1.45}
+    .customer360-dashboard-cta{font-size:11px;color:#bfd7ff;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
     .customer360-title-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
     .customer360-title-tools{display:flex;gap:8px}
     .customer360-mini-btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#18243b;color:#dfe7f7;font-weight:700;font-size:12px}
@@ -591,7 +606,7 @@
       .config-layout{grid-template-columns:1fr}
       .customer360-topbar{grid-template-columns:1fr;gap:10px}
       .customer360-layout,.customer360-main-grid,.customer360-lower-grid{grid-template-columns:1fr}
-      .customer360-stack,.customer360-department-hub .customer360-role-tool-grid{grid-template-columns:1fr}
+      .customer360-stack,.customer360-department-hub .customer360-role-tool-grid,.customer360-dashboard-grid{grid-template-columns:1fr}
       .customer360-journey-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width: 960px){
@@ -1019,6 +1034,7 @@
             </div>
 
             <section id="customer360DepartmentHub" class="customer360-department-hub"></section>
+            <section id="customer360DepartmentDashboard" class="customer360-department-dashboard"></section>
 
             <div class="customer360-main-grid">
               <section id="customer360CustomerCard" class="customer360-customer-card">
