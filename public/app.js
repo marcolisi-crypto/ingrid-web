@@ -28,6 +28,7 @@ let currentJourneyFeedbackMessage = "";
 let currentJourneyFeedbackStage = "";
 let currentJourneyFeedbackTimer = null;
 let customer360AssigneeMap = JSON.parse(localStorage.getItem("customer360Assignees") || "{}");
+let currentManagerQueueSort = localStorage.getItem("customer360ManagerQueueSort") || "urgent";
 
 const JOURNEY_ASSIGNEE_DIRECTORY = {
   bdc: ["Rachel Smith", "Nicole Adams", "BDC Queue"],
@@ -2450,6 +2451,30 @@ function getManagerQueueFreshnessLabel(value, label = "Moved") {
   }
 }
 
+function getManagerQueueSortTimestamp(value) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getManagerQueueUrgencyRank(card = {}) {
+  const toneScore = card.tone === "danger"
+    ? 3
+    : card.tone === "warn"
+      ? 2
+      : card.tone === "info"
+        ? 1
+        : 0;
+  const reasonScore = card.priorityReason ? 1 : 0;
+  return toneScore * 10 + reasonScore;
+}
+
+function setCustomer360ManagerQueueSort(mode = "urgent") {
+  currentManagerQueueSort = ["urgent", "recent", "stale"].includes(mode) ? mode : "urgent";
+  localStorage.setItem("customer360ManagerQueueSort", currentManagerQueueSort);
+  renderCustomer360Detail();
+}
+
 function buildManagerQueueCard({ key = "", label = "", headline = "", copy = "", tone = "info", countLabel = "", ownerLabel = "", action = "", focused = false, priorityReason = "", freshness = "" } = {}) {
   const ownerAge = [ownerLabel || "", freshness || ""].filter(Boolean).join(" • ");
   return `
@@ -4447,6 +4472,7 @@ function renderCustomer360Detail() {
         copy: serviceTopTask ? "Promised time, transport, and advisor follow-up are tied to the same service lane queue." : "No active advisor queue items right now.",
         priorityReason: overdueServiceTask ? "Overdue advisor step" : loanerTask ? "Loaner or transport active" : serviceTasks[0] ? "Newest advisor task" : appointments[0] ? "Arrival already booked" : "",
         freshness: getManagerQueueFreshnessLabel(serviceTopTask?.updatedAtUtc || serviceTopTask?.dueAtUtc || serviceTopTask?.createdAtUtc || serviceTopTask?.date, "Promised time moved"),
+        freshnessAt: serviceTopTask?.updatedAtUtc || serviceTopTask?.dueAtUtc || serviceTopTask?.createdAtUtc || serviceTopTask?.date || "",
         tone: serviceTasks.length ? (serviceTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : "warn") : appointments.length ? "info" : "good",
         countLabel: `${serviceTasks.length} open`,
         ownerLabel: appointments[0]?.advisor ? `Owner ${appointments[0].advisor}` : "Advisor queue",
@@ -4459,6 +4485,7 @@ function renderCustomer360Detail() {
         copy: bdcTopTask ? "Missed calls, callbacks, and reply SLA are visible from one manager surface." : "No BDC rescue or callback tasks open right now.",
         priorityReason: missedCall ? "Missed call requires rescue" : overdueBdcTask ? "Callback SLA overdue" : bdcTasks[0] ? "Active callback queue" : "",
         freshness: getManagerQueueFreshnessLabel(bdcTopTask?.updatedAtUtc || bdcTopTask?.startedAt || bdcTopTask?.createdAtUtc || bdcTopTask?.dueAtUtc, "Last callback touch"),
+        freshnessAt: bdcTopTask?.updatedAtUtc || bdcTopTask?.startedAt || bdcTopTask?.createdAtUtc || bdcTopTask?.dueAtUtc || "",
         tone: calls.some((call) => String(call.status || "").toLowerCase().includes("miss")) ? "danger" : bdcTasks.length ? "warn" : "good",
         countLabel: `${bdcTasks.length} callbacks`,
         ownerLabel: "BDC queue",
@@ -4471,6 +4498,7 @@ function renderCustomer360Detail() {
         copy: salesTopTask ? "Deals, showroom commitments, and desk risk stay visible from the same customer record." : "No sales desk items are currently open.",
         priorityReason: overdueSalesTask ? "Deal step overdue" : salesTasks[0] ? "Desk action in motion" : appointments[0] ? "Showroom visit queued" : "",
         freshness: getManagerQueueFreshnessLabel(salesTopTask?.updatedAtUtc || salesTopTask?.dueAtUtc || salesTopTask?.createdAtUtc || salesTopTask?.date, "Deal desk moved"),
+        freshnessAt: salesTopTask?.updatedAtUtc || salesTopTask?.dueAtUtc || salesTopTask?.createdAtUtc || salesTopTask?.date || "",
         tone: salesTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : salesTasks.length || appointments.length ? "warn" : "good",
         countLabel: `${salesTasks.length} deal steps`,
         ownerLabel: appointments[0] ? "Visit queued" : "Sales queue",
@@ -4483,6 +4511,7 @@ function renderCustomer360Detail() {
         copy: accountingTopTask ? "Invoice review, statement aging, and ledger follow-up are surfaced in one accounting queue." : "No accounting review items are open right now.",
         priorityReason: overdueAccountingTask ? "Invoice aging risk" : accountingTasks[0] ? "Review queue active" : "",
         freshness: getManagerQueueFreshnessLabel(accountingTopTask?.updatedAtUtc || accountingTopTask?.dueAtUtc || accountingTopTask?.createdAtUtc, "Review last touched"),
+        freshnessAt: accountingTopTask?.updatedAtUtc || accountingTopTask?.dueAtUtc || accountingTopTask?.createdAtUtc || "",
         tone: accountingTasks.some((task) => getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).tone === "danger") ? "danger" : accountingTasks.length ? "warn" : "good",
         countLabel: `${accountingTasks.length} reviews`,
         ownerLabel: "Accounting queue",
@@ -4492,9 +4521,18 @@ function renderCustomer360Detail() {
     const focusedManagerLens = ["service", "bdc", "sales", "accounting"].includes(String(currentDepartmentLens || "").toLowerCase())
       ? String(currentDepartmentLens || "").toLowerCase()
       : "";
+    const sortedManagerCards = managerCards.slice().sort((left, right) => {
+      if (currentManagerQueueSort === "recent") {
+        return getManagerQueueSortTimestamp(right.freshnessAt) - getManagerQueueSortTimestamp(left.freshnessAt);
+      }
+      if (currentManagerQueueSort === "stale") {
+        return getManagerQueueSortTimestamp(left.freshnessAt) - getManagerQueueSortTimestamp(right.freshnessAt);
+      }
+      return getManagerQueueUrgencyRank(right) - getManagerQueueUrgencyRank(left);
+    });
     const visibleManagerCards = focusedManagerLens
-      ? managerCards.filter((card) => card.key === focusedManagerLens).map((card) => ({ ...card, focused: true }))
-      : managerCards;
+      ? sortedManagerCards.filter((card) => card.key === focusedManagerLens).map((card) => ({ ...card, focused: true }))
+      : sortedManagerCards;
     const managerTitle = focusedManagerLens ? `${titleCase(focusedManagerLens)} Queue` : "Manager Queue";
     const managerSubtitle = focusedManagerLens
       ? `Focused ${titleCase(focusedManagerLens)} view with the live queue, owner posture, and next actionable item.`
@@ -4506,10 +4544,19 @@ function renderCustomer360Detail() {
           <h3>${escapeHtml(managerTitle)}</h3>
           <span>${escapeHtml(managerSubtitle)}</span>
         </div>
-        <div class="customer360-manager-strip">
-          <span class="customer360-manager-pill ${managerPressureTone}">${escapeHtml(overdueTasks.length ? `${overdueTasks.length} overdue` : urgentTasks.length ? `${urgentTasks.length} at risk` : "On track")}</span>
-          <span class="customer360-manager-pill info">${escapeHtml(`${openTasks.length} open work items`)}</span>
-          <span class="customer360-manager-pill good">${escapeHtml(`${appointments.length} visits`)}</span>
+        <div class="customer360-manager-tools">
+          <div class="customer360-manager-strip">
+            <span class="customer360-manager-pill ${managerPressureTone}">${escapeHtml(overdueTasks.length ? `${overdueTasks.length} overdue` : urgentTasks.length ? `${urgentTasks.length} at risk` : "On track")}</span>
+            <span class="customer360-manager-pill info">${escapeHtml(`${openTasks.length} open work items`)}</span>
+            <span class="customer360-manager-pill good">${escapeHtml(`${appointments.length} visits`)}</span>
+          </div>
+          ${focusedManagerLens ? "" : `
+            <div class="customer360-manager-sort">
+              <button type="button" class="${currentManagerQueueSort === "urgent" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('urgent')">Most urgent</button>
+              <button type="button" class="${currentManagerQueueSort === "recent" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('recent')">Recently moved</button>
+              <button type="button" class="${currentManagerQueueSort === "stale" ? "active" : ""}" onclick="setCustomer360ManagerQueueSort('stale')">Least touched</button>
+            </div>
+          `}
         </div>
       </div>
       <div class="customer360-manager-grid ${focusedManagerLens ? "focused" : ""}">
