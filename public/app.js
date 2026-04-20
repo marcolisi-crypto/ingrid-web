@@ -1125,8 +1125,8 @@ function buildLensServiceLaneMarkup(customer, vehicle, topTask, appointments = [
       </div>
       ${buildServiceSignalMarkup(serviceSignals)}
       <div class="customer360-service-actions">
-        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addRepairOrderEstimateLine()">Add Estimate</button>` : ""}
-        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addRepairOrderPartRequest()">Add Part Line</button>` : ""}
+        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="createServiceQuote()">Create Service Quote</button>` : ""}
+        ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="createPartsQuote()">Create Parts Quote</button>` : ""}
         ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="${technicianClockedIn ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`}">${technicianClockedIn ? "Clock Technician Out" : "Clock Technician In"}</button>` : ""}
         ${activeRepairOrder ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="addAccountingRepairOrderEntry()">Post Payment / Entry</button>` : ""}
         ${topTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="completeTask('${escapeHtml(topTask.id)}')">Mark Task Complete</button>` : ""}
@@ -1311,9 +1311,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         ${buildLaneSignalMarkup(serviceSignals)}
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "addRepairOrderEstimateLine()" : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"}"><span>🛠</span>${activeRepairOrder ? "Add Estimate" : nextAppointment ? "Open Visit" : "Schedule Service"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createServiceQuote()" : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','service')` : "startServiceWriteUp()"}"><span>🛠</span>${activeRepairOrder ? "Service Quote" : nextAppointment ? "Open Visit" : "Schedule Service"}</button>
           <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "addRepairOrderLaborOp()" : loanerTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(loanerTask)}','service')` : "startLoanerTask()"}"><span>🔧</span>${activeRepairOrder ? "Dispatch Labor" : loanerTask ? "Open Loaner" : "Create Loaner"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createAccountsReceivableInvoice()" : latestMovementNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestMovementNote)}','service')` : "startVehicleGeoMovementNote()"}"><span>💳</span>${activeRepairOrder ? "Post AR" : latestMovementNote ? "Open Movement" : "Log Movement"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createServiceInvoice()" : latestMovementNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(latestMovementNote)}','service')` : "startVehicleGeoMovementNote()"}"><span>💳</span>${activeRepairOrder ? "Service Invoice" : latestMovementNote ? "Open Movement" : "Log Movement"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Promised Time</div>
@@ -1337,12 +1337,12 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         <div class="customer360-lens-actions">
           ${loanerTask ? `<button class="customer360-toolbar-btn" style="width:100%;" onclick="openCustomer360FocusedArtifact('tasks','${escapeHtml(String(loanerTask.id || loanerTask.taskId || loanerTask.createdAtUtc || loanerTask.title))}','service')">Open Loaner Workflow</button>` : ""}
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "closeActiveRepairOrder()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Close Repair Order" : "Open Repair Order"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Add Estimate Line" : "Open RO First"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderPartRequest()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Add Part Line" : "Open RO First"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createServiceQuote()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Create Service Quote" : "Open RO First"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsQuote()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Create Parts Quote" : "Open RO First"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createSpecialPartOrder()" : "openRepairOrderFrom360()"}">${activeRepairOrder ? "Place Special Order" : "Open RO First"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? (technicianClockedIn ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`) : "openRepairOrderFrom360()"}">${activeRepairOrder ? (technicianClockedIn ? "Clock Technician Out" : "Clock Technician In") : "Open RO First"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsPayableBill()" : "startAdvisorJourneyNote()"}">${activeRepairOrder ? "Add AP Bill" : "Add Advisor Note"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsReceivableInvoice()" : "startAdvisorJourneyNote()"}">${activeRepairOrder ? "Post AR Invoice" : "Add Advisor Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createServiceInvoice()" : "startAdvisorJourneyNote()"}">${activeRepairOrder ? "Create Service Invoice" : "Add Advisor Note"}</button>
         </div>
       </div>
     `;
@@ -1579,7 +1579,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "addRepairOrderPartRequest()" : (partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()")}"><span>📦</span>${activeRepairOrder ? "Add Part Line" : partsTask ? "Open Pick" : "Create Pick"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createPartsQuote()" : (partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()")}"><span>📦</span>${activeRepairOrder ? "Parts Quote" : partsTask ? "Open Pick" : "Create Pick"}</button>
           <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createSpecialPartOrder()" : (partsEtaNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsEtaNote)}','parts')` : "startPartsEtaNote()")}"><span>⏱</span>${activeRepairOrder ? "Special Order" : partsEtaNote ? "Open ETA" : "Add ETA"}</button>
           <button class="customer360-lens-quickbtn" onclick="${technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()"}"><span>🤖</span>${technicianTask ? "Return to Tech" : "Route to Tech"}</button>
         </div>
@@ -1604,7 +1604,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createSpecialPartOrder()" : "createPartsPickTask()"}">${activeRepairOrder ? "Place Special Order" : "Create Parts Task"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "addRepairOrderPartRequest()" : "startPartsEtaNote()"}">${activeRepairOrder ? "Add Parts to RO" : "Add ETA Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsQuote()" : "startPartsEtaNote()"}">${activeRepairOrder ? "Create Parts Quote" : "Add ETA Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsInvoice()" : "createPartsPickTask()"}">${activeRepairOrder ? "Create Parts Invoice" : "Create Parts Task"}</button>
         </div>
       </div>
     `;
@@ -1632,7 +1633,7 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         ${buildLaneSignalMarkup(accountingSignals)}
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createAccountsReceivableInvoice()" : (accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()")}"><span>💳</span>${activeRepairOrder ? "Post AR" : accountingTask ? "Open Invoice" : "Queue Invoice"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createServiceInvoice()" : (accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()")}"><span>💳</span>${activeRepairOrder ? "Service Invoice" : accountingTask ? "Open Invoice" : "Queue Invoice"}</button>
           <button class="customer360-lens-quickbtn" onclick="${ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"}"><span>📘</span>${ledgerNote ? "Open Ledger" : "Add Ledger"}</button>
           <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createAccountsPayableBill()" : (partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "queueAccountingInvoiceReview()")}"><span>🧾</span>${activeRepairOrder ? "Add AP" : partsTask ? "Review Parts" : "Prep Statement"}</button>
         </div>
@@ -1656,7 +1657,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsReceivableInvoice()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Post AR Invoice" : "Queue Invoice Review"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createServiceInvoice()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Create Service Invoice" : "Queue Invoice Review"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsInvoice()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Create Parts Invoice" : "Queue Parts Review"}</button>
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsPayableBill()" : "startLedgerNote()"}">${activeRepairOrder ? "Add AP Bill" : "Add Ledger Note"}</button>
         </div>
       </div>
@@ -2295,8 +2297,8 @@ function buildServiceAdvisorTasksMarkup(openTasks = [], appointments = [], vehic
       detail: activeRepairOrder
         ? `${formatCountLabel((activeRepairOrder.estimateLines || []).length, "estimate line")} • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).total)} current estimate`
         : "No estimate exists until the RO is opened",
-      actionLabel: activeRepairOrder ? "Add" : "Prep",
-      action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "openRepairOrderFrom360()",
+      actionLabel: activeRepairOrder ? "Quote" : "Prep",
+      action: activeRepairOrder ? "createServiceQuote()" : "openRepairOrderFrom360()",
       task: serviceTasks[0] || null
     },
     {
@@ -2536,8 +2538,8 @@ function buildAccountingTasksMarkup(openTasks = [], vehicle) {
       title: "Invoice review",
       detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(currentAccountsReceivableInvoices || []).length} AR invoice(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} still due` : (openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
-      actionLabel: activeRepairOrder ? "Post AR" : accountingTask ? "Open" : "Queue",
-      action: activeRepairOrder ? "createAccountsReceivableInvoice()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
+      actionLabel: activeRepairOrder ? "Invoice" : accountingTask ? "Open" : "Queue",
+      action: activeRepairOrder ? "createServiceInvoice()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
       task: accountingTask
     },
     {
@@ -2743,6 +2745,73 @@ async function addRepairOrderEstimateLine() {
   }
 }
 
+function sumRepairOrderPartLines(repairOrder = null) {
+  const partLines = Array.isArray(repairOrder?.partLines) ? repairOrder.partLines : [];
+  return partLines.reduce((total, line) => {
+    const quantity = Number(line?.quantity || 0);
+    const unitPrice = Number(line?.unitPrice || 0);
+    return total + quantity * unitPrice;
+  }, 0);
+}
+
+function readPromptText(message = "", defaultValue = "") {
+  const result = window.prompt(message, defaultValue);
+  if (result === null) return null;
+  return result.trim();
+}
+
+function readPromptNumber(message = "", defaultValue = 0) {
+  const raw = window.prompt(message, String(defaultValue));
+  if (raw === null) return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("Enter a valid amount.");
+  }
+  return value;
+}
+
+async function createServiceQuote() {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before creating a service quote.", "error");
+    return;
+  }
+
+  try {
+    const opCode = readPromptText("Service quote op code", "DIAG");
+    if (opCode === null) return;
+    const description = readPromptText("Service quote description", "Diagnostic inspection and advisor estimate");
+    if (description === null) return;
+    const quantity = readPromptNumber("Quoted quantity", 1);
+    if (quantity === null) return;
+    const unitPrice = readPromptNumber("Quoted unit price", 149);
+    if (unitPrice === null) return;
+
+    const res = await fetch("/.netlify/functions/service-repair-order-estimate-line", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        lineType: "labor",
+        opCode,
+        description,
+        quantity,
+        unitPrice,
+        department: "service",
+        status: "quoted"
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create service quote");
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    setCustomer360ComposerStatus(`Service quote added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
+  } catch (err) {
+    console.error("createServiceQuote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create service quote.", "error");
+  }
+}
+
 async function addRepairOrderPartRequest() {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
@@ -2772,6 +2841,49 @@ async function addRepairOrderPartRequest() {
   } catch (err) {
     console.error("addRepairOrderPartRequest error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to add parts request.", "error");
+  }
+}
+
+async function createPartsQuote() {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    setCustomer360ComposerStatus("Open an RO before creating a parts quote.", "error");
+    return;
+  }
+
+  try {
+    const partNumber = readPromptText("Parts quote part number", "PART-REQ");
+    if (partNumber === null) return;
+    const description = readPromptText("Parts quote description", "Requested service part");
+    if (description === null) return;
+    const quantity = readPromptNumber("Quoted quantity", 1);
+    if (quantity === null) return;
+    const unitPrice = readPromptNumber("Quoted unit price", 89);
+    if (unitPrice === null) return;
+    const source = readPromptText("Parts source (stock, oem, aftermarket)", "stock");
+    if (source === null) return;
+
+    const res = await fetch("/.netlify/functions/service-repair-order-part-line", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        partNumber,
+        description,
+        quantity,
+        unitPrice,
+        status: "quoted",
+        source: source || "stock"
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create parts quote");
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    setCustomer360ComposerStatus(`Parts quote added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
+  } catch (err) {
+    console.error("createPartsQuote error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create parts quote.", "error");
   }
 }
 
@@ -3057,6 +3169,79 @@ async function createAccountsReceivableInvoice() {
   } catch (err) {
     console.error("createAccountsReceivableInvoice error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to create AR invoice.", "error");
+  }
+}
+
+async function createServiceInvoice() {
+  const repairOrder = getActiveRepairOrderRecord();
+  const customer = getSelectedCustomerRecord();
+  if (!repairOrder || !customer) {
+    setCustomer360ComposerStatus("Open an RO before creating a service invoice.", "error");
+    return;
+  }
+
+  try {
+    const defaultAmount = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
+    const amount = readPromptNumber("Service invoice amount", defaultAmount);
+    if (amount === null) return;
+    const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        customerId: customer.id,
+        invoiceNumber: `SVC-${Date.now().toString().slice(-6)}`,
+        amount,
+        balanceDue: amount,
+        status: "open",
+        dueAtUtc: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create service invoice");
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    setCustomer360ComposerStatus(`Service invoice ${data.invoiceNumber || "created"} posted.`, "success");
+  } catch (err) {
+    console.error("createServiceInvoice error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create service invoice.", "error");
+  }
+}
+
+async function createPartsInvoice() {
+  const repairOrder = getActiveRepairOrderRecord();
+  const customer = getSelectedCustomerRecord();
+  if (!repairOrder || !customer) {
+    setCustomer360ComposerStatus("Open an RO before creating a parts invoice.", "error");
+    return;
+  }
+
+  try {
+    const partsTotal = sumRepairOrderPartLines(repairOrder);
+    const fallbackTotal = Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0);
+    const amount = readPromptNumber("Parts invoice amount", partsTotal > 0 ? partsTotal : fallbackTotal);
+    if (amount === null) return;
+    const res = await fetch("/.netlify/functions/accounting-ar-invoice-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        customerId: customer.id,
+        invoiceNumber: `PART-${Date.now().toString().slice(-6)}`,
+        amount,
+        balanceDue: amount,
+        status: "open",
+        dueAtUtc: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to create parts invoice");
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+    setCustomer360ComposerStatus(`Parts invoice ${data.invoiceNumber || "created"} posted.`, "success");
+  } catch (err) {
+    console.error("createPartsInvoice error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to create parts invoice.", "error");
   }
 }
 
@@ -3589,12 +3774,12 @@ function buildRepairOrderOperationsMarkup(repairOrder = {}) {
   const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
   return `
     <div class="customer360-ro-actions" style="margin-top:14px;">
-      <button type="button" class="customer360-toolbar-btn" onclick="addRepairOrderEstimateLine()">Add Estimate</button>
+      <button type="button" class="customer360-toolbar-btn" onclick="createServiceQuote()">Create Service Quote</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="addRepairOrderLaborOp()">Dispatch Labor</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="addRepairOrderInspection()">Complete MPI</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="createSpecialPartOrder()">Special Order</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="${technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')"}">${technicianClockedIn ? "Clock Out" : "Clock In"}</button>
-      <button type="button" class="customer360-toolbar-btn secondary" onclick="createAccountsReceivableInvoice()">Post AR</button>
+      <button type="button" class="customer360-toolbar-btn secondary" onclick="createServiceInvoice()">Create Service Invoice</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="createAccountsPayableBill()">Add AP</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="captureTechnicianMedia('repair_order','photo')">Add Media</button>
       <button type="button" class="customer360-toolbar-btn" onclick="closeActiveRepairOrder()">Close RO</button>
@@ -3881,7 +4066,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       copy: "Everything an advisor needs to receive, write up, price, and close the visit from one place.",
       tools: [
         { label: activeRepairOrder ? "RO Is Open" : "Open RO from Visit", detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} is the live working file.` : nextAppointment ? "Convert the booked visit into a live repair order." : "Open the first repair order for this visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "openRepairOrderFrom360()", tone: activeRepairOrder ? "warn" : "info" },
-        { label: activeRepairOrder ? "Add Estimate Line" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "addRepairOrderEstimateLine()" : "startDepartmentAppointmentCreate()", tone: "good" },
+        { label: activeRepairOrder ? "Create Service Quote" : "Schedule Service", detail: activeRepairOrder ? "Write labor, diagnosis, and approved work into the RO." : "No RO yet, so set or confirm the arrival first.", action: activeRepairOrder ? "createServiceQuote()" : "startDepartmentAppointmentCreate()", tone: "good" },
         { label: activeRepairOrder ? "Warranty Claim" : "Prepare Loaner", detail: activeRepairOrder ? "Start warranty processing and pay-type posture from the advisor lane." : "Transportation and loaner coordination before the write-up.", action: activeRepairOrder ? "addRepairOrderWarrantyClaim()" : "startLoanerTask()", tone: "warn" },
         { label: activeRepairOrder ? "Set Pay Split" : "Add Advisor Note", detail: activeRepairOrder ? "Stage customer, warranty, or internal pay against the live RO." : "Capture concern, approvals, and promised time context.", action: activeRepairOrder ? "addRepairOrderPaySplit('customer')" : "startAdvisorJourneyNote()", tone: activeRepairOrder ? "good" : "info" }
       ]
@@ -3920,7 +4105,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       title: "Parts Tools",
       copy: "Parts staff should have pick, source, ETA, and runner actions immediately available.",
       tools: [
-        { label: activeRepairOrder ? "Add Parts to RO" : "Create Pick Task", detail: activeRepairOrder ? "Post requested parts to the live RO." : "No active RO, so work from a pick or source task.", action: activeRepairOrder ? "addRepairOrderPartRequest()" : "createPartsPickTask()", tone: activeRepairOrder ? "warn" : "info" },
+        { label: activeRepairOrder ? "Create Parts Quote" : "Create Pick Task", detail: activeRepairOrder ? "Post quoted parts to the live RO." : "No active RO, so work from a pick or source task.", action: activeRepairOrder ? "createPartsQuote()" : "createPartsPickTask()", tone: activeRepairOrder ? "warn" : "info" },
         { label: activeRepairOrder ? "Place Special Order" : partsTask ? "Open Parts Task" : "Log ETA / Source", detail: activeRepairOrder ? "Create a live OEM or aftermarket special order against the same RO." : partsTask ? "A live parts workflow is already assigned." : "Document source decision, ETA, or special order status.", action: activeRepairOrder ? "createSpecialPartOrder()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(partsTask.id || partsTask.taskId || partsTask.createdAtUtc || partsTask.title || ""))}','parts')` : "startPartsEtaNote()", tone: "info" },
         { label: "Runner Dispatch", detail: "Use the same vehicle and technician context to coordinate delivery to the bay.", action: "setDepartmentLens('technicians')", tone: "good" },
         { label: "VIN Archive Reference", detail: "Review service and vehicle evidence before finalizing a part decision.", action: "openVehicleOpsContext('archive')", tone: "info" }
@@ -3930,7 +4115,7 @@ function buildRoleWorkspaceToolsMarkup(customer, vehicle, tasks = [], appointmen
       title: "Accounting Tools",
       copy: "Post payments, review invoice posture, and keep the back office attached to the same RO.",
       tools: [
-        { label: activeRepairOrder ? "Post AR Invoice" : "Queue Invoice Review", detail: activeRepairOrder ? "Post the customer-facing receivable against the live RO." : "No live RO, so work the invoice queue first.", action: activeRepairOrder ? "createAccountsReceivableInvoice()" : "queueAccountingInvoiceReview()", tone: activeRepairOrder ? "good" : "warn" },
+        { label: activeRepairOrder ? "Create Service Invoice" : "Queue Invoice Review", detail: activeRepairOrder ? "Post the customer-facing service receivable against the live RO." : "No live RO, so work the invoice queue first.", action: activeRepairOrder ? "createServiceInvoice()" : "queueAccountingInvoiceReview()", tone: activeRepairOrder ? "good" : "warn" },
         { label: activeRepairOrder ? "Add AP Bill" : (accountingTask ? "Open Invoice Task" : "Add Ledger Note"), detail: activeRepairOrder ? "Track vendor-side payable tied to the same service job." : accountingTask ? "There is already a live review or collection item." : "Capture statement, reconciliation, or note context.", action: activeRepairOrder ? "createAccountsPayableBill()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${escapeHtml(String(accountingTask.id || accountingTask.taskId || accountingTask.createdAtUtc || accountingTask.title || ""))}','accounting')` : "startLedgerNote()", tone: "info" },
         { label: activeRepairOrder ? "Review RO Balance" : "Open Service Context", detail: activeRepairOrder ? `${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} remaining on the RO.` : "Return to the advisor lane to resolve the source visit.", action: activeRepairOrder ? "setDepartmentLens('service')" : "setDepartmentLens('service')", tone: "warn" },
         { label: "Customer Financial File", detail: "Use the unified timeline and notes before closing the back-office loop.", action: "setCustomer360TimelineFilter('activity')", tone: "good" }
@@ -4024,8 +4209,8 @@ function getDepartmentCreateActions(lens = "home") {
     service: [
       { label: "Create Appointment", detail: "Book a service visit from the advisor dashboard.", action: "startDepartmentAppointmentCreate()" },
       { label: "Create RO", detail: "Open a live repair order from the service desk.", action: "startDepartmentRepairOrderCreate()" },
-      { label: "Create Customer", detail: "Add a new service customer to the DMS.", action: "startCreateCustomerRecord()" },
-      { label: "Create Vehicle", detail: "Add a vehicle to the selected customer record.", action: "startCreateVehicleRecord()" }
+      { label: "Create Service Quote", detail: "Write a labor or diagnostic quote into the active RO.", action: "startServiceQuoteCreate()" },
+      { label: "Create Service Invoice", detail: "Post a customer-facing service invoice from the live RO.", action: "startServiceInvoiceCreate()" }
     ],
     bdc: [
       { label: "Create Customer", detail: "Start a new customer record from the contact queue.", action: "startCreateCustomerRecord()" },
@@ -4049,12 +4234,14 @@ function getDepartmentCreateActions(lens = "home") {
       { label: "Create AR Invoice", detail: "Post the customer receivable when the RO is live.", action: "startAccountingReceivableCreate()" }
     ],
     parts: [
-      { label: "Create Part Line", detail: "Add requested parts to the active RO.", action: "startDepartmentPartCreate()" },
+      { label: "Create Parts Quote", detail: "Write a quoted parts line into the active RO.", action: "startPartsQuoteCreate()" },
       { label: "Create Special Order", detail: "Open an OEM or aftermarket special order.", action: "startDepartmentSpecialOrderCreate()" },
+      { label: "Create Parts Invoice", detail: "Post a customer-facing parts invoice from the live RO.", action: "startPartsInvoiceCreate()" },
       { label: "Create Parts Task", detail: "Start a pick, source, or ETA workflow.", action: "createPartsPickTask()" }
     ],
     accounting: [
-      { label: "Create AR Invoice", detail: "Post the customer receivable for the live job.", action: "startAccountingReceivableCreate()" },
+      { label: "Create Service Invoice", detail: "Post the service receivable for the live RO.", action: "startServiceInvoiceCreate()" },
+      { label: "Create Parts Invoice", detail: "Post the parts receivable for the live RO.", action: "startPartsInvoiceCreate()" },
       { label: "Create AP Bill", detail: "Create a vendor payable tied to the job.", action: "startAccountingPayableCreate()" },
       { label: "Create Review Task", detail: "Queue a back-office review for the team.", action: "queueAccountingInvoiceReview()" }
     ]
@@ -4204,6 +4391,22 @@ function startDepartmentPartCreate() {
   addRepairOrderPartRequest();
 }
 
+function startServiceQuoteCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before creating a service quote.", "error");
+    return;
+  }
+  createServiceQuote();
+}
+
+function startPartsQuoteCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before creating a parts quote.", "error");
+    return;
+  }
+  createPartsQuote();
+}
+
 function startDepartmentSpecialOrderCreate() {
   if (!getActiveRepairOrderRecord()) {
     setCustomer360ComposerStatus("Open an RO before placing a special order.", "error");
@@ -4218,6 +4421,22 @@ function startAccountingReceivableCreate() {
     return;
   }
   createAccountsReceivableInvoice();
+}
+
+function startServiceInvoiceCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before creating a service invoice.", "error");
+    return;
+  }
+  createServiceInvoice();
+}
+
+function startPartsInvoiceCreate() {
+  if (!getActiveRepairOrderRecord()) {
+    setCustomer360ComposerStatus("Open an RO before creating a parts invoice.", "error");
+    return;
+  }
+  createPartsInvoice();
 }
 
 function startAccountingPayableCreate() {
@@ -5077,8 +5296,8 @@ function buildRepairOrderBoardMarkup(repairOrders = []) {
             </div>
             <div class="customer360-ro-actions">
               <button type="button" class="customer360-toolbar-btn" onclick="setDepartmentLens('service')">${closed ? "View RO" : "Advisor View"}</button>
-              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? "openRepairOrderFrom360()" : "addRepairOrderEstimateLine()"}">${closed ? "Reopen Flow" : "Add Estimate"}</button>
-              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? `openCustomer360FocusedArtifact('tasks','${sourceId}','service')` : "addRepairOrderPartRequest()"}">${closed ? "Open Activity" : "Add Part"}</button>
+              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? "openRepairOrderFrom360()" : "createServiceQuote()"}">${closed ? "Reopen Flow" : "Service Quote"}</button>
+              <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? `openCustomer360FocusedArtifact('tasks','${sourceId}','service')` : "createPartsQuote()"}">${closed ? "Open Activity" : "Parts Quote"}</button>
               <button type="button" class="customer360-toolbar-btn secondary" onclick="${closed ? "addAccountingRepairOrderEntry()" : (latestClockEvent?.eventType === "clock_in" ? `addTechnicianClockEvent('clock_out')` : `addTechnicianClockEvent('clock_in')`)}">${closed ? "Post Payment" : (latestClockEvent?.eventType === "clock_in" ? "Clock Out" : "Clock In")}</button>
               <button type="button" class="customer360-toolbar-btn secondary" onclick="addAccountingRepairOrderEntry()">Post Accounting</button>
               <button type="button" class="customer360-toolbar-btn ${closed ? "secondary" : ""}" onclick="${closed ? "openRepairOrderFrom360()" : "closeActiveRepairOrder()"}">${closed ? "Open New RO" : "Close RO"}</button>
@@ -6359,7 +6578,7 @@ function buildDepartmentRecordStripMarkup(customer, vehicle, tasks = [], appoint
       : currentDepartmentLens === "parts"
         ? (activeRepairOrder ? "createSpecialPartOrder()" : "openRepairOrderFrom360()")
         : currentDepartmentLens === "accounting"
-          ? (activeRepairOrder ? "createAccountsReceivableInvoice()" : "setDepartmentLens('accounting')")
+          ? (activeRepairOrder ? "createServiceInvoice()" : "setDepartmentLens('accounting')")
           : primaryPhone
             ? "openSmsForPhone(getSelectedCustomerPrimaryPhone())"
             : "setDepartmentLens('home')";
