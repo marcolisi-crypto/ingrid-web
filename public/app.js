@@ -1633,8 +1633,8 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         <div class="customer360-lens-quickbar">
           <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createPartsQuote()" : (partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()")}"><span>📦</span>${activeRepairOrder ? "Parts Quote" : partsTask ? "Open Pick" : "Create Pick"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createSpecialPartOrder()" : (partsEtaNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsEtaNote)}','parts')` : "startPartsEtaNote()")}"><span>⏱</span>${activeRepairOrder ? "Special Order" : partsEtaNote ? "Open ETA" : "Add ETA"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()"}"><span>🤖</span>${technicianTask ? "Return to Tech" : "Route to Tech"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "openPartsSourcingWindow()" : (partsEtaNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsEtaNote)}','parts')` : "startPartsEtaNote()")}"><span>🗂</span>${activeRepairOrder ? "Source / Bin" : partsEtaNote ? "Open ETA" : "Add ETA"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "advancePartsArrivalWorkflow('arrived')" : (technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()")}"><span>🚚</span>${activeRepairOrder ? "Mark Arrived" : technicianTask ? "Return to Tech" : "Route to Tech"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Pick</div>
@@ -1657,8 +1657,9 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         <div class="customer360-lens-actions">
           <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createSpecialPartOrder()" : "createPartsPickTask()"}">${activeRepairOrder ? "Place Special Order" : "Create Parts Task"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsQuote()" : "startPartsEtaNote()"}">${activeRepairOrder ? "Create Parts Quote" : "Add ETA Note"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsInvoice()" : "createPartsPickTask()"}">${activeRepairOrder ? "Create Parts Invoice" : "Create Parts Task"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "updatePartsEtaWindow()" : "startPartsEtaNote()"}">${activeRepairOrder ? "Update ETA / Source" : "Add ETA Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "advancePartsArrivalWorkflow('ready_to_deliver')" : "createPartsPickTask()"}">${activeRepairOrder ? "Ready to Deliver" : "Create Parts Task"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "startPartsDeclinedRecovery()" : "createPartsPickTask()"}">${activeRepairOrder ? "Declined Follow-Up" : "Create Parts Task"}</button>
         </div>
       </div>
     `;
@@ -3573,11 +3574,15 @@ function buildPartsApprovalRailMarkup(customer, vehicle, appointments = []) {
         <button type="button" class="customer360-toolbar-btn" onclick="requestPartsEsignature()">✍️ E-signature</button>
         <button type="button" class="customer360-toolbar-btn" onclick="recordPartsWetSignatureApproval()">🖊️ Wet signature</button>
         <button type="button" class="customer360-toolbar-btn secondary" onclick="markPartsWorkDeclined()">❌ Mark declined</button>
+        <button type="button" class="customer360-toolbar-btn secondary" onclick="startPartsDeclinedRecovery()">↺ Declined follow-up</button>
       </div>
       <div class="customer360-meta" style="margin-top:10px;">${escapeHtml(approvalSummary.detail)}${declinedCount ? ` • ${declinedCount} part line${declinedCount === 1 ? "" : "s"} declined` : ""}</div>
       <div class="service-advisor-floating-actions">
         <button type="button" class="service-advisor-float-btn" onclick="createPartsQuote()">Parts quote</button>
         <button type="button" class="service-advisor-float-btn" onclick="createSpecialPartOrder()">Special order</button>
+        <button type="button" class="service-advisor-float-btn" onclick="openPartsSourcingWindow()">Source / Bin</button>
+        <button type="button" class="service-advisor-float-btn" onclick="updatePartsEtaWindow()">Update ETA</button>
+        <button type="button" class="service-advisor-float-btn" onclick="advancePartsArrivalWorkflow('arrived')">Mark Arrived</button>
         <button type="button" class="service-advisor-float-btn" onclick="createPartsInvoice()">Parts invoice</button>
       </div>
     </div>
@@ -3671,11 +3676,12 @@ function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
   const partsTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]")) || openTasks[0] || null;
   const technicianTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[technician]"));
   const nextAppointment = appointments[0];
+  const latestOrder = getLatestRepairOrderPartOrder(activeRepairOrder);
   const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.appointmentId || item.createdAtUtc || item.title || ""));
   const sourcingRows = [
     {
       title: "Stock pull",
-      detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(activeRepairOrder.partLines || []).length} part line(s) attached` : (openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`),
+      detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(activeRepairOrder.partLines || []).length} part line(s) attached${latestOrder?.partNumber ? ` • ${latestOrder.partNumber}` : ""}` : (openTasks[0]?.title || `Open pick flow for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
       actionLabel: partsTask ? "Open" : "Create",
       action: partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()",
@@ -3683,18 +3689,18 @@ function buildPartsTasksMarkup(openTasks = [], appointments = [], vehicle) {
     },
     {
       title: "Source decision",
-      detail: activeRepairOrder ? `${(currentPartOrders || []).length} live part order(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).parts)} on the RO` : (openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet"),
+      detail: activeRepairOrder ? `${(currentPartOrders || []).length} live part order(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).parts)} on the RO${latestOrder ? ` • ${titleCase(String(latestOrder.status || "ordered").replaceAll("_", " "))}` : ""}` : (openTasks.length ? "Choose in-stock, transfer, or special order" : "No active SKU routing yet"),
       tone: openTasks.length ? "info" : "good",
-      actionLabel: activeRepairOrder ? "Order" : partsTask ? "Review" : "Start",
-      action: activeRepairOrder ? "createSpecialPartOrder()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()",
+      actionLabel: activeRepairOrder ? "Source" : partsTask ? "Review" : "Start",
+      action: activeRepairOrder ? "openPartsSourcingWindow()" : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()",
       task: partsTask
     },
     {
-      title: "Dispatch",
-      detail: appointments.length ? "Runner can route to active bay" : "Stage at counter until bay is ready",
+      title: "Arrival / dispatch",
+      detail: latestOrder ? `${titleCase(String(latestOrder.status || "ordered").replaceAll("_", " "))} • ${latestOrder.etaAtUtc ? formatDisplayDateTime(latestOrder.etaAtUtc) : "ETA pending"}${latestOrder?.partNumber ? ` • ${latestOrder.partNumber}` : ""}` : (appointments.length ? "Runner can route to active bay" : "Stage at counter until bay is ready"),
       tone: appointments.length ? "warn" : "info",
-      actionLabel: nextAppointment ? "Open" : technicianTask ? "Return" : "Prep",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()",
+      actionLabel: latestOrder ? (String(latestOrder.status || "").toLowerCase().includes("arriv") ? "Ready" : "Arrived") : nextAppointment ? "Open" : technicianTask ? "Return" : "Prep",
+      action: latestOrder ? (String(latestOrder.status || "").toLowerCase().includes("arriv") ? "advancePartsArrivalWorkflow('ready_to_deliver')" : "advancePartsArrivalWorkflow('arrived')") : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : technicianTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(technicianTask)}','technicians')` : "createTechnicianPartsRequest()",
       task: partsTask || technicianTask
     }
   ];
@@ -3712,20 +3718,20 @@ function buildPartsNotesMarkup(notes = [], appointments = []) {
     {
       label: "ETA updates",
       detail: livePartOrder ? `${livePartOrder.partNumber || "Part"} • ${titleCase(livePartOrder.status || "ordered")} • ETA ${formatDisplayDateTime(livePartOrder.etaAtUtc || livePartOrder.updatedAtUtc || livePartOrder.createdAtUtc)}` : notes.length ? `${notes.length} parts-side notes captured for customer follow-up` : "No ETA note has been recorded yet",
-      actionLabel: partsNote ? "Open" : "Add",
-      action: partsNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsNote)}','parts')` : "startPartsEtaNote()"
+      actionLabel: livePartOrder ? "Update" : partsNote ? "Open" : "Add",
+      action: livePartOrder ? "updatePartsEtaWindow()" : partsNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsNote)}','parts')` : "startPartsEtaNote()"
     },
     {
-      label: "Runner dispatch",
-      detail: appointments.length ? "Bay delivery can be queued against the active visit" : "No active lane visit, so keep dispatch staged",
-      actionLabel: nextAppointment ? "Open" : partsTask ? "Open" : "Prep",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
+      label: "Arrival / runner dispatch",
+      detail: livePartOrder ? `${titleCase(String(livePartOrder.status || "ordered").replaceAll("_", " "))} • ${livePartOrder.partNumber || "Part"}${appointments.length ? " • active bay visit ready" : ""}` : (appointments.length ? "Bay delivery can be queued against the active visit" : "No active lane visit, so keep dispatch staged"),
+      actionLabel: livePartOrder ? "Advance" : nextAppointment ? "Open" : partsTask ? "Open" : "Prep",
+      action: livePartOrder ? (String(livePartOrder.status || "").toLowerCase().includes("arriv") ? "advancePartsArrivalWorkflow('ready_to_deliver')" : "advancePartsArrivalWorkflow('arrived')") : nextAppointment ? `openCustomer360FocusedArtifact('appointments','${getArtifactSourceId(nextAppointment)}','parts')` : partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "createPartsPickTask()"
     },
     {
-      label: "Vendor status",
-      detail: "Track transfer, special order, and backorder posture here",
-      actionLabel: partsNote ? "Review" : "Log",
-      action: partsNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(partsNote)}','parts')` : "startPartsEtaNote()"
+      label: "Declined follow-up",
+      detail: "Track save attempts, alternate part sourcing, or deferred parts decisions here",
+      actionLabel: "Queue",
+      action: "startPartsDeclinedRecovery()"
     }
   ];
 
@@ -4807,6 +4813,278 @@ async function addRepairOrderPaySplit(payload = "customer") {
   }
 }
 
+async function logPartsWorkflowEvent({
+  repairOrder = getActiveRepairOrderRecord(),
+  headline = "",
+  taskTitle = "",
+  detailLines = {},
+  dueAt = "",
+  assignedUser = "",
+  successMessage = ""
+} = {}) {
+  const repairOrderNumber = repairOrder?.repairOrderNumber || "active RO";
+  const detailBody = buildStructuredDetailLines(`[PARTS] ${headline} on ${repairOrderNumber}.`, detailLines);
+  await createQuickNoteRecord({
+    noteType: "internal",
+    body: detailBody,
+    suppressLanding: true
+  });
+  await createQuickTaskRecord({
+    assignedDepartment: "parts",
+    assignedUser: assignedUser || getPartsCounterOwner(repairOrder),
+    title: taskTitle || `[PARTS] ${headline} • ${repairOrderNumber}`,
+    description: detailBody,
+    dueAt: dueAt || toLocalDateInputValue(new Date())
+  });
+  setCustomer360ComposerStatus(successMessage || `${headline} recorded.`, "success");
+}
+
+async function openPartsSourcingWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Open RO Before Sourcing",
+      subtitle: "Source and bin decisions need an active repair order so the desk stays tied to the correct job."
+    });
+    return;
+  }
+
+  const latestOrder = getLatestRepairOrderPartOrder(repairOrder);
+  const latestPartLine = getLatestRepairOrderPartLine(repairOrder);
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Source / Bin Control",
+      subtitle: "Lock the sourcing decision, bin location, and vendor posture for the current parts work.",
+      submitLabel: "Save Sourcing",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${(repairOrder.partLines || []).length} part line(s) on the job.` },
+        { label: "Current part", value: latestOrder?.partNumber || latestPartLine?.partNumber || "No part selected", detail: latestOrder ? getPartsOrderVendorLabel(latestOrder) : "Choose the part you are sourcing." },
+        { label: "Counter owner", value: getPartsCounterOwner(repairOrder), detail: "This follow-through stays in the parts desk queue." }
+      ],
+      notes: [
+        { label: "Sourcing control", body: "Use this when the counter decides whether the part comes from stock, transfer, OEM, or aftermarket and needs the bin and ETA recorded for the desk." }
+      ],
+      fields: [
+        { type: "section", label: "Part routing" },
+        { name: "partNumber", label: "Part number", type: "text", required: true, value: latestOrder?.partNumber || latestPartLine?.partNumber || "PART-REQ" },
+        { name: "source", label: "Source", type: "select", value: latestOrder?.orderType || "stock", options: ["stock", "oem", "aftermarket", "transfer", "backorder"] },
+        { name: "vendor", label: "Vendor", type: "text", value: getPartsOrderVendorLabel(latestOrder) || "OEM" },
+        { type: "section", label: "Location and timing" },
+        { name: "binLocation", label: "Bin location", type: "text", value: "" },
+        { name: "etaDate", label: "ETA date", type: "date", value: latestOrder?.etaAtUtc ? toLocalDateInputValue(new Date(latestOrder.etaAtUtc)) : toLocalDateInputValue(addDays(new Date(), 2)) },
+        { name: "status", label: "Desk status", type: "select", value: latestOrder?.status || "sourcing", options: ["sourcing", "ordered", "backorder", "stock_reserved", "ready_to_pull"] },
+        { name: "notes", label: "Counter notes", type: "textarea", full: true, value: "" }
+      ],
+      onSubmit: async (values) => openPartsSourcingWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logPartsWorkflowEvent({
+      repairOrder,
+      headline: "Source / bin updated",
+      taskTitle: `[PARTS] Source / bin update • ${repairOrder.repairOrderNumber || "RO"} • ${payload.partNumber || "Part"}`,
+      dueAt: payload.etaDate,
+      detailLines: {
+        "Part Number": payload.partNumber,
+        "Source": titleCase(String(payload.source || "").replaceAll("_", " ")),
+        "Vendor": payload.vendor,
+        "Bin": payload.binLocation,
+        "ETA": payload.etaDate,
+        "Status": titleCase(String(payload.status || "").replaceAll("_", " ")),
+        "Notes": payload.notes || ""
+      },
+      successMessage: `Sourcing updated for ${payload.partNumber || "the part"}.`
+    });
+  } catch (err) {
+    console.error("openPartsSourcingWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to save sourcing control.", "error");
+  }
+}
+
+async function updatePartsEtaWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Open RO Before ETA Update",
+      subtitle: "ETA updates need an active repair order so the desk can follow the correct job."
+    });
+    return;
+  }
+
+  const latestOrder = getLatestRepairOrderPartOrder(repairOrder);
+  const latestPartLine = getLatestRepairOrderPartLine(repairOrder);
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Update ETA / Customer Follow-Up",
+      subtitle: "Record the latest ETA, vendor posture, and customer communication status for the parts desk.",
+      submitLabel: "Save ETA",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "ETA changes should stay visible to service and parts." },
+        { label: "Current part", value: latestOrder?.partNumber || latestPartLine?.partNumber || "No part selected", detail: latestOrder?.etaAtUtc ? `Current ETA ${formatDisplayDateTime(latestOrder.etaAtUtc)}` : "No ETA has been recorded yet." },
+        { label: "Queue owner", value: getPartsCounterOwner(repairOrder), detail: "Use this to keep the counter follow-up current." }
+      ],
+      fields: [
+        { type: "section", label: "ETA follow-through" },
+        { name: "partNumber", label: "Part number", type: "text", required: true, value: latestOrder?.partNumber || latestPartLine?.partNumber || "PART-REQ" },
+        { name: "etaDate", label: "ETA date", type: "date", required: true, value: latestOrder?.etaAtUtc ? toLocalDateInputValue(new Date(latestOrder.etaAtUtc)) : toLocalDateInputValue(addDays(new Date(), 2)) },
+        { name: "customerUpdate", label: "Customer update", type: "select", value: "pending", options: ["pending", "sms_sent", "email_sent", "advisor_called"] },
+        { name: "status", label: "Order posture", type: "select", value: latestOrder?.status || "ordered", options: ["ordered", "backorder", "arriving_today", "delayed", "ready_to_deliver"] },
+        { name: "notes", label: "ETA notes", type: "textarea", full: true, value: "" }
+      ],
+      onSubmit: async (values) => updatePartsEtaWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logPartsWorkflowEvent({
+      repairOrder,
+      headline: "ETA updated",
+      taskTitle: `[PARTS] ETA follow-up • ${repairOrder.repairOrderNumber || "RO"} • ${payload.partNumber || "Part"}`,
+      dueAt: payload.etaDate,
+      detailLines: {
+        "Part Number": payload.partNumber,
+        "ETA": payload.etaDate,
+        "Customer Update": titleCase(String(payload.customerUpdate || "").replaceAll("_", " ")),
+        "Order Posture": titleCase(String(payload.status || "").replaceAll("_", " ")),
+        "Notes": payload.notes || ""
+      },
+      successMessage: `ETA updated for ${payload.partNumber || "the part"}.`
+    });
+  } catch (err) {
+    console.error("updatePartsEtaWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to update ETA.", "error");
+  }
+}
+
+async function advancePartsArrivalWorkflow(targetStatus = "arrived", payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Open RO Before Arrival Update",
+      subtitle: "Arrival and delivery states need an active repair order so the right bay and advisor stay in sync."
+    });
+    return;
+  }
+
+  const latestOrder = getLatestRepairOrderPartOrder(repairOrder);
+  const latestPartLine = getLatestRepairOrderPartLine(repairOrder);
+  const stateConfig = {
+    arrived: { title: "Mark Part Arrived", submitLabel: "Mark Arrived", headline: "Part arrived", queueTitle: "Part arrived" },
+    ready_to_deliver: { title: "Mark Ready to Deliver", submitLabel: "Mark Ready", headline: "Part ready to deliver", queueTitle: "Ready to deliver" },
+    delivered: { title: "Mark Delivered to Bay", submitLabel: "Mark Delivered", headline: "Part delivered to bay", queueTitle: "Delivered to bay" }
+  };
+  const config = stateConfig[targetStatus] || stateConfig.arrived;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: config.title,
+      subtitle: "Update the counter workflow so advisors and technicians know whether the part is on hand, staged, or delivered.",
+      submitLabel: config.submitLabel,
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Arrival posture should stay visible to the whole fixed-ops flow." },
+        { label: "Part", value: latestOrder?.partNumber || latestPartLine?.partNumber || "No part selected", detail: getPartsOrderVendorLabel(latestOrder) || "Use the part number you are moving." },
+        { label: "Target state", value: titleCase(String(targetStatus).replaceAll("_", " ")), detail: "This should feed the parts arrival queue and counter follow-up." }
+      ],
+      fields: [
+        { type: "section", label: "Arrival state" },
+        { name: "partNumber", label: "Part number", type: "text", required: true, value: latestOrder?.partNumber || latestPartLine?.partNumber || "PART-REQ" },
+        { name: "binLocation", label: "Bin / staging", type: "text", value: "" },
+        { name: "deliveryTarget", label: "Deliver to", type: "select", value: targetStatus === "delivered" ? "technician_bay" : "parts_counter", options: ["parts_counter", "service_advisor", "technician_bay", "customer_hold"] },
+        { name: "notes", label: "Arrival notes", type: "textarea", full: true, value: "" }
+      ],
+      onSubmit: async (values) => advancePartsArrivalWorkflow(targetStatus, { ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logPartsWorkflowEvent({
+      repairOrder,
+      headline: config.headline,
+      taskTitle: `[PARTS] ${config.queueTitle} • ${repairOrder.repairOrderNumber || "RO"} • ${payload.partNumber || "Part"}`,
+      detailLines: {
+        "Part Number": payload.partNumber,
+        "State": titleCase(String(targetStatus).replaceAll("_", " ")),
+        "Bin / Staging": payload.binLocation,
+        "Deliver To": titleCase(String(payload.deliveryTarget || "").replaceAll("_", " ")),
+        "Notes": payload.notes || ""
+      },
+      successMessage: `${config.queueTitle} recorded for ${payload.partNumber || "the part"}.`
+    });
+  } catch (err) {
+    console.error("advancePartsArrivalWorkflow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to update parts arrival state.", "error");
+  }
+}
+
+async function startPartsDeclinedRecovery(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "parts",
+      eyebrow: "Parts Counter",
+      title: "Open RO Before Declined Follow-Up",
+      subtitle: "Declined quote recovery needs an active repair order so the follow-up stays tied to the right job."
+    });
+    return;
+  }
+
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "parts",
+      eyebrow: "Parts Quote Recovery",
+      title: "Declined Follow-Up",
+      subtitle: "Record the next save attempt when a customer declines quoted parts.",
+      submitLabel: "Queue Follow-Up",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: `${getRepairOrderQuoteLineCount(repairOrder, "parts")} parts quote lines on the RO.` },
+        { label: "Counter owner", value: getPartsCounterOwner(repairOrder), detail: "This follow-up stays in the parts queue." },
+        { label: "Use this for", value: "Save attempt / alternate / defer", detail: "Keep the paper trail visible instead of losing it in freeform notes." }
+      ],
+      fields: [
+        { type: "section", label: "Recovery plan" },
+        { name: "outcome", label: "Next move", type: "select", value: "save_attempt", options: ["save_attempt", "alternate_part", "defer", "close_declined"] },
+        { name: "dueAt", label: "Follow-up date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 1)) },
+        { name: "notes", label: "Recovery notes", type: "textarea", required: true, full: true, value: "Customer declined quoted parts. Next counter follow-up:" }
+      ],
+      onSubmit: async (values) => startPartsDeclinedRecovery({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logPartsWorkflowEvent({
+      repairOrder,
+      headline: "Declined parts follow-up queued",
+      taskTitle: `[PARTS] Declined quote recovery • ${repairOrder.repairOrderNumber || "RO"}`,
+      dueAt: payload.dueAt,
+      detailLines: {
+        "Next Move": titleCase(String(payload.outcome || "").replaceAll("_", " ")),
+        "Follow-Up Date": payload.dueAt,
+        "Notes": payload.notes || ""
+      },
+      successMessage: "Declined parts follow-up queued."
+    });
+  } catch (err) {
+    console.error("startPartsDeclinedRecovery error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to queue declined follow-up.", "error");
+  }
+}
+
 async function createSpecialPartOrder(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!payload?.__submit) {
@@ -4828,13 +5106,16 @@ async function createSpecialPartOrder(payload = null) {
         { type: "section", label: "Part sourcing" },
         { name: "partNumber", label: "Part number", type: "text", required: true, value: "OEM-SO-001" },
         { name: "vendor", label: "Vendor", type: "text", required: true, value: "OEM" },
+        { name: "source", label: "Source", type: "select", value: "oem", options: ["oem", "aftermarket", "transfer", "stock"] },
         { name: "orderType", label: "Order type", type: "select", value: "special_order", options: ["special_order", "stock_order", "transfer"] },
         { type: "section", label: "Order values" },
         { name: "quantity", label: "Quantity", type: "number", required: true, value: "1", min: 1, step: 1 },
         { name: "unitCost", label: "Unit cost", type: "number", required: true, value: "89", min: 0, step: 0.01 },
         { name: "etaDate", label: "ETA date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 3)) },
-        { name: "status", label: "Status", type: "select", value: "ordered", options: ["ordered", "backorder", "arrived"] },
-        { name: "vendorReference", label: "Vendor reference", type: "text", value: "" }
+        { name: "status", label: "Status", type: "select", value: "ordered", options: ["ordered", "backorder", "arrived", "ready_to_deliver"] },
+        { name: "binLocation", label: "Bin / staging", type: "text", value: "" },
+        { name: "vendorReference", label: "Vendor reference", type: "text", value: "" },
+        { name: "notes", label: "Counter notes", type: "textarea", full: true, value: "" }
       ],
       onSubmit: async (values) => createSpecialPartOrder({ ...values, __submit: true })
     });
@@ -4848,6 +5129,7 @@ async function createSpecialPartOrder(payload = null) {
         repairOrderId: repairOrder?.id || null,
         partNumber: payload.partNumber,
         vendor: buildStructuredDetailLines(payload.vendor, {
+          "Source": titleCase(String(payload.source || "").replaceAll("_", " ")),
           "Vendor Ref": payload.vendorReference
         }),
         orderType: payload.orderType || "special_order",
@@ -4860,6 +5142,25 @@ async function createSpecialPartOrder(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create part order");
+    await logPartsWorkflowEvent({
+      repairOrder,
+      headline: "Special order opened",
+      taskTitle: `[PARTS] Special order in flight • ${repairOrder?.repairOrderNumber || "RO"} • ${payload.partNumber || "Part"}`,
+      dueAt: payload.etaDate,
+      detailLines: {
+        "Part Number": payload.partNumber,
+        "Vendor": payload.vendor,
+        "Source": titleCase(String(payload.source || "").replaceAll("_", " ")),
+        "Order Type": titleCase(String(payload.orderType || "").replaceAll("_", " ")),
+        "Quantity": String(payload.quantity || 1),
+        "Unit Cost": formatMoney(Number(payload.unitCost || 0)),
+        "ETA": payload.etaDate,
+        "Status": titleCase(String(payload.status || "").replaceAll("_", " ")),
+        "Bin / Staging": payload.binLocation,
+        "Vendor Reference": payload.vendorReference,
+        "Notes": payload.notes || ""
+      }
+    });
     await refreshSelectedCustomer360();
     renderCustomer360();
     setCustomer360ComposerStatus(`Special order ${data.partNumber || "created"} queued for parts.`, "success");
@@ -6585,6 +6886,26 @@ function getRepairOrderPartOrders(repairOrder = {}) {
   return (currentPartOrders || []).filter((item) => String(item.repairOrderId || "") === repairOrderId);
 }
 
+function getLatestRepairOrderPartOrder(repairOrder = {}) {
+  return getRepairOrderPartOrders(repairOrder)
+    .slice()
+    .sort((left, right) => new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime())[0] || null;
+}
+
+function getLatestRepairOrderPartLine(repairOrder = {}) {
+  return (Array.isArray(repairOrder?.partLines) ? repairOrder.partLines : [])
+    .slice()
+    .sort((left, right) => new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime())[0] || null;
+}
+
+function getPartsOrderVendorLabel(order = {}) {
+  return String(order?.vendor || "").split("\n")[0].trim() || "Vendor pending";
+}
+
+function getPartsCounterOwner(repairOrder = null) {
+  return getPreferredDepartmentUser("parts", "Parts Counter");
+}
+
 function getRepairOrderArInvoices(repairOrder = {}) {
   const repairOrderId = String(repairOrder?.id || "");
   return (currentAccountsReceivableInvoices || []).filter((item) => String(item.repairOrderId || "") === repairOrderId);
@@ -7938,10 +8259,41 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         cta: "Open MPI"
       });
     });
-  const specialOrderRows = currentPartOrders
-    .filter((order) => String(order.orderType || "").toLowerCase().includes("special"))
+  const specialOrderWorkflowTasks = allOpenTasks.filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return getTaskAssignedDepartment(task) === "parts" && (
+      haystack.includes("special order") ||
+      haystack.includes("source / bin update") ||
+      haystack.includes("eta follow-up")
+    );
+  });
+  const specialOrderRows = [
+    ...currentPartOrders
+      .filter((order) => String(order.orderType || "").toLowerCase().includes("special"))
+      .map((order) => ({ type: "order", order })),
+    ...specialOrderWorkflowTasks.map((task) => ({ type: "task", task }))
+  ]
     .slice(0, 8)
-    .map((order) => {
+    .map((entry) => {
+      if (entry.type === "task") {
+        const task = entry.task;
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "Special order follow-through",
+          meta: task.description || "Parts sourcing and ETA follow-up",
+          owner: task.assignedUser || "Parts Queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
+          badges: ["Special Order", getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','parts','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open Follow-Up"
+        });
+      }
+      const order = entry.order;
       const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(order.repairOrderId || ""));
       const rowCustomer = getCustomerById(repairOrder?.customerId);
       const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
@@ -7949,7 +8301,7 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         customer: rowCustomer,
         vehicle: rowVehicle,
         title: `${order.partNumber || "Part"} • Special order`,
-        meta: `${titleCase(order.vendor || "vendor")} • ETA ${formatDisplayDateTime(order.etaAtUtc || order.updatedAtUtc || order.createdAtUtc)}`,
+        meta: `${getPartsOrderVendorLabel(order)} • ETA ${formatDisplayDateTime(order.etaAtUtc || order.updatedAtUtc || order.createdAtUtc)}`,
         owner: "Parts Queue",
         status: titleCase(order.status || "ordered"),
         dueAt: order.etaAtUtc || "",
@@ -7959,10 +8311,41 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         cta: "Open Order"
       });
     });
-  const arrivalRows = currentPartOrders
-    .filter((order) => ["arrived", "picked", "ready", "received"].includes(String(order.status || "").toLowerCase()))
+  const arrivalWorkflowTasks = allOpenTasks.filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return getTaskAssignedDepartment(task) === "parts" && (
+      haystack.includes("part arrived") ||
+      haystack.includes("ready to deliver") ||
+      haystack.includes("delivered to bay")
+    );
+  });
+  const arrivalRows = [
+    ...currentPartOrders
+      .filter((order) => ["arrived", "picked", "ready", "received", "ready_to_deliver"].includes(String(order.status || "").toLowerCase()))
+      .map((order) => ({ type: "order", order })),
+    ...arrivalWorkflowTasks.map((task) => ({ type: "task", task }))
+  ]
     .slice(0, 8)
-    .map((order) => {
+    .map((entry) => {
+      if (entry.type === "task") {
+        const task = entry.task;
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "Arrival workflow",
+          meta: task.description || "Parts arrival or bay delivery follow-through",
+          owner: task.assignedUser || "Parts Queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
+          badges: ["Arrival", getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','parts','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open Delivery"
+        });
+      }
+      const order = entry.order;
       const repairOrder = allRepairOrders.find((item) => String(item.id || "") === String(order.repairOrderId || ""));
       const rowCustomer = getCustomerById(repairOrder?.customerId);
       const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
@@ -7970,12 +8353,12 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         customer: rowCustomer,
         vehicle: rowVehicle,
         title: `${order.partNumber || "Part"} • Ready to deliver`,
-        meta: `${titleCase(order.status || "arrived")} • ${repairOrder?.repairOrderNumber || "RO queue"}`,
+        meta: `${titleCase(String(order.status || "arrived").replaceAll("_", " "))} • ${repairOrder?.repairOrderNumber || "RO queue"}`,
         owner: "Parts Queue",
-        status: titleCase(order.status || "arrived"),
+        status: titleCase(String(order.status || "arrived").replaceAll("_", " ")),
         dueAt: order.etaAtUtc || "",
         updatedAt: order.updatedAtUtc || order.createdAtUtc || "",
-        badges: [titleCase(order.vendor || "vendor"), "Deliver to bay"],
+        badges: [getPartsOrderVendorLabel(order), "Deliver to bay"],
         action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder?.customerId || ""))}','parts')`,
         cta: "Open Delivery"
       });
