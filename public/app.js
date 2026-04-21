@@ -2172,11 +2172,15 @@ async function createQuickTaskRecord({ assignedDepartment = currentDepartmentLen
   if (!res.ok) throw new Error(data.error || "Failed to create task");
   await loadTasks();
   await refreshSelectedCustomer360();
-  renderCustomer360();
+  completeCreateLanding({
+    lens: normalizeDepartmentKey(assignedDepartment || currentDepartmentLens || "home"),
+    kind: "tasks",
+    sourceId: data.id || data.taskId || data.createdAtUtc || data.title || title
+  });
   return data;
 }
 
-async function createQuickNoteRecord({ noteType = "internal", body = "" } = {}) {
+async function createQuickNoteRecord({ noteType = "internal", body = "", suppressLanding = false } = {}) {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   if (!customer) throw new Error("Select a customer before creating a note.");
@@ -2195,7 +2199,15 @@ async function createQuickNoteRecord({ noteType = "internal", body = "" } = {}) 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to create note");
   await refreshSelectedCustomer360();
-  renderCustomer360();
+  if (!suppressLanding) {
+    completeCreateLanding({
+      lens: getCreateLandingLens(),
+      kind: "notes",
+      sourceId: data.id || data.noteId || data.createdAtUtc || body
+    });
+  } else {
+    renderCustomer360();
+  }
   return data;
 }
 
@@ -2234,7 +2246,11 @@ async function createQuickAppointmentRecord({ service = "", advisor = "", date =
   if (!res.ok) throw new Error(data.error || "Failed to schedule service");
   await loadAppointments();
   await refreshSelectedCustomer360();
-  renderCustomer360();
+  completeCreateLanding({
+    lens: getCreateLandingLens(),
+    kind: "appointments",
+    sourceId: data.id || data.appointmentId || data.createdAtUtc || `${date || ""} ${time || ""}`.trim()
+  });
   return data;
 }
 
@@ -2242,6 +2258,55 @@ function getDefaultAdvisorForLens() {
   if (currentDepartmentLens === "sales") return "Sales Desk";
   if (currentDepartmentLens === "fi") return "Finance Desk";
   return "Rachel Smith";
+}
+
+function getPreferredDepartmentUser(department = "", fallback = "") {
+  const roster = getDepartmentRoster(department);
+  const normalizedDepartment = normalizeDepartmentKey(department);
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const currentTask = (currentTasks || []).find((task) => {
+    const taskDepartment = getTaskAssignedDepartment(task);
+    return taskDepartment === normalizedDepartment && String(task.status || "").toLowerCase() !== "completed";
+  });
+  const preferredCandidates = [
+    normalizedDepartment === "service" ? getRepairOrderAdvisorName(activeRepairOrder || getActiveServiceReceptionRecord() || {}) : "",
+    normalizedDepartment === "technicians" ? latestClockEvent?.technicianName : "",
+    normalizedDepartment === "technicians" ? (Array.isArray(activeRepairOrder?.laborOps) ? activeRepairOrder.laborOps.find((item) => item?.technicianName)?.technicianName : "") : "",
+    currentTask?.assignedUser,
+    fallback
+  ].filter(Boolean);
+  return preferredCandidates.find((name) => roster.includes(name)) || roster[0] || preferredCandidates[0] || "";
+}
+
+function getPreferredRepairOrderOpCode(repairOrder = null) {
+  const activeRepairOrder = repairOrder || getActiveRepairOrderRecord();
+  const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const laborOps = Array.isArray(activeRepairOrder?.laborOps) ? activeRepairOrder.laborOps : [];
+  const estimateLines = Array.isArray(activeRepairOrder?.estimateLines) ? activeRepairOrder.estimateLines : [];
+  return (
+    latestClockEvent?.laborOpCode ||
+    laborOps.find((item) => String(item?.dispatchStatus || "").toLowerCase() !== "complete")?.opCode ||
+    laborOps[0]?.opCode ||
+    estimateLines[0]?.opCode ||
+    "GEN"
+  );
+}
+
+function getCreateLandingLens(preferredLens = "") {
+  if (DEPARTMENT_LENSES[preferredLens]) return preferredLens;
+  if (DEPARTMENT_LENSES[currentDepartmentLens]) return currentDepartmentLens;
+  return "home";
+}
+
+function completeCreateLanding({ lens = "", kind = "", sourceId = "" } = {}) {
+  const landingLens = getCreateLandingLens(lens);
+  currentCustomer360Focus = null;
+  if (kind && sourceId) {
+    openCustomer360FocusedArtifact(kind, sourceId, landingLens);
+    return;
+  }
+  setDepartmentLens(landingLens);
 }
 
 function getModalContextMarkup() {
@@ -3803,6 +3868,7 @@ async function openRepairOrderFrom360(payload = null) {
   }
   if (existing) {
     if (existing) {
+      completeCreateLanding({ lens: "service" });
       setCustomer360ComposerStatus(`RO ${existing.repairOrderNumber || "open"} is already active.`, "success");
     }
     return;
@@ -3875,7 +3941,7 @@ async function openRepairOrderFrom360(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to open repair order");
     await loadAppointments();
     await refreshSelectedCustomer360();
-    renderCustomer360();
+    completeCreateLanding({ lens: "service" });
     setCustomer360ComposerStatus(`Repair order ${data.repairOrderNumber || data.repairOrder?.repairOrderNumber || "opened"} created.`, "success");
   } catch (err) {
     console.error("openRepairOrderFrom360 error:", err);
@@ -4195,6 +4261,8 @@ async function addTechnicianClockEvent(eventType = "clock_in", payload = null) {
   }
 
   const technicianOptions = getDepartmentRoster("technicians");
+  const defaultTechnician = getPreferredDepartmentUser("technicians", technicianOptions[0] || "Technician Queue");
+  const defaultOpCode = getPreferredRepairOrderOpCode(repairOrder);
   if (!payload?.__submit) {
     openDmsActionModal({
       theme: "operations",
@@ -4205,13 +4273,13 @@ async function addTechnicianClockEvent(eventType = "clock_in", payload = null) {
       summaryItems: [
         { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Clocking will stay tied to this service job." },
         { label: "Event", value: titleCase(String(eventType || "").replaceAll("_", " ")), detail: "Use this for technician time tracking and bay visibility." },
-        { label: "Technician desk", value: technicianOptions[0] || "Tech queue", detail: "Assign the correct technician before posting the event." }
+        { label: "Technician desk", value: defaultTechnician || technicianOptions[0] || "Tech queue", detail: "Assign the correct technician before posting the event." }
       ],
       fields: [
         { type: "section", label: "Clock event" },
-        { name: "technicianName", label: "Technician", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
-        { name: "laborOpCode", label: "Labor op code", type: "text", required: true, value: "DIAG" },
-        { name: "notes", label: "Notes", type: "textarea", full: true, value: eventType === "clock_in" ? "Technician started work from 360." : "Technician finished work from 360." }
+        { name: "technicianName", label: "Technician", type: "select", required: true, value: defaultTechnician || technicianOptions[0] || "Technician Queue", options: technicianOptions.length ? technicianOptions : ["Technician Queue"] },
+        { name: "laborOpCode", label: "Labor op code", type: "text", required: true, value: defaultOpCode },
+        { name: "notes", label: "Notes", type: "textarea", full: true, value: eventType === "clock_in" ? `Technician started work on ${repairOrder.repairOrderNumber || "the active RO"}.` : `Technician finished work on ${repairOrder.repairOrderNumber || "the active RO"}.` }
       ],
       onSubmit: async (values) => addTechnicianClockEvent(eventType, { ...values, __submit: true })
     });
@@ -4224,10 +4292,10 @@ async function addTechnicianClockEvent(eventType = "clock_in", payload = null) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        technicianName: payload.technicianName || technicianOptions[0] || "Miguel Santos",
+        technicianName: payload.technicianName || defaultTechnician || technicianOptions[0] || "Technician Queue",
         eventType,
-        laborOpCode: payload.laborOpCode || "DIAG",
-        notes: payload.notes || (eventType === "clock_in" ? "Technician started work from 360." : "Technician finished work from 360.")
+        laborOpCode: payload.laborOpCode || defaultOpCode,
+        notes: payload.notes || (eventType === "clock_in" ? `Technician started work on ${repairOrder.repairOrderNumber || "the active RO"}.` : `Technician finished work on ${repairOrder.repairOrderNumber || "the active RO"}.`)
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -4317,6 +4385,8 @@ async function addRepairOrderLaborOp(payload = null) {
   }
 
   const technicianOptions = getDepartmentRoster("technicians");
+  const defaultTechnician = getPreferredDepartmentUser("technicians", technicianOptions[0] || "Technician Queue");
+  const defaultOpCode = getPreferredRepairOrderOpCode(repairOrder);
   if (!payload?.__submit) {
     openDmsActionModal({
       theme: "operations",
@@ -4326,7 +4396,7 @@ async function addRepairOrderLaborOp(payload = null) {
       submitLabel: "Add Labor Op",
       summaryItems: [
         { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "The labor op will be attached to this repair order." },
-        { label: "Technician desk", value: technicianOptions[0] || "Tech queue", detail: "Assign the op to a technician or foreman now." },
+        { label: "Technician desk", value: defaultTechnician || technicianOptions[0] || "Tech queue", detail: "Assign the op to a technician or foreman now." },
         { label: "Pay type", value: "Customer", detail: "Use pay split and warranty tools separately when needed." }
       ],
       notes: [
@@ -4334,9 +4404,9 @@ async function addRepairOrderLaborOp(payload = null) {
       ],
       fields: [
         { type: "section", label: "Operation setup" },
-        { name: "opCode", label: "Op code", type: "text", required: true, value: "DIAG" },
+        { name: "opCode", label: "Op code", type: "text", required: true, value: defaultOpCode },
         { name: "description", label: "Description", type: "text", required: true, value: "Diagnostic and dispatch labor op" },
-        { name: "technicianName", label: "Technician", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
+        { name: "technicianName", label: "Technician", type: "select", required: true, value: defaultTechnician || technicianOptions[0] || "Technician Queue", options: technicianOptions.length ? technicianOptions : ["Technician Queue"] },
         { type: "section", label: "Time and status" },
         { name: "soldHours", label: "Sold hours", type: "number", required: true, value: "1.5", min: 0, step: 0.1 },
         { name: "flatRateHours", label: "Flat-rate hours", type: "number", value: "1.2", min: 0, step: 0.1 },
@@ -4355,9 +4425,9 @@ async function addRepairOrderLaborOp(payload = null) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        opCode: payload.opCode || "DIAG",
+        opCode: payload.opCode || defaultOpCode,
         description: payload.description || "Diagnostic and dispatch labor op",
-        technicianName: payload.technicianName || technicianOptions[0] || "Miguel Santos",
+        technicianName: payload.technicianName || defaultTechnician || technicianOptions[0] || "Technician Queue",
         soldHours: Number(payload.soldHours || 1.5),
         flatRateHours: Number(payload.flatRateHours || 1.2),
         actualHours: Number(payload.actualHours || 0),
@@ -4390,6 +4460,7 @@ async function addRepairOrderInspection(payload = null) {
   }
 
   const technicianOptions = getDepartmentRoster("technicians");
+  const defaultTechnician = getPreferredDepartmentUser("technicians", technicianOptions[0] || "Technician Queue");
   if (!payload?.__submit) {
     openDmsActionModal({
       theme: "operations",
@@ -4400,7 +4471,7 @@ async function addRepairOrderInspection(payload = null) {
       summaryItems: [
         { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Inspection result will be attached to this service job." },
         { label: "Current MPI", value: formatCountLabel((repairOrder.multiPointInspections || []).length, "item"), detail: "Use this to add the next inspection result." },
-        { label: "Technician", value: technicianOptions[0] || "Tech queue", detail: "Inspection ownership stays visible to the advisor." }
+        { label: "Technician", value: defaultTechnician || technicianOptions[0] || "Tech queue", detail: "Inspection ownership stays visible to the advisor." }
       ],
       notes: [
         { label: "Inspection result", body: "Use MPI items for red/yellow/green conditions that should drive advisor approval, parts quoting, and follow-up." }
@@ -4412,7 +4483,7 @@ async function addRepairOrderInspection(payload = null) {
         { name: "result", label: "Result", type: "select", required: true, value: "yellow", options: ["green", "yellow", "red"] },
         { name: "severity", label: "Severity", type: "select", value: "attention", options: ["ok", "attention", "critical"] },
         { type: "section", label: "Technician note" },
-        { name: "technicianName", label: "Technician", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
+        { name: "technicianName", label: "Technician", type: "select", required: true, value: defaultTechnician || technicianOptions[0] || "Technician Queue", options: technicianOptions.length ? technicianOptions : ["Technician Queue"] },
         { name: "notes", label: "Notes", type: "textarea", required: true, full: true, value: "Pads nearing replacement threshold." }
       ],
       onSubmit: async (values) => addRepairOrderInspection({ ...values, __submit: true })
@@ -4431,7 +4502,7 @@ async function addRepairOrderInspection(payload = null) {
         result: payload.result || "yellow",
         severity: payload.severity || "attention",
         notes: payload.notes || "Pads nearing replacement threshold.",
-        technicianName: payload.technicianName || technicianOptions[0] || "Miguel Santos",
+        technicianName: payload.technicianName || defaultTechnician || technicianOptions[0] || "Technician Queue",
         inspectedAtUtc: new Date().toISOString()
       })
     });
@@ -4458,6 +4529,7 @@ async function addRepairOrderWarrantyClaim(payload = null) {
     return;
   }
 
+  const defaultOpCode = getPreferredRepairOrderOpCode(repairOrder);
   if (!payload?.__submit) {
     openDmsActionModal({
       theme: "service",
@@ -4476,7 +4548,7 @@ async function addRepairOrderWarrantyClaim(payload = null) {
       fields: [
         { type: "section", label: "Claim identity" },
         { name: "claimType", label: "Claim type", type: "select", value: "warranty", options: ["warranty", "goodwill", "policy"] },
-        { name: "opCode", label: "Op code", type: "text", required: true, value: "DIAG" },
+        { name: "opCode", label: "Op code", type: "text", required: true, value: defaultOpCode },
         { name: "failureCode", label: "Failure code", type: "text", required: true, value: "CHKENG" },
         { type: "section", label: "Cause and correction" },
         { name: "cause", label: "Cause", type: "textarea", required: true, full: true, value: "Check engine light concern" },
@@ -4497,7 +4569,7 @@ async function addRepairOrderWarrantyClaim(payload = null) {
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
         claimType: payload.claimType || "warranty",
-        opCode: payload.opCode || "DIAG",
+        opCode: payload.opCode || defaultOpCode,
         failureCode: payload.failureCode || "CHKENG",
         cause: payload.cause || "Check engine light concern",
         correction: payload.correction || "Diagnostic and warranty review",
@@ -4700,6 +4772,10 @@ async function createAccountsPayableBill(payload = null) {
         vendorName: payload.vendorName,
         invoiceNumber: payload.invoiceNumber,
         amount: Number(payload.amount || 0),
+        balanceDue: Number(payload.amount || 0),
+        payableType: payload.payableType || "parts",
+        profitCentre: payload.profitCentre || "parts",
+        brand: payload.brand || "",
         status: payload.status || "open",
         dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       })
@@ -4708,7 +4784,8 @@ async function createAccountsPayableBill(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create AP bill");
     await createQuickNoteRecord({
       noteType: "internal",
-      body: `[ACCOUNTING] AP Bill ${payload.invoiceNumber}\nVendor: ${payload.vendorName}\nPayable Type: ${titleCase(String(payload.payableType || "").replaceAll("_", " "))}\nProfit Centre: ${titleCase(String(payload.profitCentre || "").replaceAll("_", " "))}`
+      body: `[ACCOUNTING] AP Bill ${payload.invoiceNumber}\nVendor: ${payload.vendorName}\nPayable Type: ${titleCase(String(payload.payableType || "").replaceAll("_", " "))}\nProfit Centre: ${titleCase(String(payload.profitCentre || "").replaceAll("_", " "))}`,
+      suppressLanding: true
     });
     await refreshSelectedCustomer360();
     renderCustomer360();
@@ -4783,6 +4860,9 @@ async function createAccountsReceivableInvoice(payload = null) {
         invoiceNumber: payload.invoiceNumber,
         amount: Number(payload.amount || 0),
         balanceDue: Number(payload.amount || 0),
+        receivableType: payload.receivableType || "aftersales",
+        profitCentre: payload.profitCentre || "service",
+        brand: payload.brand || "",
         status: payload.status || "open",
         dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
@@ -4791,7 +4871,8 @@ async function createAccountsReceivableInvoice(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create AR invoice");
     await createQuickNoteRecord({
       noteType: "internal",
-      body: `[ACCOUNTING] AR Invoice ${payload.invoiceNumber}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nProfit Centre: ${titleCase(String(payload.profitCentre || "").replaceAll("_", " "))}`
+      body: `[ACCOUNTING] AR Invoice ${payload.invoiceNumber}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nProfit Centre: ${titleCase(String(payload.profitCentre || "").replaceAll("_", " "))}`,
+      suppressLanding: true
     });
     await refreshSelectedCustomer360();
     renderCustomer360();
@@ -4875,6 +4956,9 @@ async function createServiceInvoice(payload = null) {
         invoiceNumber: payload.invoiceNumber,
         amount: totalAmount,
         balanceDue: totalAmount,
+        receivableType: payload.receivableType || "aftersales",
+        profitCentre: "service",
+        brand: payload.brand || "",
         status: payload.status || "open",
         dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
@@ -4883,7 +4967,8 @@ async function createServiceInvoice(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create service invoice");
     await createQuickNoteRecord({
       noteType: "internal",
-      body: `[ACCOUNTING] Service Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nSubtotal: ${formatMoney(subtotal)}\nTax: ${formatMoney(taxAmount)}\nFees: ${formatMoney(feesAmount)}\nTotal: ${formatMoney(totalAmount)}`
+      body: `[ACCOUNTING] Service Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nSubtotal: ${formatMoney(subtotal)}\nTax: ${formatMoney(taxAmount)}\nFees: ${formatMoney(feesAmount)}\nTotal: ${formatMoney(totalAmount)}`,
+      suppressLanding: true
     });
     await refreshSelectedCustomer360();
     renderCustomer360();
@@ -4969,6 +5054,9 @@ async function createPartsInvoice(payload = null) {
         invoiceNumber: payload.invoiceNumber,
         amount: totalAmount,
         balanceDue: totalAmount,
+        receivableType: payload.receivableType || "aftersales",
+        profitCentre: "parts",
+        brand: payload.brand || "",
         status: payload.status || "open",
         dueAtUtc: payload.dueAt ? new Date(`${payload.dueAt}T12:00:00`).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       })
@@ -4977,7 +5065,8 @@ async function createPartsInvoice(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create parts invoice");
     await createQuickNoteRecord({
       noteType: "internal",
-      body: `[ACCOUNTING] Parts Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nSubtotal: ${formatMoney(subtotal)}\nTax: ${formatMoney(taxAmount)}\nFees: ${formatMoney(feesAmount)}\nTotal: ${formatMoney(totalAmount)}`
+      body: `[ACCOUNTING] Parts Invoice ${payload.invoiceNumber}\nPayment Method: ${titleCase(String(payload.paymentMethod || "").replaceAll("_", " "))}\nReceivable Type: ${titleCase(String(payload.receivableType || "").replaceAll("_", " "))}\nSubtotal: ${formatMoney(subtotal)}\nTax: ${formatMoney(taxAmount)}\nFees: ${formatMoney(feesAmount)}\nTotal: ${formatMoney(totalAmount)}`,
+      suppressLanding: true
     });
     await refreshSelectedCustomer360();
     renderCustomer360();
@@ -5426,6 +5515,8 @@ async function captureTechnicianMedia(contextType = "repair_order", preferredMed
   const vehicle = getSelectedVehicleRecord();
   const repairOrder = getActiveRepairOrderRecord();
   const technicianOptions = getDepartmentRoster("technicians");
+  const defaultTechnician = getPreferredDepartmentUser("technicians", technicianOptions[0] || "Technician Queue");
+  const defaultOpCode = getPreferredRepairOrderOpCode(repairOrder);
 
   if (!payload?.__submit) {
     openDmsActionModal({
@@ -5444,8 +5535,8 @@ async function captureTechnicianMedia(contextType = "repair_order", preferredMed
       ],
       fields: [
         { type: "section", label: "Media context" },
-        { name: "capturedBy", label: "Captured by", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
-        { name: "opCode", label: "Labor op code", type: "text", value: "DIAG" },
+        { name: "capturedBy", label: "Captured by", type: "select", required: true, value: defaultTechnician || technicianOptions[0] || "Technician Queue", options: technicianOptions.length ? technicianOptions : ["Technician Queue"] },
+        { name: "opCode", label: "Labor op code", type: "text", value: defaultOpCode },
         { name: "caption", label: "Caption", type: "text", required: true, value: `${titleCase(contextType.replaceAll("_", " "))} evidence` },
         {
           name: "visibility",
@@ -5507,7 +5598,7 @@ async function captureTechnicianMedia(contextType = "repair_order", preferredMed
             caption: buildStructuredDetailLines(String(payload.caption || "").trim(), {
               "Op Code": payload.opCode
             }),
-            capturedBy: payload.capturedBy || technicianOptions[0] || "Miguel Santos",
+            capturedBy: payload.capturedBy || defaultTechnician || technicianOptions[0] || "Technician Queue",
             visibility: payload.visibility || "internal",
             capturedAtUtc: new Date().toISOString()
           })
@@ -6532,6 +6623,7 @@ async function startCreateCustomerRecord(payload = null) {
     if (!res.ok) throw new Error(data.error || "Failed to create customer");
     selectedCustomerId = data.id || data.customerId || "";
     await loadCustomer360();
+    completeCreateLanding({ lens: getCreateLandingLens() });
     setCustomer360ComposerStatus(`Customer ${customerDisplayName(data)} created.`, "success");
   } catch (err) {
     console.error("startCreateCustomerRecord error:", err);
@@ -6599,6 +6691,7 @@ async function startCreateVehicleRecord(payload = null) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create vehicle");
     await loadCustomer360();
+    completeCreateLanding({ lens: getCreateLandingLens() });
     setCustomer360ComposerStatus(`Vehicle ${vehicleDisplayName(data)} created.`, "success");
   } catch (err) {
     console.error("startCreateVehicleRecord error:", err);
