@@ -3200,6 +3200,7 @@ function buildServiceAdvisorHeaderMarkup(customer, vehicle, appointments = [], c
         ${primaryPhone ? `<a href="#" class="customer360-record-strip-action phone-link" data-phone="${escapeHtml(primaryPhone)}" data-mode="sms">💬 SMS</a>` : ""}
         <a href="${customer?.email ? `mailto:${encodeURIComponent(customer.email)}` : "#"}" class="customer360-record-strip-action">📧 Email</a>
         <button type="button" class="customer360-record-strip-action" onclick="startAdvisorJourneyNote()">➕ Add note</button>
+        ${activeRepairOrder ? `<button type="button" class="customer360-record-strip-action" onclick="openRepairOrderControlCenter()">Edit RO</button>` : ""}
       </div>
     </div>
   `;
@@ -3510,6 +3511,7 @@ function buildPartsApprovalRailMarkup(customer, vehicle, appointments = []) {
 function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
   const activeRepairOrder = getActiveRepairOrderRecord();
   const latestClockEvent = getRepairOrderLatestClockEvent(activeRepairOrder);
+  const latestLaborOp = getLatestRepairOrderLaborOp(activeRepairOrder);
   const technicianTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[technician]")) || openTasks[0] || null;
   const partsTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[parts]"));
   const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.createdAtUtc || item.title || ""));
@@ -3524,10 +3526,10 @@ function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
     },
     {
       title: "Labor dispatch",
-      detail: activeRepairOrder ? `${(activeRepairOrder.laborOps || []).length} labor op(s) on the RO` : "Open RO before assigning flat-rate work",
+      detail: activeRepairOrder ? `${(activeRepairOrder.laborOps || []).length} labor op(s) on the RO${latestLaborOp ? ` • ${titleCase(String(latestLaborOp.dispatchStatus || "dispatched").replaceAll("_", " "))}` : ""}` : "Open RO before assigning flat-rate work",
       tone: activeRepairOrder ? "warn" : "info",
-      actionLabel: activeRepairOrder ? "Dispatch" : "Prep",
-      action: activeRepairOrder ? "addRepairOrderLaborOp()" : "openRepairOrderFrom360()",
+      actionLabel: activeRepairOrder ? (latestClockEvent?.eventType === "clock_in" ? "Complete" : latestLaborOp ? "Start" : "Dispatch") : "Prep",
+      action: activeRepairOrder ? (latestClockEvent?.eventType === "clock_in" ? "advanceLatestLaborWorkflow('complete')" : latestLaborOp ? "advanceLatestLaborWorkflow('in_progress')" : "addRepairOrderLaborOp()") : "openRepairOrderFrom360()",
       task: technicianTask
     },
     {
@@ -3540,10 +3542,10 @@ function buildTechnicianTasksMarkup(openTasks = [], vehicle) {
     },
     {
       title: "Advisor approval",
-      detail: latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} at ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Return recommendation and media to the advisor timeline",
+      detail: (activeRepairOrder?.multiPointInspections || []).length ? `${(activeRepairOrder.multiPointInspections || []).length} MPI item(s) ready to return to advisor` : latestClockEvent ? `${titleCase(String(latestClockEvent.eventType || "").replaceAll("_", " "))} at ${formatDisplayDateTime(latestClockEvent.occurredAtUtc || latestClockEvent.createdAtUtc)}` : "Return recommendation and media to the advisor timeline",
       tone: "info",
-      actionLabel: "Notify",
-      action: "startAdvisorJourneyNote()",
+      actionLabel: (activeRepairOrder?.multiPointInspections || []).length ? "Send" : "Notify",
+      action: (activeRepairOrder?.multiPointInspections || []).length ? "sendLatestMpiToAdvisor()" : "startAdvisorJourneyNote()",
       task: technicianTask
     }
   ];
@@ -5077,6 +5079,111 @@ async function createPartsInvoice(payload = null) {
   }
 }
 
+function getRepairOrderPrimaryPayType(repairOrder = {}) {
+  const paySplits = Array.isArray(repairOrder?.paySplits) ? repairOrder.paySplits : [];
+  if (paySplits[0]?.payType) return String(paySplits[0].payType).toLowerCase();
+  if (Number(repairOrder.warrantyPaySubtotal || 0) > 0) return "warranty";
+  if (Number(repairOrder.internalPaySubtotal || 0) > 0) return "internal";
+  return "customer";
+}
+
+async function openRepairOrderControlCenter(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed") || null;
+  if (!repairOrder) {
+    openRepairOrderFrom360();
+    return;
+  }
+
+  const advisorOptions = getActiveServiceAdvisorRoster();
+  const promiseAt = getRepairOrderPromisedAt(repairOrder);
+  const promiseDate = promiseAt ? toLocalDateInputValue(promiseAt) : nextAppointment?.date || "";
+  const promiseTime = promiseAt
+    ? `${String(promiseAt.getHours()).padStart(2, "0")}:${String(promiseAt.getMinutes()).padStart(2, "0")}`
+    : nextAppointment?.time || "16:30";
+
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "service",
+      eyebrow: "RO Control",
+      title: "Update Repair Order Control",
+      subtitle: "Adjust the live advisor-facing fields for this job from one service control window.",
+      submitLabel: "Save RO Control",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: customerDisplayName(customer) },
+        { label: "Vehicle", value: vehicleDisplayName(vehicle), detail: vehicle?.vin || "Vehicle attached" },
+        { label: "Current status", value: titleCase(String(repairOrder.status || "open").replaceAll("_", " ")), detail: promiseAt ? `Promised ${formatDisplayDateTime(promiseAt)}` : "No promised time set" }
+      ],
+      notes: [
+        { label: "Advisor control", body: "Use this to keep promised time, transport, complaint, status, and desk ownership current without leaving the active repair order." }
+      ],
+      fields: [
+        { type: "section", label: "RO header" },
+        { name: "advisor", label: "Advisor", type: "select", value: getRepairOrderAdvisorName(repairOrder), options: advisorOptions.length ? advisorOptions : [getRepairOrderAdvisorName(repairOrder)] },
+        { name: "status", label: "RO status", type: "select", value: String(repairOrder.status || "open").toLowerCase(), options: ["open", "in_progress", "ready", "closed"] },
+        { name: "payType", label: "Pay type", type: "select", value: getRepairOrderPrimaryPayType(repairOrder), options: ["customer", "warranty", "internal", "maintenance"] },
+        { type: "section", label: "Customer and vehicle" },
+        { name: "complaint", label: "Complaint / concern", type: "textarea", required: true, full: true, value: repairOrder.complaint || "Customer concern captured from service lane" },
+        { name: "odometerIn", label: "Mileage in", type: "number", value: repairOrder.odometerIn ?? vehicle?.mileage ?? "", min: 0 },
+        { name: "transportOption", label: "Transport", type: "select", value: repairOrder.transportOption || nextAppointment?.transport || "", options: ["", "waiter", "dropoff", "shuttle", "loaner"] },
+        { type: "section", label: "Promised time" },
+        { name: "promiseDate", label: "Promised date", type: "date", value: promiseDate },
+        { name: "promiseTime", label: "Promised time", type: "text", value: promiseTime, placeholder: "16:30" },
+        { type: "section", label: "Advisor notes" },
+        { name: "notes", label: "RO control notes", type: "textarea", full: true, value: "" }
+      ],
+      onSubmit: async (values) => openRepairOrderControlCenter({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    const promiseLabel = payload.promiseDate ? `${payload.promiseDate} ${payload.promiseTime || ""}`.trim() : "";
+    if (nextAppointment?.id || nextAppointment?.appointmentId) {
+      const appointmentRes = await fetch("/.netlify/functions/appointments-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+          advisor: payload.advisor || "",
+          transport: payload.transportOption || "",
+          notes: promiseLabel ? `Promised time updated to ${promiseLabel}.` : "RO control updated from service advisor desk."
+        })
+      });
+      if (appointmentRes.ok) {
+        await loadAppointments();
+      }
+    }
+
+    const res = await fetch("/.netlify/functions/service-repair-order-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        status: payload.status || repairOrder.status || "open",
+        notes: buildStructuredDetailLines(String(payload.notes || "").trim(), {
+          "Advisor": payload.advisor,
+          "Complaint": payload.complaint,
+          "Mileage In": payload.odometerIn,
+          "Transport": titleCase(String(payload.transportOption || "").replaceAll("_", " ")),
+          "Pay Type": titleCase(String(payload.payType || "").replaceAll("_", " ")),
+          "Promised Time": promiseLabel
+        })
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to update repair order control");
+    await refreshSelectedCustomer360();
+    completeCreateLanding({ lens: "service" });
+    setCustomer360ComposerStatus(`Repair order ${repairOrder.repairOrderNumber || "control"} updated.`, "success");
+  } catch (err) {
+    console.error("openRepairOrderControlCenter error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to update repair order control.", "error");
+  }
+}
+
 async function updateActiveRepairOrderStatus(status = "in_progress", successCopy = "Repair order updated.") {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
@@ -5102,6 +5209,89 @@ async function updateActiveRepairOrderStatus(status = "in_progress", successCopy
   } catch (err) {
     console.error("updateActiveRepairOrderStatus error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to update repair order status.", "error");
+  }
+}
+
+async function advanceLatestLaborWorkflow(nextStatus = "in_progress") {
+  const repairOrder = getActiveRepairOrderRecord();
+  const latestLaborOp = getLatestRepairOrderLaborOp(repairOrder);
+  const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
+  if (!repairOrder || !latestLaborOp) {
+    setCustomer360ComposerStatus("Add or dispatch a labor op before moving labor workflow.", "error");
+    return;
+  }
+
+  try {
+    await createQuickNoteRecord({
+      noteType: "internal",
+      suppressLanding: true,
+      body: buildStructuredDetailLines(`[TECHNICIAN] Labor workflow updated for ${repairOrder.repairOrderNumber || "active RO"}.`, {
+        "Op Code": latestLaborOp.opCode || "",
+        "Technician": latestLaborOp.technicianName || latestClockEvent?.technicianName || "",
+        "Dispatch Status": titleCase(String(nextStatus || "").replaceAll("_", " ")),
+        "Description": latestLaborOp.description || ""
+      })
+    });
+    if (nextStatus === "in_progress" && String(latestClockEvent?.eventType || "").toLowerCase() !== "clock_in") {
+      await addTechnicianClockEvent("clock_in", {
+        __submit: true,
+        technicianName: latestLaborOp.technicianName || latestClockEvent?.technicianName || getPreferredDepartmentUser("technicians"),
+        laborOpCode: latestLaborOp.opCode || getPreferredRepairOrderOpCode(repairOrder),
+        notes: `Technician moved ${latestLaborOp.opCode || "labor op"} to In Progress from technician workflow.`
+      });
+    } else if (nextStatus === "complete" && String(latestClockEvent?.eventType || "").toLowerCase() === "clock_in") {
+      await addTechnicianClockEvent("clock_out", {
+        __submit: true,
+        technicianName: latestLaborOp.technicianName || latestClockEvent?.technicianName || getPreferredDepartmentUser("technicians"),
+        laborOpCode: latestLaborOp.opCode || getPreferredRepairOrderOpCode(repairOrder),
+        notes: `Technician completed ${latestLaborOp.opCode || "labor op"} from technician workflow.`
+      });
+    } else {
+      await refreshSelectedCustomer360();
+      renderCustomer360();
+    }
+    setCustomer360ComposerStatus(`Labor workflow moved to ${titleCase(String(nextStatus || "").replaceAll("_", " "))}.`, "success");
+  } catch (err) {
+    console.error("advanceLatestLaborWorkflow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to move labor workflow.", "error");
+  }
+}
+
+async function sendLatestMpiToAdvisor() {
+  const repairOrder = getActiveRepairOrderRecord();
+  const inspections = Array.isArray(repairOrder?.multiPointInspections) ? repairOrder.multiPointInspections : [];
+  const latestInspection = [...inspections].sort((a, b) => new Date(b.updatedAtUtc || b.createdAtUtc || 0).getTime() - new Date(a.updatedAtUtc || a.createdAtUtc || 0).getTime())[0] || null;
+  if (!repairOrder || !latestInspection) {
+    setCustomer360ComposerStatus("Add an MPI item before sending it to the advisor.", "error");
+    return;
+  }
+
+  try {
+    const summary = buildStructuredDetailLines(`[SERVICE] MPI ready for advisor review on ${repairOrder.repairOrderNumber || "active RO"}.`, {
+      "Item": latestInspection.itemName || latestInspection.category || "Inspection item",
+      "Result": titleCase(String(latestInspection.result || "").replaceAll("_", " ")),
+      "Severity": titleCase(String(latestInspection.severity || "").replaceAll("_", " ")),
+      "Technician": latestInspection.technicianName || "",
+      "Notes": latestInspection.notes || ""
+    });
+    await createQuickTaskRecord({
+      assignedDepartment: "service",
+      assignedUser: getPreferredDepartmentUser("service"),
+      title: `[SERVICE] MPI review • ${repairOrder.repairOrderNumber || "RO"}`,
+      description: summary,
+      dueAt: toLocalDateInputValue(new Date())
+    });
+    await createQuickNoteRecord({
+      noteType: "internal",
+      suppressLanding: true,
+      body: summary
+    });
+    await refreshSelectedCustomer360();
+    completeCreateLanding({ lens: "service" });
+    setCustomer360ComposerStatus("MPI sent to advisor review.", "success");
+  } catch (err) {
+    console.error("sendLatestMpiToAdvisor error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to send MPI to advisor.", "error");
   }
 }
 
@@ -6205,12 +6395,16 @@ function getRepairOrderApBills(repairOrder = {}) {
 
 function buildRepairOrderOperationsMarkup(repairOrder = {}) {
   const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
+  const latestLaborOp = getLatestRepairOrderLaborOp(repairOrder);
   const technicianClockedIn = latestClockEvent?.eventType === "clock_in";
   return `
     <div class="customer360-ro-actions" style="margin-top:14px;">
+      <button type="button" class="customer360-toolbar-btn" onclick="openRepairOrderControlCenter()">Update RO Control</button>
       <button type="button" class="customer360-toolbar-btn" onclick="createServiceQuote()">Create Service Quote</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="addRepairOrderLaborOp()">Dispatch Labor</button>
+      ${latestLaborOp ? `<button type="button" class="customer360-toolbar-btn secondary" onclick="advanceLatestLaborWorkflow('${technicianClockedIn ? "complete" : "in_progress"}')">${technicianClockedIn ? "Complete Labor" : "Start Labor"}</button>` : ""}
       <button type="button" class="customer360-toolbar-btn secondary" onclick="addRepairOrderInspection()">Complete MPI</button>
+      ${(repairOrder.multiPointInspections || []).length ? `<button type="button" class="customer360-toolbar-btn secondary" onclick="sendLatestMpiToAdvisor()">Send MPI to Advisor</button>` : ""}
       <button type="button" class="customer360-toolbar-btn secondary" onclick="createSpecialPartOrder()">Special Order</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="${technicianClockedIn ? "addTechnicianClockEvent('clock_out')" : "addTechnicianClockEvent('clock_in')"}">${technicianClockedIn ? "Clock Out" : "Clock In"}</button>
       <button type="button" class="customer360-toolbar-btn secondary" onclick="createServiceInvoice()">Create Service Invoice</button>
