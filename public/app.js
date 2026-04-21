@@ -1687,9 +1687,10 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
         </div>
         ${buildLaneSignalMarkup(accountingSignals)}
         <div class="customer360-lens-quickbar">
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createServiceInvoice()" : (accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()")}"><span>💳</span>${activeRepairOrder ? "Service Invoice" : accountingTask ? "Open Invoice" : "Queue Invoice"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "applyCustomerPaymentWindow()" : (accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()")}"><span>💳</span>${activeRepairOrder ? "Apply Payment" : accountingTask ? "Open Invoice" : "Queue Invoice"}</button>
           <button class="customer360-lens-quickbtn" onclick="${ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"}"><span>📘</span>${ledgerNote ? "Open Ledger" : "Add Ledger"}</button>
-          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "createAccountsPayableBill()" : (partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "queueAccountingInvoiceReview()")}"><span>🧾</span>${activeRepairOrder ? "Add AP" : partsTask ? "Review Parts" : "Prep Statement"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "settleAccountsPayableWindow()" : (partsTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(partsTask)}','parts')` : "queueAccountingInvoiceReview()")}"><span>🧾</span>${activeRepairOrder ? "Settle AP" : partsTask ? "Review Parts" : "Prep Statement"}</button>
+          <button class="customer360-lens-quickbtn" onclick="${activeRepairOrder ? "postWorkInProgressWindow()" : "queueAccountingInvoiceReview()"}"><span>📚</span>${activeRepairOrder ? "Post WIP" : "Open WIP"}</button>
         </div>
         <div class="customer360-lens-row">
           <div class="customer360-lens-label">Next Financial Step</div>
@@ -1711,9 +1712,10 @@ function buildLensPanelMarkup(customer, vehicle, tasks = [], notes = [], appoint
           </div>
         </div>
         <div class="customer360-lens-actions">
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createServiceInvoice()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Create Service Invoice" : "Queue Invoice Review"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createPartsInvoice()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Create Parts Invoice" : "Queue Parts Review"}</button>
-          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "createAccountsPayableBill()" : "startLedgerNote()"}">${activeRepairOrder ? "Add AP Bill" : "Add Ledger Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "applyCustomerPaymentWindow()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Apply Customer Payment" : "Queue Invoice Review"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "postWorkInProgressWindow()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Post / Review WIP" : "Queue WIP Review"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "advanceWarrantyReceivableWindow()" : "startLedgerNote()"}">${activeRepairOrder ? "Advance Warranty Receivable" : "Add Ledger Note"}</button>
+          <button class="customer360-toolbar-btn" style="width:100%;" onclick="${activeRepairOrder ? "openAccountingReconciliationWindow()" : "queueAccountingInvoiceReview()"}">${activeRepairOrder ? "Queue Reconciliation" : "Queue Accounting Review"}</button>
         </div>
       </div>
     `;
@@ -3750,30 +3752,32 @@ function buildAccountingTasksMarkup(openTasks = [], vehicle) {
   const activeRepairOrder = getActiveRepairOrderRecord();
   const accountingTask = openTasks.find((item) => `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[accounting]")) || openTasks[0] || null;
   const ledgerNote = (currentCustomerNotes || []).find((item) => item.customerId === selectedCustomerId && (`${item.body || ""}`.toLowerCase().includes("[accounting]") || `${item.body || ""}`.toLowerCase().includes("ledger")));
+  const latestInvoice = activeRepairOrder ? getRepairOrderArInvoices(activeRepairOrder).slice().sort((left, right) => new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime())[0] || null : null;
+  const latestBill = activeRepairOrder ? getRepairOrderApBills(activeRepairOrder).slice().sort((left, right) => new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime())[0] || null : null;
   const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.taskId || item.noteId || item.createdAtUtc || item.title || item.body || ""));
   const ledgerRows = [
     {
       title: "Invoice review",
       detail: activeRepairOrder ? `${activeRepairOrder.repairOrderNumber || "RO"} • ${(currentAccountsReceivableInvoices || []).length} AR invoice(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).balance)} still due` : (openTasks[0]?.title || `Review charges for ${vehicleDisplayName(vehicle)}`),
       tone: openTasks.length ? "warn" : "info",
-      actionLabel: activeRepairOrder ? "Invoice" : accountingTask ? "Open" : "Queue",
-      action: activeRepairOrder ? "createServiceInvoice()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
+      actionLabel: activeRepairOrder ? (latestInvoice ? "Apply Cash" : "Invoice") : accountingTask ? "Open" : "Queue",
+      action: activeRepairOrder ? (latestInvoice ? "applyCustomerPaymentWindow()" : "createServiceInvoice()") : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
       task: accountingTask
     },
     {
       title: "Payment request",
       detail: activeRepairOrder ? `${formatCountLabel((activeRepairOrder.accountingEntries || []).length, "accounting entry")} • ${(currentAccountsPayableBills || []).length} AP bill(s) • ${formatMoney(getRepairOrderAmounts(activeRepairOrder).paid)} already applied` : (openTasks.length ? "Stripe collection or statement follow-up is active" : "No active collection workflow yet"),
       tone: openTasks.length ? "info" : "good",
-      actionLabel: activeRepairOrder ? "Post AP" : ledgerNote ? "Open" : "Add",
-      action: activeRepairOrder ? "createAccountsPayableBill()" : ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()",
+      actionLabel: activeRepairOrder ? (latestBill ? "Settle AP" : "Post AP") : ledgerNote ? "Open" : "Add",
+      action: activeRepairOrder ? (latestBill ? "settleAccountsPayableWindow()" : "createAccountsPayableBill()") : ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()",
       task: accountingTask
     },
     {
       title: "Reconciliation",
       detail: "Close ledger loop against service, parts, and delivery activity",
       tone: "info",
-      actionLabel: accountingTask ? "Review" : "Prep",
-      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
+      actionLabel: activeRepairOrder ? "Queue" : accountingTask ? "Review" : "Prep",
+      action: activeRepairOrder ? "openAccountingReconciliationWindow()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()",
       task: accountingTask
     }
   ];
@@ -3786,25 +3790,27 @@ function buildAccountingNotesMarkup(notes = []) {
   const accountingTask = (currentTasks || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed" && `${item.title || ""} ${item.description || ""}`.toLowerCase().includes("[accounting]"));
   const latestInvoice = (currentAccountsReceivableInvoices || [])[0] || null;
   const latestBill = (currentAccountsPayableBills || [])[0] || null;
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const latestWarrantyClaim = (Array.isArray(activeRepairOrder?.warrantyClaims) ? activeRepairOrder.warrantyClaims : [])[0] || null;
   const getArtifactSourceId = (item = {}) => escapeHtml(String(item.id || item.noteId || item.taskId || item.createdAtUtc || item.body || item.title || ""));
   const statementRows = [
     {
       label: "Statement status",
       detail: latestInvoice ? `${latestInvoice.invoiceNumber || "Invoice"} • ${titleCase(latestInvoice.status || "open")} • ${formatMoney(latestInvoice.balanceDue || latestInvoice.amount || 0)}` : notes.length ? `${notes.length} accounting notes available for customer statement context` : "No statement notes captured yet",
-      actionLabel: ledgerNote ? "Open" : "Add",
-      action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
+      actionLabel: latestInvoice ? "Apply" : ledgerNote ? "Open" : "Add",
+      action: latestInvoice ? "applyCustomerPaymentWindow()" : ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
     },
     {
       label: "Payment rail",
       detail: latestBill ? `${latestBill.invoiceNumber || "AP bill"} • ${titleCase(latestBill.status || "open")} • ${formatMoney(latestBill.amount || 0)}` : "Stripe-backed payment, refund, and collection posture should sit here",
-      actionLabel: accountingTask ? "Review" : "Queue",
-      action: accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
+      actionLabel: latestBill ? "Settle" : accountingTask ? "Review" : "Queue",
+      action: latestBill ? "settleAccountsPayableWindow()" : accountingTask ? `openCustomer360FocusedArtifact('tasks','${getArtifactSourceId(accountingTask)}','accounting')` : "queueAccountingInvoiceReview()"
     },
     {
-      label: "Reconciliation trail",
-      detail: "Keep QuickBooks-style ledger comments tied to the same customer + VIN record",
-      actionLabel: ledgerNote ? "Open" : "Log",
-      action: ledgerNote ? `openCustomer360FocusedArtifact('notes','${getArtifactSourceId(ledgerNote)}','accounting')` : "startLedgerNote()"
+      label: "Warranty / WIP trail",
+      detail: latestWarrantyClaim ? `${latestWarrantyClaim.claimNumber || latestWarrantyClaim.opCode || "Warranty claim"} • ${titleCase(latestWarrantyClaim.receivableStatus || latestWarrantyClaim.status || "submitted")}` : "Keep warranty receivable and WIP follow-through tied to the same customer + VIN record",
+      actionLabel: latestWarrantyClaim ? "Advance" : "WIP",
+      action: latestWarrantyClaim ? "advanceWarrantyReceivableWindow()" : "postWorkInProgressWindow()"
     }
   ];
 
@@ -5167,6 +5173,351 @@ async function createSpecialPartOrder(payload = null) {
   } catch (err) {
     console.error("createSpecialPartOrder error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to create special order.", "error");
+  }
+}
+
+async function logAccountingWorkflowEvent({
+  repairOrder = getActiveRepairOrderRecord(),
+  headline = "",
+  taskTitle = "",
+  detailLines = {},
+  dueAt = "",
+  assignedUser = "",
+  successMessage = ""
+} = {}) {
+  const repairOrderNumber = repairOrder?.repairOrderNumber || "active RO";
+  const detailBody = buildStructuredDetailLines(`[ACCOUNTING] ${headline} on ${repairOrderNumber}.`, detailLines);
+  await createQuickNoteRecord({
+    noteType: "internal",
+    body: detailBody,
+    suppressLanding: true
+  });
+  await createQuickTaskRecord({
+    assignedDepartment: "accounting",
+    assignedUser: assignedUser || getPreferredDepartmentUser("accounting", "Accounting Queue"),
+    title: taskTitle || `[ACCOUNTING] ${headline} • ${repairOrderNumber}`,
+    description: detailBody,
+    dueAt: dueAt || toLocalDateInputValue(new Date())
+  });
+  setCustomer360ComposerStatus(successMessage || `${headline} recorded.`, "success");
+}
+
+async function applyCustomerPaymentWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Cash Receipt",
+      title: "Open RO Before Applying Payment",
+      subtitle: "Customer payment needs an active repair order so the receipt stays tied to the correct job."
+    });
+    return;
+  }
+
+  const defaultAmount = Number(getRepairOrderAmounts(repairOrder).balance || 0);
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Cash Receipt",
+      title: "Apply Customer Payment",
+      subtitle: "Record the payment method, amount, and receipt detail against the live repair order.",
+      submitLabel: "Apply Payment",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Cash receipt will stay tied to this accounting record." },
+        { label: "Open balance", value: formatMoney(defaultAmount), detail: "Use the current RO balance as the suggested receipt amount." },
+        { label: "Profit centre", value: "Aftersales", detail: "Use this for customer-facing RO collections." }
+      ],
+      fields: [
+        { type: "section", label: "Receipt detail" },
+        { name: "amount", label: "Payment amount", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
+        { name: "paymentMethod", label: "Payment method", type: "select", value: "card", options: ["card", "cash", "debit", "cheque", "finance"] },
+        { name: "receiptReference", label: "Receipt reference", type: "text", value: `PMT-${Date.now().toString().slice(-6)}` },
+        { name: "status", label: "Posting status", type: "select", value: "posted", options: ["open", "posted", "paid"] },
+        { name: "notes", label: "Receipt notes", type: "textarea", full: true, value: "Customer payment applied to the active repair order." }
+      ],
+      onSubmit: async (values) => applyCustomerPaymentWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    const amount = Number(payload.amount || defaultAmount || 0);
+    const res = await fetch("/.netlify/functions/service-repair-order-accounting-entry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repairOrderId: repairOrder.id,
+        entryType: "payment_applied",
+        description: buildStructuredDetailLines(`Customer payment applied to ${repairOrder.repairOrderNumber || "active RO"}.`, {
+          "Payment Method": titleCase(String(payload.paymentMethod || "").replaceAll("_", " ")),
+          "Receipt Reference": payload.receiptReference,
+          "Notes": payload.notes || ""
+        }),
+        amount,
+        status: payload.status || "posted"
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to apply customer payment");
+    await logAccountingWorkflowEvent({
+      repairOrder,
+      headline: "Customer payment applied",
+      taskTitle: `[ACCOUNTING] Cash receipt • ${repairOrder.repairOrderNumber || "RO"}`,
+      detailLines: {
+        "Amount": formatMoney(amount),
+        "Payment Method": titleCase(String(payload.paymentMethod || "").replaceAll("_", " ")),
+        "Receipt Reference": payload.receiptReference,
+        "Status": titleCase(String(payload.status || "posted").replaceAll("_", " ")),
+        "Notes": payload.notes || ""
+      },
+      successMessage: `Payment applied to ${repairOrder.repairOrderNumber || "active RO"}.`
+    });
+    await refreshSelectedCustomer360();
+    renderCustomer360();
+  } catch (err) {
+    console.error("applyCustomerPaymentWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to apply customer payment.", "error");
+  }
+}
+
+async function settleAccountsPayableWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "AP Settlement",
+      title: "Open RO Before AP Settlement",
+      subtitle: "AP settlement should stay tied to the same job and supplier context."
+    });
+    return;
+  }
+
+  const latestBill = getRepairOrderApBills(repairOrder)
+    .slice()
+    .sort((left, right) => new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime())[0] || null;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "AP Settlement",
+      title: "Mark AP Paid / Ready",
+      subtitle: "Record the supplier payment or settlement state so AP aging and review stay current.",
+      submitLabel: "Save AP Status",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "AP settlement should stay tied to the same service job." },
+        { label: "Current bill", value: latestBill?.invoiceNumber || "No AP bill selected", detail: latestBill ? `${latestBill.vendorName || "Vendor"} • ${formatMoney(latestBill.balanceDue || latestBill.amount || 0)}` : "Use this for vendor settlement follow-through." },
+        { label: "Desk owner", value: getPreferredDepartmentUser("accounting", "Accounting Queue"), detail: "Back-office settlement and approval flow." }
+      ],
+      fields: [
+        { type: "section", label: "Supplier settlement" },
+        { name: "invoiceNumber", label: "AP invoice", type: "text", required: true, value: latestBill?.invoiceNumber || "" },
+        { name: "vendorName", label: "Vendor", type: "text", value: latestBill?.vendorName || "" },
+        { name: "status", label: "Settlement status", type: "select", value: latestBill?.status || "approved", options: ["approved", "paid", "hold", "needs_review"] },
+        { name: "amount", label: "Amount", type: "number", required: true, value: String(Number(latestBill?.balanceDue || latestBill?.amount || 0)), min: 0, step: 0.01 },
+        { name: "paymentDate", label: "Payment date", type: "date", value: toLocalDateInputValue(new Date()) },
+        { name: "notes", label: "Settlement notes", type: "textarea", full: true, value: "AP bill reviewed and settlement posture updated." }
+      ],
+      onSubmit: async (values) => settleAccountsPayableWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logAccountingWorkflowEvent({
+      repairOrder,
+      headline: "AP settlement updated",
+      taskTitle: `[ACCOUNTING] AP settlement • ${payload.invoiceNumber || repairOrder.repairOrderNumber || "RO"}`,
+      dueAt: payload.paymentDate,
+      detailLines: {
+        "AP Invoice": payload.invoiceNumber,
+        "Vendor": payload.vendorName,
+        "Status": titleCase(String(payload.status || "").replaceAll("_", " ")),
+        "Amount": formatMoney(Number(payload.amount || 0)),
+        "Payment Date": payload.paymentDate,
+        "Notes": payload.notes || ""
+      },
+      successMessage: `AP settlement updated for ${payload.invoiceNumber || "the supplier bill"}.`
+    });
+  } catch (err) {
+    console.error("settleAccountsPayableWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to update AP settlement.", "error");
+  }
+}
+
+async function postWorkInProgressWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Work In Progress",
+      title: "Open RO Before WIP Posting",
+      subtitle: "WIP review and posting should stay tied to the active repair order."
+    });
+    return;
+  }
+
+  const amounts = getRepairOrderAmounts(repairOrder);
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Work In Progress",
+      title: "Post / Review WIP",
+      subtitle: "Capture the labour, parts, sublet, and pay-type posture before WIP is posted or reviewed.",
+      submitLabel: "Save WIP",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "WIP posture should match the live service job." },
+        { label: "Current labour", value: formatMoney(amounts.labor), detail: "Suggested labour WIP from the live RO." },
+        { label: "Current parts", value: formatMoney(amounts.parts), detail: "Suggested parts WIP from the live RO." }
+      ],
+      fields: [
+        { type: "section", label: "WIP summary" },
+        { name: "profitCentre", label: "Profit centre", type: "select", value: "service", options: ["service", "parts", "body_paint"] },
+        { name: "payType", label: "Pay type", type: "select", value: "customer", options: ["customer", "warranty", "internal", "maintenance"] },
+        { name: "labourAmount", label: "Labour", type: "number", value: String(amounts.labor || 0), min: 0, step: 0.01 },
+        { name: "partsAmount", label: "Parts", type: "number", value: String(amounts.parts || 0), min: 0, step: 0.01 },
+        { name: "subletAmount", label: "Sublet", type: "number", value: "0", min: 0, step: 0.01 },
+        { name: "status", label: "WIP status", type: "select", value: "open", options: ["open", "review", "posted"] },
+        { name: "notes", label: "WIP notes", type: "textarea", full: true, value: "WIP reviewed for labour, parts, and sublet posture." }
+      ],
+      onSubmit: async (values) => postWorkInProgressWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    const total = Number(payload.labourAmount || 0) + Number(payload.partsAmount || 0) + Number(payload.subletAmount || 0);
+    await logAccountingWorkflowEvent({
+      repairOrder,
+      headline: "WIP reviewed",
+      taskTitle: `[ACCOUNTING] WIP posting • ${repairOrder.repairOrderNumber || "RO"}`,
+      detailLines: {
+        "Profit Centre": titleCase(String(payload.profitCentre || "").replaceAll("_", " ")),
+        "Pay Type": titleCase(String(payload.payType || "").replaceAll("_", " ")),
+        "Labour": formatMoney(Number(payload.labourAmount || 0)),
+        "Parts": formatMoney(Number(payload.partsAmount || 0)),
+        "Sublet": formatMoney(Number(payload.subletAmount || 0)),
+        "Total WIP": formatMoney(total),
+        "Status": titleCase(String(payload.status || "").replaceAll("_", " ")),
+        "Notes": payload.notes || ""
+      },
+      successMessage: `WIP reviewed for ${repairOrder.repairOrderNumber || "active RO"}.`
+    });
+  } catch (err) {
+    console.error("postWorkInProgressWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to save WIP review.", "error");
+  }
+}
+
+async function advanceWarrantyReceivableWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Warranty Receivable",
+      title: "Open RO Before Warranty Follow-Through",
+      subtitle: "Warranty receivable workflow should stay tied to the active repair order."
+    });
+    return;
+  }
+
+  const latestClaim = (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims : [])
+    .slice()
+    .sort((left, right) => new Date(right.updatedAtUtc || right.createdAtUtc || 0).getTime() - new Date(left.updatedAtUtc || left.createdAtUtc || 0).getTime())[0] || null;
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Warranty Receivable",
+      title: "Advance Warranty Receivable",
+      subtitle: "Move the warranty receivable from submitted to approved to posted with a visible accounting trail.",
+      submitLabel: "Save Warranty Status",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Warranty accounting should remain attached to the service job." },
+        { label: "Claim", value: latestClaim?.claimNumber || latestClaim?.opCode || "No active claim", detail: latestClaim ? `${latestClaim.manufacturer || "OEM"} • ${formatMoney(latestClaim.approvedAmount || latestClaim.claimAmount || 0)}` : "Use this when warranty follow-through is active." },
+        { label: "Current state", value: titleCase(latestClaim?.receivableStatus || latestClaim?.status || "submitted"), detail: "Accounting can track the receivable posture here." }
+      ],
+      fields: [
+        { type: "section", label: "Warranty status" },
+        { name: "claimNumber", label: "Claim number", type: "text", value: latestClaim?.claimNumber || "" },
+        { name: "manufacturer", label: "Manufacturer", type: "text", value: latestClaim?.manufacturer || "OEM" },
+        { name: "receivableStatus", label: "Receivable status", type: "select", value: latestClaim?.receivableStatus || "submitted", options: ["submitted", "approved", "posted", "unpaid"] },
+        { name: "approvedAmount", label: "Amount", type: "number", value: String(Number(latestClaim?.approvedAmount || latestClaim?.claimAmount || 0)), min: 0, step: 0.01 },
+        { name: "notes", label: "Warranty notes", type: "textarea", full: true, value: "Warranty receivable follow-through updated." }
+      ],
+      onSubmit: async (values) => advanceWarrantyReceivableWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logAccountingWorkflowEvent({
+      repairOrder,
+      headline: "Warranty receivable advanced",
+      taskTitle: `[ACCOUNTING] Warranty receivable • ${payload.claimNumber || repairOrder.repairOrderNumber || "RO"}`,
+      detailLines: {
+        "Claim Number": payload.claimNumber,
+        "Manufacturer": payload.manufacturer,
+        "Receivable Status": titleCase(String(payload.receivableStatus || "").replaceAll("_", " ")),
+        "Amount": formatMoney(Number(payload.approvedAmount || 0)),
+        "Notes": payload.notes || ""
+      },
+      successMessage: "Warranty receivable updated."
+    });
+  } catch (err) {
+    console.error("advanceWarrantyReceivableWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to update warranty receivable.", "error");
+  }
+}
+
+async function openAccountingReconciliationWindow(payload = null) {
+  const repairOrder = getActiveRepairOrderRecord();
+  if (!repairOrder) {
+    await ensureRepairOrderContext(null, {
+      theme: "accounting",
+      eyebrow: "Reconciliation",
+      title: "Open RO Before Reconciliation Review",
+      subtitle: "Reconciliation review should stay tied to the active repair order and customer ledger."
+    });
+    return;
+  }
+
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Reconciliation",
+      title: "Queue Reconciliation Review",
+      subtitle: "Record the next accounting review for cash, WIP, warranty, and invoice reconciliation.",
+      submitLabel: "Queue Review",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Review should stay tied to this customer and job." },
+        { label: "Balance due", value: formatMoney(getRepairOrderAmounts(repairOrder).balance), detail: "Use the current RO posture to guide the review." },
+        { label: "Queue owner", value: getPreferredDepartmentUser("accounting", "Accounting Queue"), detail: "This creates a real accounting task." }
+      ],
+      fields: [
+        { type: "section", label: "Review detail" },
+        { name: "reviewType", label: "Review type", type: "select", value: "reconciliation", options: ["reconciliation", "statement_follow_up", "cash_audit", "month_end"] },
+        { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(new Date()) },
+        { name: "notes", label: "Review notes", type: "textarea", required: true, full: true, value: "Accounting review requested for invoice, payment, and reconciliation posture." }
+      ],
+      onSubmit: async (values) => openAccountingReconciliationWindow({ ...values, __submit: true })
+    });
+    return;
+  }
+
+  try {
+    await logAccountingWorkflowEvent({
+      repairOrder,
+      headline: "Reconciliation review queued",
+      taskTitle: `[ACCOUNTING] ${titleCase(String(payload.reviewType || "reconciliation").replaceAll("_", " "))} review • ${repairOrder.repairOrderNumber || "RO"}`,
+      dueAt: payload.dueAt,
+      detailLines: {
+        "Review Type": titleCase(String(payload.reviewType || "").replaceAll("_", " ")),
+        "Due Date": payload.dueAt,
+        "Notes": payload.notes || ""
+      },
+      successMessage: "Accounting review queued."
+    });
+  } catch (err) {
+    console.error("openAccountingReconciliationWindow error:", err);
+    setCustomer360ComposerStatus(err.message || "Unable to queue reconciliation review.", "error");
   }
 }
 
@@ -7393,10 +7744,10 @@ function getDepartmentCreateActions(lens = "home") {
       { label: "Create Parts Task", detail: "Start a pick, source, or ETA workflow.", action: "createPartsPickTask()" }
     ],
     accounting: [
-      { label: "Create Service Invoice", detail: "Post the service receivable for the live RO.", action: "startServiceInvoiceCreate()" },
-      { label: "Create Parts Invoice", detail: "Post the parts receivable for the live RO.", action: "startPartsInvoiceCreate()" },
+      { label: "Create AR Invoice", detail: "Post the customer receivable for the live RO.", action: "startAccountingReceivableCreate()" },
       { label: "Create AP Bill", detail: "Create a vendor payable tied to the job.", action: "startAccountingPayableCreate()" },
-      { label: "Create Review Task", detail: "Queue a back-office review for the team.", action: "queueAccountingInvoiceReview()" }
+      { label: "Apply Payment", detail: "Post a cash receipt or customer payment against the live RO.", action: "applyCustomerPaymentWindow()" },
+      { label: "Queue Reconciliation", detail: "Create a back-office review for balancing and closeout.", action: "openAccountingReconciliationWindow()" }
     ]
   };
 

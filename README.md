@@ -46,6 +46,7 @@ Additional storage:
 - [User Manual Index](./docs/USER_MANUAL_INDEX.md)
 - [Service / Fixed Ops User Manual](./docs/SERVICE_FIXED_OPS_USER_MANUAL.md)
 - [Parts User Manual](./docs/PARTS_USER_MANUAL.md)
+- [Accounting User Manual](./docs/ACCOUNTING_USER_MANUAL.md)
 - [INGRID DMS Object Map](./docs/INGRID_DMS_OBJECT_MAP.md)
 
 ## Call Dashboard
