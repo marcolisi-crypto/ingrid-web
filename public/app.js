@@ -3033,8 +3033,8 @@ function buildServiceAdvisorNotesMarkup(notes = [], appointments = []) {
         : nextAppointment
           ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() || "Visit scheduled without promised-time note"
           : "No promised-time anchor on the record yet",
-      actionLabel: nextAppointment ? "Open" : "Set",
-      action: nextAppointment ? `openCustomer360FocusedArtifact('appointments','${escapeHtml(String(nextAppointment.id || nextAppointment.appointmentId || nextAppointment.createdAtUtc || nextAppointment.date || ""))}','service')` : "startDepartmentAppointmentCreate()"
+      actionLabel: nextAppointment || activeRepairOrder ? "Update" : "Set",
+      action: nextAppointment || activeRepairOrder ? "startServiceEtaUpdate()" : "startDepartmentAppointmentCreate()"
     },
     {
       label: "Authorization Trail",
@@ -3355,7 +3355,7 @@ function buildServiceAdvisorNextStepsMarkup(customer, vehicle, appointments = []
         <div class="service-advisor-next-card">
           <small>Estimated Completion</small>
           <strong>${escapeHtml(promiseAt ? formatDisplayDateTime(promiseAt) : nextAppointment ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() : "Pending")}</strong>
-          <button type="button" class="customer360-panel-action" onclick="startAdvisorJourneyNote()">Update ETA</button>
+          <button type="button" class="customer360-panel-action" onclick="startServiceEtaUpdate()">Update ETA</button>
         </div>
         <div class="service-advisor-next-card">
           <small>Book Next Service</small>
@@ -5822,14 +5822,124 @@ async function startLoanerTask() {
     setCustomer360ComposerStatus("Select a customer before creating a loaner task.", "error");
     return;
   }
-  openQuickWorkflowTaskModal({
-    title: "Create Loaner / Transport Task",
-    subtitle: "Create the transportation workflow with the customer-facing details required by the advisor desk.",
-    promptLabel: "Transportation details",
-    defaultBody: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nTransportation need:\nLoaner approved:\nPickup / return notes:\nAdvisor follow-up:`,
-    taskTitle: `[SERVICE] ${vehicleDisplayName(vehicle)} loaner coordination`,
-    assignedDepartment: "service",
-    successCopy: "Loaner task created."
+  const advisorOptions = getActiveServiceAdvisorRoster();
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === customer.id && String(item.status || "").toLowerCase() !== "completed") || null;
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Transportation Desk",
+    title: "Create Loaner / Transport Workflow",
+    subtitle: "Capture the fixed-ops transportation plan with the details the advisor and cashier need.",
+    submitLabel: "Create Transport Workflow",
+    summaryItems: [
+      { label: "Customer", value: customerDisplayName(customer), detail: customer?.primaryPhone || customer?.email || "Customer selected" },
+      { label: "Vehicle", value: vehicleDisplayName(vehicle), detail: vehicle?.vin || "Vehicle context attached" },
+      { label: "Visit", value: nextAppointment?.service || "Walk-in service", detail: nextAppointment?.date ? `${nextAppointment.date} • ${nextAppointment.time || "Time pending"}` : "No appointment linked" }
+    ],
+    notes: [
+      { label: "Transportation control", body: "Use this when the advisor needs a loaner, shuttle, pickup, or waiter plan tracked in the service queue with a real owner and due time." }
+    ],
+    fields: [
+      { type: "section", label: "Transport plan" },
+      { name: "transportType", label: "Transport type", type: "select", value: nextAppointment?.transport || "loaner", options: ["loaner", "shuttle", "pickup", "waiter", "dropoff"] },
+      { name: "status", label: "Workflow status", type: "select", value: "requested", options: ["requested", "approved", "reserved", "in_progress", "ready"] },
+      { name: "assignedUser", label: "Advisor owner", type: "select", value: getPreferredDepartmentUser("service", advisorOptions[0] || "Advisor queue"), options: advisorOptions.length ? advisorOptions : ["Advisor queue"] },
+      { type: "section", label: "Timing" },
+      { name: "dueAt", label: "Need-by date", type: "date", value: nextAppointment?.date || toLocalDateInputValue(new Date()) },
+      { name: "provider", label: "Provider / source", type: "text", value: nextAppointment?.transport === "loaner" ? "Loaner pool" : "Service drive" },
+      { type: "section", label: "Advisor notes" },
+      { name: "body", label: "Transportation notes", type: "textarea", required: true, full: true, value: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nTransportation need:\nCustomer waiting / pickup plan:\nDriver or fleet notes:\nReturn expectation:` }
+    ],
+    onSubmit: async (values) => {
+      if (nextAppointment?.id || nextAppointment?.appointmentId) {
+        await fetch("/.netlify/functions/appointments-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+            transport: values.transportType || "",
+            notes: `Transport updated to ${values.transportType || "standard"} from service workflow.`
+          })
+        }).catch((err) => console.error("startLoanerTask appointment update error:", err));
+        await loadAppointments();
+      }
+      await createQuickTaskRecord({
+        assignedDepartment: "service",
+        assignedUser: values.assignedUser || "",
+        title: `[SERVICE] ${vehicleDisplayName(vehicle)} ${values.transportType || "transport"} workflow`,
+        description: buildStructuredDetailLines(String(values.body || "").trim(), {
+          "Transport Type": titleCase(String(values.transportType || "").replaceAll("_", " ")),
+          "Status": titleCase(String(values.status || "").replaceAll("_", " ")),
+          "Provider": values.provider
+        }),
+        dueAt: values.dueAt || ""
+      });
+      setCustomer360ComposerStatus("Transportation workflow created.", "success");
+    }
+  });
+}
+
+async function startServiceEtaUpdate() {
+  const customer = getSelectedCustomerRecord();
+  const vehicle = getSelectedVehicleRecord();
+  const activeRepairOrder = getActiveRepairOrderRecord();
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed") || null;
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer before updating ETA.", "error");
+    return;
+  }
+
+  const existingPromise = getRepairOrderPromisedAt(activeRepairOrder);
+  const suggestedDate = existingPromise ? toLocalDateInputValue(existingPromise) : nextAppointment?.date || toLocalDateInputValue(new Date());
+  const suggestedTime = existingPromise
+    ? `${String(existingPromise.getHours()).padStart(2, "0")}:${String(existingPromise.getMinutes()).padStart(2, "0")}`
+    : nextAppointment?.time || "16:30";
+
+  openDmsActionModal({
+    theme: "service",
+    eyebrow: "Promised Time",
+    title: "Update ETA / Promised Time",
+    subtitle: "Capture the advisor-facing completion promise and next communication step.",
+    submitLabel: "Save ETA Update",
+    summaryItems: [
+      { label: "Customer", value: customerDisplayName(customer), detail: vehicleDisplayName(vehicle) },
+      { label: "Repair order", value: activeRepairOrder?.repairOrderNumber || "No active RO", detail: activeRepairOrder ? "ETA update will support the live service job." : "ETA update will stay on the visit timeline." },
+      { label: "Current promise", value: existingPromise ? formatDisplayDateTime(existingPromise) : nextAppointment ? `${nextAppointment.date || ""} ${nextAppointment.time || ""}`.trim() : "Pending", detail: "Use this to reset the next customer-facing commitment." }
+    ],
+    notes: [
+      { label: "Advisor commitment", body: "Use this window when promised time moves, diagnostics expand, or the customer needs a new completion update logged on the service record." }
+    ],
+    fields: [
+      { type: "section", label: "Updated promise" },
+      { name: "promiseDate", label: "Promised date", type: "date", required: true, value: suggestedDate },
+      { name: "promiseTime", label: "Promised time", type: "text", required: true, value: suggestedTime, placeholder: "16:30" },
+      { name: "customerState", label: "Customer posture", type: "select", value: "in_process", options: ["waiting", "in_process", "parts_delay", "ready_today", "overnight"] },
+      { type: "section", label: "Communication" },
+      { name: "channel", label: "Next communication", type: "select", value: "sms", options: ["sms", "call", "email", "in_person"] },
+      { name: "body", label: "ETA notes", type: "textarea", required: true, full: true, value: `[SERVICE] ETA updated for ${activeRepairOrder?.repairOrderNumber || vehicleDisplayName(vehicle)}\nReason for ETA change:\nCustomer communication:\nNext fixed-ops step:` }
+    ],
+    onSubmit: async (values) => {
+      const promiseLabel = `${values.promiseDate || ""} ${values.promiseTime || ""}`.trim();
+      if (nextAppointment?.id || nextAppointment?.appointmentId) {
+        await fetch("/.netlify/functions/appointments-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+            notes: `Promised time updated to ${promiseLabel}.`
+          })
+        }).catch((err) => console.error("startServiceEtaUpdate appointment update error:", err));
+        await loadAppointments();
+      }
+      await createQuickNoteRecord({
+        noteType: "internal",
+        body: buildStructuredDetailLines(String(values.body || "").trim(), {
+          "Promised Time": promiseLabel,
+          "Customer Posture": titleCase(String(values.customerState || "").replaceAll("_", " ")),
+          "Next Communication": titleCase(String(values.channel || "").replaceAll("_", " "))
+        })
+      });
+      setCustomer360ComposerStatus("ETA update recorded.", "success");
+    }
   });
 }
 
@@ -7131,6 +7241,73 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
   const myOpenRoRows = preferredServiceOwner && preferredServiceOwner !== "all"
     ? openRoRows.filter((row) => row.owner === preferredServiceOwner)
     : [];
+  const readyTodayRows = allRepairOrders
+    .filter((repairOrder) => {
+      const status = String(repairOrder.status || "").toLowerCase();
+      const promisedAt = getRepairOrderPromisedAt(repairOrder);
+      return status.includes("ready") || isDepartmentQueueDateToday(promisedAt || "");
+    })
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const promisedAt = getRepairOrderPromisedAt(repairOrder);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Ready / due today`,
+        meta: `${getRepairOrderAdvisorName(repairOrder)} • ${promisedAt ? `Promise ${formatDisplayDateTime(promisedAt)}` : "Ready for customer contact"}`,
+        owner: getRepairOrderAdvisorName(repairOrder),
+        status: String(repairOrder.status || "").toLowerCase().includes("ready") ? "Ready" : "Due today",
+        dueAt: promisedAt || "",
+        updatedAt: repairOrder.updatedAtUtc || repairOrder.createdAtUtc || "",
+        badges: [titleCase(repairOrder.status || "open"), formatMoney(getRepairOrderAmounts(repairOrder).balance || 0)],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
+        cta: "Open Ready"
+      });
+    });
+  const clockedInServiceRows = allRepairOrders
+    .filter((repairOrder) => String(getRepairOrderLatestClockEvent(repairOrder)?.eventType || "").toLowerCase() === "clock_in")
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const latestClockEvent = getRepairOrderLatestClockEvent(repairOrder);
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Technician active`,
+        meta: `${latestClockEvent?.technicianName || "Technician"} • Clocked in ${formatDisplayDateTime(latestClockEvent?.occurredAtUtc || latestClockEvent?.createdAtUtc || repairOrder.updatedAtUtc)}`,
+        owner: getRepairOrderAdvisorName(repairOrder),
+        status: "Clocked in",
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: latestClockEvent?.occurredAtUtc || latestClockEvent?.createdAtUtc || repairOrder.updatedAtUtc || "",
+        badges: [latestClockEvent?.technicianName || "Technician", "Clocked in"],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
+        cta: "Open Active RO"
+      });
+    });
+  const serviceWarrantyRows = allRepairOrders
+    .filter((repairOrder) => (repairOrder.warrantyClaims || []).some((claim) => !["paid", "closed", "posted"].includes(String(claim.status || claim.receivableStatus || "").toLowerCase())))
+    .slice(0, 8)
+    .map((repairOrder) => {
+      const rowCustomer = getCustomerById(repairOrder.customerId);
+      const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+      const claim = (repairOrder.warrantyClaims || []).find((item) => !["paid", "closed", "posted"].includes(String(item.status || item.receivableStatus || "").toLowerCase())) || (repairOrder.warrantyClaims || [])[0] || {};
+      return buildDepartmentQueueRow({
+        customer: rowCustomer,
+        vehicle: rowVehicle,
+        title: `${repairOrder.repairOrderNumber || "RO"} • Warranty follow-through`,
+        meta: `${claim.failureCode || claim.opCode || "Warranty claim"} • ${formatMoney(Number(claim.claimAmount || claim.approvedAmount || 0))}`,
+        owner: getRepairOrderAdvisorName(repairOrder),
+        status: titleCase(claim.status || claim.receivableStatus || "submitted"),
+        dueAt: getRepairOrderPromisedAt(repairOrder) || "",
+        updatedAt: claim.updatedAtUtc || claim.createdAtUtc || repairOrder.updatedAtUtc || "",
+        badges: [titleCase(claim.claimType || "warranty"), titleCase(claim.status || claim.receivableStatus || "submitted")],
+        action: `openDepartmentQueueRecord('${escapeHtml(String(repairOrder.customerId || ""))}','service')`,
+        cta: "Open Warranty"
+      });
+    });
   const technicianQueueRows = allRepairOrders
     .filter((repairOrder) => (repairOrder.laborOps || []).length || (repairOrder.multiPointInspections || []).length)
     .slice(0, 8)
@@ -7684,8 +7861,11 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
       buildDepartmentQueueSection("All Upcoming Appointments", upcomingServiceRows, "No service appointments scheduled."),
       buildDepartmentQueueSection("Tomorrow's Appointments", tomorrowServiceRows, "No appointments booked for tomorrow."),
       buildDepartmentQueueSection("All Open Repair Orders", openRoRows, "No open repair orders in fixed ops."),
+      buildDepartmentQueueSection("Ready Today", readyTodayRows, "No service jobs are marked ready or promised today."),
+      buildDepartmentQueueSection("Clocked-In Jobs", clockedInServiceRows, "No technician is currently clocked into a service job."),
       buildDepartmentQueueSection("Waiting Approval", serviceApprovalRows, "No repair orders are waiting on estimate approval."),
       buildDepartmentQueueSection("Declined Work", serviceDeclinedRows, "No declined-work follow-up is active."),
+      buildDepartmentQueueSection("Warranty Follow-Through", serviceWarrantyRows, "No service warranty claims need advisor follow-through."),
       buildDepartmentQueueSection("Transport / Loaner Queue", transportQueueRows, "No transport or loaner work is active.")
     ],
     technicians: [
