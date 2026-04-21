@@ -17,6 +17,7 @@ let currentVehicles = [];
 let currentCustomerNotes = [];
 let currentCustomerTimeline = [];
 let selectedCustomerId = "";
+let selectedVehicleId = "";
 let isLoadingInbox = false;
 let readMap = JSON.parse(localStorage.getItem("readConversations") || "{}");
 let activeDepartmentFilter = "all";
@@ -490,7 +491,55 @@ function getSelectedCustomerRecord() {
 }
 
 function getSelectedVehicleRecord() {
-  return getCustomerPrimaryVehicle(getSelectedCustomerRecord());
+  const customer = getSelectedCustomerRecord();
+  if (!customer) return null;
+  const customerVehicles = getCustomerVehicleMatches(customer);
+  return customerVehicles.find((vehicle) => vehicle.id === selectedVehicleId) || customerVehicles[0] || null;
+}
+
+function getVehicleOwnerCustomer(vehicle) {
+  if (!vehicle?.id) return null;
+  return (currentCustomers || []).find((customer) => {
+    const vehicleIds = Array.isArray(customer.vehicleIds) ? customer.vehicleIds : [];
+    return vehicleIds.includes(vehicle.id);
+  }) || null;
+}
+
+function getCustomerVehicleSelectOptions({ includeBlank = true, blankLabel = "Select vehicle later" } = {}) {
+  const options = [];
+  if (includeBlank) {
+    options.push({ value: "", label: blankLabel });
+  }
+  (currentVehicles || []).forEach((vehicle) => {
+    const owner = getVehicleOwnerCustomer(vehicle);
+    options.push({
+      value: vehicle.id,
+      label: `${vehicleDisplayName(vehicle)}${vehicle?.vin ? ` • ${vehicle.vin}` : ""}${owner ? ` • ${customerDisplayName(owner)}` : ""}`
+    });
+  });
+  return options;
+}
+
+async function ensureCustomerVehicleMasterData() {
+  if (Array.isArray(currentCustomers) && currentCustomers.length && Array.isArray(currentVehicles) && currentVehicles.length) {
+    return;
+  }
+  await loadCustomer360();
+}
+
+function setSelectedCustomerVehicleContext(customerId = "", vehicleId = "") {
+  if (customerId) selectedCustomerId = customerId;
+  const customer = getSelectedCustomerRecord();
+  const customerVehicles = getCustomerVehicleMatches(customer);
+  selectedVehicleId = customerVehicles.find((vehicle) => vehicle.id === vehicleId)?.id || customerVehicles[0]?.id || "";
+}
+
+function resolveCustomerVehicleContextFromValues(values = {}, { allowVehicleFallback = true } = {}) {
+  const selectedCustomer = getCustomerById(values.customerId || selectedCustomerId);
+  const selectedVehicle = getVehicleById(values.vehicleId || "");
+  const derivedCustomer = getVehicleOwnerCustomer(selectedVehicle) || selectedCustomer || null;
+  const derivedVehicle = selectedVehicle || (allowVehicleFallback ? getCustomerPrimaryVehicle(derivedCustomer) : null);
+  return { customer: derivedCustomer, vehicle: derivedVehicle };
 }
 
 function normalizeCustomer360TimelineFilter(value = "") {
@@ -2089,7 +2138,7 @@ async function ensureCustomerContext(onReady = null, options = {}) {
       }
     ],
     onSubmit: async (values) => {
-      selectedCustomerId = values.customerId || "";
+      setSelectedCustomerVehicleContext(values.customerId || "", "");
       await refreshSelectedCustomer360();
       renderCustomer360();
       const customer = getSelectedCustomerRecord();
@@ -2252,6 +2301,33 @@ async function createQuickAppointmentRecord({ service = "", advisor = "", date =
     sourceId: data.id || data.appointmentId || data.createdAtUtc || `${date || ""} ${time || ""}`.trim()
   });
   return data;
+}
+
+function buildCustomerVehicleFieldBlock({ allowNoVehicle = true } = {}) {
+  return [
+    { type: "section", label: "Customer and vehicle" },
+    {
+      name: "customerId",
+      label: "Customer",
+      type: "select",
+      required: true,
+      value: selectedCustomerId || currentCustomers[0]?.id || "",
+      options: (currentCustomers || []).map((customer) => ({
+        value: customer.id,
+        label: `${customerDisplayName(customer)}${customer?.primaryPhone ? ` • ${formatPhonePretty(customer.primaryPhone)}` : ""}`
+      }))
+    },
+    {
+      name: "vehicleId",
+      label: "Vehicle / VIN",
+      type: "select",
+      value: getSelectedVehicleRecord()?.id || "",
+      options: getCustomerVehicleSelectOptions({
+        includeBlank: allowNoVehicle,
+        blankLabel: allowNoVehicle ? "Walk-in / select vehicle later" : "Select linked vehicle"
+      })
+    }
+  ];
 }
 
 function getDefaultAdvisorForLens() {
@@ -3854,20 +3930,11 @@ async function startServiceReceptionCreate(payload = null) {
 }
 
 async function openRepairOrderFrom360(payload = null) {
-  const customer = getSelectedCustomerRecord();
-  const vehicle = getSelectedVehicleRecord();
+  await ensureCustomerVehicleMasterData();
+  const preselectedCustomer = getSelectedCustomerRecord();
+  const preselectedVehicle = getSelectedVehicleRecord();
   const existing = getActiveRepairOrderRecord();
   const serviceReception = getActiveServiceReceptionRecord();
-  if (!customer) {
-    await ensureCustomerContext(() => openRepairOrderFrom360(payload), {
-      theme: "service",
-      eyebrow: "Repair Order Control",
-      title: "Select Customer for RO",
-      subtitle: "Choose the customer first so the repair order opens on the correct record.",
-      submitLabel: "Continue to RO"
-    });
-    return;
-  }
   if (existing) {
     if (existing) {
       completeCreateLanding({ lens: "service" });
@@ -3876,8 +3943,22 @@ async function openRepairOrderFrom360(payload = null) {
     return;
   }
 
-  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === customer.id && String(item.status || "").toLowerCase() !== "completed") || null;
-  const openTasks = (currentTasks || []).filter((task) => task.customerId === customer.id && String(task.status || "").toLowerCase() !== "completed");
+  const context = payload?.__submit
+    ? resolveCustomerVehicleContextFromValues(payload, { allowVehicleFallback: true })
+    : { customer: preselectedCustomer, vehicle: preselectedVehicle };
+  const customer = context.customer;
+  const vehicle = context.vehicle;
+  if (payload?.__submit && !customer) {
+    setCustomer360ComposerStatus("Select a customer or linked vehicle before opening the repair order.", "error");
+    return;
+  }
+
+  const nextAppointment = customer
+    ? (currentAppointments || []).find((item) => item.customerId === customer.id && String(item.status || "").toLowerCase() !== "completed") || null
+    : null;
+  const openTasks = customer
+    ? (currentTasks || []).filter((task) => task.customerId === customer.id && String(task.status || "").toLowerCase() !== "completed")
+    : [];
 
   if (!payload?.__submit) {
     openDmsActionModal({
@@ -3892,9 +3973,10 @@ async function openRepairOrderFrom360(payload = null) {
         { label: "Promise", value: nextAppointment?.date || "No promise set", detail: nextAppointment?.time || "Use the fields below to set the promised time." }
       ],
       notes: [
-        { label: "RO creation", body: "This is the main advisor control point. Once saved, the RO becomes the live working object for service, technician, parts, and accounting." }
+        { label: "RO creation", body: "Choose either the customer directly or the linked vehicle/VIN row. Once saved, the RO becomes the live working object for service, technician, parts, and accounting." }
       ],
       fields: [
+        ...buildCustomerVehicleFieldBlock({ allowNoVehicle: true }),
         { type: "section", label: "RO header" },
         { name: "advisor", label: "Advisor", type: "text", required: true, value: serviceReception?.advisor || nextAppointment?.advisor || getDefaultAdvisorForLens() },
         { name: "complaint", label: "Complaint / concern", type: "textarea", required: true, full: true, value: serviceReception?.concern || nextAppointment?.service || openTasks[0]?.description || "Customer concern captured from service lane" },
@@ -3916,6 +3998,7 @@ async function openRepairOrderFrom360(payload = null) {
   }
 
   try {
+    setSelectedCustomerVehicleContext(customer.id, vehicle?.id || "");
     const res = await fetch("/.netlify/functions/service-repair-order-open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -6925,7 +7008,7 @@ async function startCreateCustomerRecord(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create customer");
-    selectedCustomerId = data.id || data.customerId || "";
+    setSelectedCustomerVehicleContext(data.id || data.customerId || "", "");
     await loadCustomer360();
     completeCreateLanding({ lens: getCreateLandingLens() });
     setCustomer360ComposerStatus(`Customer ${customerDisplayName(data)} created.`, "success");
@@ -6994,6 +7077,7 @@ async function startCreateVehicleRecord(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to create vehicle");
+    setSelectedCustomerVehicleContext(customer.id, data.id || data.vehicleId || "");
     await loadCustomer360();
     completeCreateLanding({ lens: getCreateLandingLens() });
     setCustomer360ComposerStatus(`Vehicle ${vehicleDisplayName(data)} created.`, "success");
@@ -7004,16 +7088,15 @@ async function startCreateVehicleRecord(payload = null) {
 }
 
 function startDepartmentAppointmentCreate(payload = null) {
-  if (!getSelectedCustomerRecord()) {
-    ensureCustomerContext(() => startDepartmentAppointmentCreate(payload), {
-      theme: currentDepartmentLens === "sales" ? "crm" : "service",
-      eyebrow: currentDepartmentLens === "sales" ? "Showroom Scheduling" : "Advisor Scheduling",
-      title: currentDepartmentLens === "sales" ? "Select Customer for Visit" : "Select Customer for Appointment",
-      subtitle: "Choose the customer record first so the appointment saves into the right DMS record.",
-      submitLabel: "Continue to Booking"
+  ensureCustomerVehicleMasterData()
+    .then(() => startDepartmentAppointmentCreateReady(payload))
+    .catch((err) => {
+      console.error("startDepartmentAppointmentCreate preload error:", err);
+      setCustomer360ComposerStatus(err.message || "Unable to load customer and vehicle records.", "error");
     });
-    return;
-  }
+}
+
+function startDepartmentAppointmentCreateReady(payload = null) {
   const defaultService = getDefaultQuickAppointmentService();
   if (!payload?.__submit) {
     openDmsActionModal({
@@ -7023,14 +7106,15 @@ function startDepartmentAppointmentCreate(payload = null) {
       subtitle: "Book the next customer commitment with the advisor and transport details required to submit.",
       submitLabel: currentDepartmentLens === "sales" ? "Create Visit" : "Book Appointment",
       summaryItems: [
-        { label: "Customer", value: customerDisplayName(getSelectedCustomerRecord()), detail: getSelectedCustomerRecord()?.primaryPhone || "Selected customer" },
-        { label: "Vehicle", value: vehicleDisplayName(getSelectedVehicleRecord()), detail: getSelectedVehicleRecord()?.vin || "Vehicle context attached" },
+        { label: "Customer", value: customerDisplayName(getSelectedCustomerRecord()), detail: getSelectedCustomerRecord()?.primaryPhone || "Select the customer inside this window" },
+        { label: "Vehicle", value: vehicleDisplayName(getSelectedVehicleRecord()), detail: getSelectedVehicleRecord()?.vin || "Pick a VIN or continue as a walk-in" },
         { label: "Desk", value: currentDepartmentLens === "sales" ? "Sales / BDC" : "Service advisor", detail: currentDepartmentLens === "sales" ? "Use this for showroom, test-drive, or delivery visits." : "Use this for service check-in and advisor scheduling." }
       ],
       notes: [
-        { label: currentDepartmentLens === "sales" ? "Visit booking" : "Appointment booking", body: currentDepartmentLens === "sales" ? "This creates a customer commitment the sales team can drill into from the dashboard." : "This creates a service appointment the advisor can later turn into a write-up and repair order." }
+        { label: currentDepartmentLens === "sales" ? "Visit booking" : "Appointment booking", body: currentDepartmentLens === "sales" ? "Choose either the customer directly or the linked vehicle/VIN row, then save the store visit." : "Choose either the customer directly or the linked vehicle/VIN row, then save the advisor appointment." }
       ],
       fields: [
+        ...buildCustomerVehicleFieldBlock({ allowNoVehicle: true }),
         { type: "section", label: currentDepartmentLens === "sales" ? "Visit details" : "Appointment details" },
         { name: "service", label: currentDepartmentLens === "sales" ? "Visit type" : "Appointment type", type: "text", required: true, value: defaultService },
         { name: "advisor", label: "Assigned advisor", type: "text", required: true, value: getDefaultAdvisorForLens() },
@@ -7045,6 +7129,12 @@ function startDepartmentAppointmentCreate(payload = null) {
     return;
   }
 
+  const { customer, vehicle } = resolveCustomerVehicleContextFromValues(payload, { allowVehicleFallback: true });
+  if (!customer) {
+    setCustomer360ComposerStatus("Select a customer or linked vehicle before creating the appointment.", "error");
+    return;
+  }
+  setSelectedCustomerVehicleContext(customer.id, vehicle?.id || "");
   createQuickAppointmentRecord({
     service: payload.service || defaultService,
     advisor: payload.advisor || getDefaultAdvisorForLens(),
@@ -7122,7 +7212,7 @@ function getRepairOrdersByCustomer(customerId = "") {
 }
 
 async function openDepartmentQueueRecord(customerId = "", lens = "home", kind = "", sourceId = "") {
-  if (customerId) selectedCustomerId = customerId;
+  if (customerId) setSelectedCustomerVehicleContext(customerId, "");
   await refreshSelectedCustomer360();
   if (kind && sourceId) {
     openCustomer360FocusedArtifact(kind, sourceId, lens || currentDepartmentLens);
@@ -9382,7 +9472,9 @@ async function loadCustomer360() {
     currentVehicles = Array.isArray(vehiclesData.vehicles) ? vehiclesData.vehicles : [];
 
     if (!selectedCustomerId || !currentCustomers.some((customer) => customer.id === selectedCustomerId)) {
-      selectedCustomerId = currentCustomers[0]?.id || "";
+      setSelectedCustomerVehicleContext(currentCustomers[0]?.id || "", "");
+    } else if (!getSelectedVehicleRecord()) {
+      setSelectedCustomerVehicleContext(selectedCustomerId, "");
     }
 
     await refreshSelectedCustomer360();
@@ -9503,7 +9595,7 @@ function renderCustomer360List() {
 
   list.querySelectorAll("[data-customer360-id]").forEach((element) => {
     element.addEventListener("click", async () => {
-      selectedCustomerId = element.getAttribute("data-customer360-id") || "";
+      setSelectedCustomerVehicleContext(element.getAttribute("data-customer360-id") || "", "");
       await refreshSelectedCustomer360();
       renderCustomer360();
     });
