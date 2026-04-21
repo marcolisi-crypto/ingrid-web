@@ -2855,7 +2855,10 @@ function getDmsActionEntitySearchItems(field = {}) {
   if (field.entity === "vehicle") {
     const selectedCustomer = getCustomerById(document.querySelector('[name="customerId"]')?.value || selectedCustomerId);
     const linkedVehicleIds = new Set(Array.isArray(selectedCustomer?.vehicleIds) ? selectedCustomer.vehicleIds.map(String) : []);
-    return (currentVehicles || []).map((vehicle) => {
+    const vehicleSource = linkedVehicleIds.size
+      ? (currentVehicles || []).filter((vehicle) => linkedVehicleIds.has(String(vehicle.id)))
+      : (currentVehicles || []);
+    return vehicleSource.map((vehicle) => {
       const owner = getVehicleOwnerCustomer(vehicle);
       return {
         id: vehicle.id,
