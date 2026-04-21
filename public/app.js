@@ -4182,7 +4182,7 @@ async function createPartsQuote(payload = null) {
   }
 }
 
-async function addTechnicianClockEvent(eventType = "clock_in") {
+async function addTechnicianClockEvent(eventType = "clock_in", payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     await ensureRepairOrderContext(null, {
@@ -4194,16 +4194,40 @@ async function addTechnicianClockEvent(eventType = "clock_in") {
     return;
   }
 
+  const technicianOptions = getDepartmentRoster("technicians");
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "operations",
+      eyebrow: "Technician Dispatch",
+      title: eventType === "clock_out" ? "Clock Technician Out" : "Clock Technician In",
+      subtitle: "Post the technician clock event against the active repair order.",
+      submitLabel: eventType === "clock_out" ? "Clock Out" : "Clock In",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Clocking will stay tied to this service job." },
+        { label: "Event", value: titleCase(String(eventType || "").replaceAll("_", " ")), detail: "Use this for technician time tracking and bay visibility." },
+        { label: "Technician desk", value: technicianOptions[0] || "Tech queue", detail: "Assign the correct technician before posting the event." }
+      ],
+      fields: [
+        { type: "section", label: "Clock event" },
+        { name: "technicianName", label: "Technician", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
+        { name: "laborOpCode", label: "Labor op code", type: "text", required: true, value: "DIAG" },
+        { name: "notes", label: "Notes", type: "textarea", full: true, value: eventType === "clock_in" ? "Technician started work from 360." : "Technician finished work from 360." }
+      ],
+      onSubmit: async (values) => addTechnicianClockEvent(eventType, { ...values, __submit: true })
+    });
+    return;
+  }
+
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-clock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        technicianName: "Miguel Santos",
+        technicianName: payload.technicianName || technicianOptions[0] || "Miguel Santos",
         eventType,
-        laborOpCode: "DIAG",
-        notes: eventType === "clock_in" ? "Technician started work from 360." : "Technician finished work from 360."
+        laborOpCode: payload.laborOpCode || "DIAG",
+        notes: payload.notes || (eventType === "clock_in" ? "Technician started work from 360." : "Technician finished work from 360.")
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -5401,16 +5425,27 @@ async function captureTechnicianMedia(contextType = "repair_order", preferredMed
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
   const repairOrder = getActiveRepairOrderRecord();
+  const technicianOptions = getDepartmentRoster("technicians");
 
   if (!payload?.__submit) {
     openDmsActionModal({
+      theme: "operations",
+      eyebrow: contextType === "vin_archive" ? "VIN Archive Media" : "Repair Order Media",
       title: preferredMediaType === "video" ? "Record Technician Video" : "Add Technician Media",
       subtitle: contextType === "repair_order"
         ? "Attach evidence directly to the active repair order."
         : "Attach evidence to the VIN archive record.",
       submitLabel: preferredMediaType === "video" ? "Choose Video" : "Choose Media",
       submittingLabel: "Opening picker...",
+      summaryItems: [
+        { label: "Repair order", value: contextType === "repair_order" ? repairOrder?.repairOrderNumber || "No RO linked" : "VIN archive", detail: contextType === "repair_order" ? "Evidence will be attached to the active repair order." : "Evidence will be attached to the VIN history stream." },
+        { label: "Media type", value: preferredMediaType === "video" ? "Video" : "Photo / Video", detail: "Use clear captions so advisors can review the issue quickly." },
+        { label: "Visibility", value: "Internal", detail: "Switch to customer-facing only when the evidence is ready to share." }
+      ],
       fields: [
+        { type: "section", label: "Media context" },
+        { name: "capturedBy", label: "Captured by", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
+        { name: "opCode", label: "Labor op code", type: "text", value: "DIAG" },
         { name: "caption", label: "Caption", type: "text", required: true, value: `${titleCase(contextType.replaceAll("_", " "))} evidence` },
         {
           name: "visibility",
@@ -5469,8 +5504,10 @@ async function captureTechnicianMedia(contextType = "repair_order", preferredMed
             storageUrl: uploadData.storageUrl,
             thumbnailUrl: uploadData.thumbnailUrl,
             fileName: uploadData.fileName || file.name,
-            caption: String(payload.caption || "").trim(),
-            capturedBy: "Miguel Santos",
+            caption: buildStructuredDetailLines(String(payload.caption || "").trim(), {
+              "Op Code": payload.opCode
+            }),
+            capturedBy: payload.capturedBy || technicianOptions[0] || "Miguel Santos",
             visibility: payload.visibility || "internal",
             capturedAtUtc: new Date().toISOString()
           })
@@ -5517,15 +5554,39 @@ async function startBdcCallbackTask() {
     setCustomer360ComposerStatus("Select a customer before creating a callback task.", "error");
     return;
   }
-
-  openQuickWorkflowTaskModal({
+  const bdcOptions = getDepartmentRoster("bdc");
+  openDmsActionModal({
+    theme: "crm",
+    eyebrow: "BDC Queue",
     title: "Create BDC Callback Task",
-    subtitle: "Queue the callback with the next outreach step and appointment goal.",
-    promptLabel: "Callback notes",
-    defaultBody: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLast contact result:\nNext outreach step:\nAppointment goal:\nHandoff notes for sales:`,
-    taskTitle: `[BDC] ${vehicleDisplayName(vehicle)} callback`,
-    assignedDepartment: "bdc",
-    successCopy: "BDC callback task created."
+    subtitle: "Queue the callback with ownership, outreach channel, and appointment goal.",
+    submitLabel: "Create Callback",
+    summaryItems: [
+      { label: "Customer", value: customerDisplayName(customer), detail: customer?.primaryPhone || customer?.email || "Customer record selected" },
+      { label: "Vehicle", value: vehicleDisplayName(vehicle), detail: vehicle?.vin || "Vehicle context available" },
+      { label: "Department", value: "BDC", detail: "Task will land in the BDC follow-up queue." }
+    ],
+    fields: [
+      { type: "section", label: "Callback ownership" },
+      { name: "taskTitle", label: "Task title", type: "text", required: true, value: `[BDC] ${vehicleDisplayName(vehicle)} callback` },
+      { name: "assignedUser", label: "Assigned to", type: "select", value: bdcOptions[0] || "Rachel Smith", options: bdcOptions.length ? bdcOptions : ["Rachel Smith"] },
+      { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(new Date()) },
+      { type: "section", label: "Callback detail" },
+      { name: "channel", label: "Preferred channel", type: "select", value: "phone", options: ["phone", "sms", "email"] },
+      { name: "body", label: "Callback notes", type: "textarea", required: true, full: true, value: `[BDC] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nLast contact result:\nNext outreach step:\nAppointment goal:\nHandoff notes for sales:` }
+    ],
+    onSubmit: async (values) => {
+      await createQuickTaskRecord({
+        assignedDepartment: "bdc",
+        assignedUser: values.assignedUser || "",
+        title: values.taskTitle,
+        description: buildStructuredDetailLines(String(values.body || "").trim(), {
+          "Preferred Channel": titleCase(String(values.channel || ""))
+        }),
+        dueAt: values.dueAt || ""
+      });
+      setCustomer360ComposerStatus("BDC callback task created.", "success");
+    }
   });
 }
 
@@ -5537,14 +5598,39 @@ async function startSalesDealTask() {
     return;
   }
 
-  openQuickWorkflowTaskModal({
+  const salesOptions = getDepartmentRoster("sales");
+  openDmsActionModal({
+    theme: "crm",
+    eyebrow: "Sales Desk",
     title: "Create Sales Deal Task",
-    subtitle: "Queue the sales opportunity with deal desk, trade, and showroom details attached.",
-    promptLabel: "Deal notes",
-    defaultBody: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nQuote status:\nTrade / appraisal notes:\nTest-drive or showroom plan:\nHandoff notes for F&I:`,
-    taskTitle: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review`,
-    assignedDepartment: "sales",
-    successCopy: "Sales deal task created."
+    subtitle: "Queue the sales opportunity with owner, stage, and showroom detail.",
+    submitLabel: "Create Deal Task",
+    summaryItems: [
+      { label: "Customer", value: customerDisplayName(customer), detail: customer?.primaryPhone || customer?.email || "Customer record selected" },
+      { label: "Vehicle", value: vehicleDisplayName(vehicle), detail: vehicle?.vin || "Interest / trade vehicle available" },
+      { label: "Department", value: "Sales", detail: "Task will land in the sales opportunity queue." }
+    ],
+    fields: [
+      { type: "section", label: "Opportunity ownership" },
+      { name: "taskTitle", label: "Task title", type: "text", required: true, value: `[SALES] ${vehicleDisplayName(vehicle)} opportunity review` },
+      { name: "assignedUser", label: "Assigned to", type: "select", value: salesOptions[0] || "Jordan Blake", options: salesOptions.length ? salesOptions : ["Jordan Blake"] },
+      { name: "stage", label: "Deal stage", type: "select", value: "quote", options: ["lead", "contacted", "appointment", "quote", "test_drive", "trade", "fi_handoff", "delivery"] },
+      { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(new Date()) },
+      { type: "section", label: "Deal detail" },
+      { name: "body", label: "Deal notes", type: "textarea", required: true, full: true, value: `[SALES] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nQuote status:\nTrade / appraisal notes:\nTest-drive or showroom plan:\nHandoff notes for F&I:` }
+    ],
+    onSubmit: async (values) => {
+      await createQuickTaskRecord({
+        assignedDepartment: "sales",
+        assignedUser: values.assignedUser || "",
+        title: values.taskTitle,
+        description: buildStructuredDetailLines(String(values.body || "").trim(), {
+          "Deal Stage": titleCase(String(values.stage || "").replaceAll("_", " "))
+        }),
+        dueAt: values.dueAt || ""
+      });
+      setCustomer360ComposerStatus("Sales deal task created.", "success");
+    }
   });
 }
 
