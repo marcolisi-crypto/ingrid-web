@@ -4042,24 +4042,54 @@ async function closeActiveRepairOrder() {
   }
 
   try {
-    const res = await fetch("/.netlify/functions/service-repair-order-status", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        repairOrderId: repairOrder.id,
-        status: "closed",
-        notes: "Closed from Customer + Vehicle 360"
-      })
+    await postRepairOrderWorkflowSignal(repairOrder, {
+      status: "closed",
+      eventLabel: "Repair order closed",
+      details: {
+        "Closed By": getPreferredDepartmentUser("service", getRepairOrderAdvisorName(repairOrder)),
+        "Disposition": "Closed from Customer + Vehicle 360"
+      }
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Failed to close repair order");
-    await loadAppointments();
-    await refreshSelectedCustomer360();
-    renderCustomer360();
     setCustomer360ComposerStatus(`Repair order ${repairOrder.repairOrderNumber || "closed"} closed.`, "success");
   } catch (err) {
     console.error("closeActiveRepairOrder error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to close repair order.", "error");
+  }
+}
+
+async function postRepairOrderWorkflowSignal(repairOrder, { status = null, eventLabel = "", details = {}, appointmentUpdate = null, suppressLanding = false } = {}) {
+  if (!repairOrder?.id) return;
+  const nextAppointment = (currentAppointments || []).find((item) => item.customerId === (repairOrder.customerId || selectedCustomerId) && String(item.status || "").toLowerCase() !== "completed") || null;
+
+  if (appointmentUpdate && (nextAppointment?.id || nextAppointment?.appointmentId)) {
+    const appointmentRes = await fetch("/.netlify/functions/appointments-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+        ...appointmentUpdate
+      })
+    });
+    const appointmentData = await appointmentRes.json().catch(() => ({}));
+    if (!appointmentRes.ok) throw new Error(appointmentData.error || "Failed to update appointment context");
+    await loadAppointments();
+  }
+
+  const res = await fetch("/.netlify/functions/service-repair-order-status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repairOrderId: repairOrder.id,
+      status: status || repairOrder.status || "open",
+      notes: buildStructuredDetailLines(`[SERVICE] ${eventLabel || "Repair order workflow updated"} • ${repairOrder.repairOrderNumber || "active RO"}.`, details)
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to update repair order workflow");
+  await refreshSelectedCustomer360();
+  renderCustomer360();
+  if (!suppressLanding) {
+    completeCreateLanding({ lens: "service" });
   }
 }
 
@@ -4523,8 +4553,17 @@ async function addRepairOrderLaborOp(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to add labor op");
-    await refreshSelectedCustomer360();
-    renderCustomer360();
+    await postRepairOrderWorkflowSignal(repairOrder, {
+      status: payload.dispatchStatus === "in_progress" ? "in_progress" : repairOrder.status || "open",
+      eventLabel: "Labor operation dispatched",
+      details: {
+        "Op Code": payload.opCode || defaultOpCode,
+        "Technician": payload.technicianName || defaultTechnician || technicianOptions[0] || "Technician Queue",
+        "Sold Hours": payload.soldHours || 1.5,
+        "Dispatch Status": titleCase(String(payload.dispatchStatus || "dispatched").replaceAll("_", " ")),
+        "Pay Type": titleCase(String(payload.payType || "customer").replaceAll("_", " "))
+      }
+    });
     setCustomer360ComposerStatus(`Labor op added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("addRepairOrderLaborOp error:", err);
@@ -4593,8 +4632,16 @@ async function addRepairOrderInspection(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to add MPI item");
-    await refreshSelectedCustomer360();
-    renderCustomer360();
+    await postRepairOrderWorkflowSignal(repairOrder, {
+      eventLabel: "MPI item recorded",
+      details: {
+        "Category": payload.category || "Brakes",
+        "Item": payload.itemName || "Front brake pad measurement",
+        "Result": titleCase(String(payload.result || "yellow").replaceAll("_", " ")),
+        "Severity": titleCase(String(payload.severity || "attention").replaceAll("_", " ")),
+        "Technician": payload.technicianName || defaultTechnician || technicianOptions[0] || "Technician Queue"
+      }
+    });
     setCustomer360ComposerStatus(`MPI item added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("addRepairOrderInspection error:", err);
@@ -4665,8 +4712,16 @@ async function addRepairOrderWarrantyClaim(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to add warranty claim");
-    await refreshSelectedCustomer360();
-    renderCustomer360();
+    await postRepairOrderWorkflowSignal(repairOrder, {
+      eventLabel: "Warranty claim updated",
+      details: {
+        "Claim Type": titleCase(String(payload.claimType || "warranty").replaceAll("_", " ")),
+        "Op Code": payload.opCode || defaultOpCode,
+        "Failure Code": payload.failureCode || "CHKENG",
+        "Claim Amount": formatMoney(Number(payload.claimAmount || 149)),
+        "Status": titleCase(String(payload.status || "submitted").replaceAll("_", " "))
+      }
+    });
     setCustomer360ComposerStatus(`Warranty claim added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("addRepairOrderWarrantyClaim error:", err);
@@ -4736,8 +4791,15 @@ async function addRepairOrderPaySplit(payload = "customer") {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to add pay split");
-    await refreshSelectedCustomer360();
-    renderCustomer360();
+    await postRepairOrderWorkflowSignal(repairOrder, {
+      eventLabel: "Pay split updated",
+      details: {
+        "Pay Type": titleCase(String(payload.payType || requestedPayType).replaceAll("_", " ")),
+        "Amount": formatMoney(Number(payload.amount || defaultAmount)),
+        "Percentage": `${Number(payload.percentage || (total > 0 ? ((Number(payload.amount || defaultAmount) / total) * 100) : 0)).toFixed(2)}%`,
+        "Status": titleCase(String(payload.status || "open").replaceAll("_", " "))
+      }
+    });
     setCustomer360ComposerStatus(`${titleCase(payload.payType || requestedPayType)} pay split added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("addRepairOrderPaySplit error:", err);
@@ -5430,9 +5492,14 @@ function sendServiceEstimateSms() {
     ],
     onSubmit: async (values) => {
       const noteBody = `[APPROVAL] Estimate sent via SMS for ${repairOrder.repairOrderNumber || "active repair order"}.\n${String(values.message || "").trim()}`;
-      await createQuickNoteRecord({
-        noteType: "internal",
-        body: noteBody
+      await postRepairOrderWorkflowSignal(repairOrder, {
+        eventLabel: "Estimate approval sent",
+        details: {
+          "Method": "SMS",
+          "Quote Lines": getRepairOrderQuoteLineCount(repairOrder),
+          "Message": String(values.message || "").trim()
+        },
+        suppressLanding: true
       });
       await createQuickTaskRecord({
         assignedDepartment: "service",
@@ -5474,9 +5541,15 @@ function sendServiceEstimateEmail() {
     ],
     onSubmit: async (values) => {
       const noteBody = `[APPROVAL] Estimate sent via email for ${repairOrder.repairOrderNumber || "active repair order"}.\nSubject: ${values.subject}\n${String(values.message || "").trim()}`;
-      await createQuickNoteRecord({
-        noteType: "internal",
-        body: noteBody
+      await postRepairOrderWorkflowSignal(repairOrder, {
+        eventLabel: "Estimate approval sent",
+        details: {
+          "Method": "Email",
+          "Subject": values.subject,
+          "Quote Lines": getRepairOrderQuoteLineCount(repairOrder),
+          "Message": String(values.message || "").trim()
+        },
+        suppressLanding: true
       });
       await createQuickTaskRecord({
         assignedDepartment: "service",
@@ -5512,14 +5585,19 @@ async function requestServiceEsignature() {
     ],
     onSubmit: async (values) => {
       const noteBody = `[APPROVAL] E-signature requested for ${repairOrder.repairOrderNumber || "active repair order"}.\nRecipient: ${values.recipient}\n${String(values.message || "").trim()}`;
+      await postRepairOrderWorkflowSignal(repairOrder, {
+        eventLabel: "E-signature requested",
+        details: {
+          "Recipient": values.recipient,
+          "Quote Lines": getRepairOrderQuoteLineCount(repairOrder),
+          "Message": String(values.message || "").trim()
+        },
+        suppressLanding: true
+      });
       await createQuickTaskRecord({
         assignedDepartment: "service",
         title: `E-signature request for ${repairOrder.repairOrderNumber || "RO"}`,
         description: noteBody
-      });
-      await createQuickNoteRecord({
-        noteType: "internal",
-        body: noteBody
       });
       setCustomer360ComposerStatus("E-signature request queued.", "success");
     }
@@ -5549,9 +5627,15 @@ function recordServiceWetSignatureApproval() {
     ],
     onSubmit: async (values) => {
       const noteBody = `[APPROVAL] Wet signature approval recorded for ${repairOrder.repairOrderNumber || "active repair order"}.\nSigner: ${values.signerName}\nLocation: ${values.location}\n${String(values.notes || "").trim()}`;
-      await createQuickNoteRecord({
-        noteType: "internal",
-        body: noteBody
+      await postRepairOrderWorkflowSignal(repairOrder, {
+        eventLabel: "Wet signature approval recorded",
+        details: {
+          "Signer": values.signerName,
+          "Location": values.location,
+          "Quote Lines": getRepairOrderQuoteLineCount(repairOrder),
+          "Approval Notes": String(values.notes || "").trim()
+        },
+        suppressLanding: true
       });
       await createQuickTaskRecord({
         assignedDepartment: "service",
@@ -5586,9 +5670,14 @@ async function markServiceWorkDeclined() {
     ],
     onSubmit: async (values) => {
       const declineCopy = `[APPROVAL] Customer declined current estimate on ${repairOrder.repairOrderNumber || "active repair order"}.\nMethod: ${titleCase(String(values.declineMethod || "").replaceAll("_", " "))}\n${String(values.reason || "").trim()}\n\n${buildRepairOrderQuoteSummary(repairOrder)}`;
-      await createQuickNoteRecord({
-        noteType: "internal",
-        body: declineCopy
+      await postRepairOrderWorkflowSignal(repairOrder, {
+        eventLabel: "Estimate declined",
+        details: {
+          "Method": titleCase(String(values.declineMethod || "").replaceAll("_", " ")),
+          "Quote Lines": getRepairOrderQuoteLineCount(repairOrder),
+          "Reason": String(values.reason || "").trim()
+        },
+        suppressLanding: true
       });
       await createQuickTaskRecord({
         assignedDepartment: "service",
@@ -6091,6 +6180,7 @@ async function startVinArchiveEntryNote() {
 async function startLoanerTask() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
+  const repairOrder = getActiveRepairOrderRecord();
   if (!customer) {
     setCustomer360ComposerStatus("Select a customer before creating a loaner task.", "error");
     return;
@@ -6123,18 +6213,6 @@ async function startLoanerTask() {
       { name: "body", label: "Transportation notes", type: "textarea", required: true, full: true, value: `[SERVICE] ${customerDisplayName(customer)} • ${vehicleDisplayName(vehicle)}\nTransportation need:\nCustomer waiting / pickup plan:\nDriver or fleet notes:\nReturn expectation:` }
     ],
     onSubmit: async (values) => {
-      if (nextAppointment?.id || nextAppointment?.appointmentId) {
-        await fetch("/.netlify/functions/appointments-update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            appointmentId: nextAppointment.id || nextAppointment.appointmentId,
-            transport: values.transportType || "",
-            notes: `Transport updated to ${values.transportType || "standard"} from service workflow.`
-          })
-        }).catch((err) => console.error("startLoanerTask appointment update error:", err));
-        await loadAppointments();
-      }
       await createQuickTaskRecord({
         assignedDepartment: "service",
         assignedUser: values.assignedUser || "",
@@ -6146,6 +6224,32 @@ async function startLoanerTask() {
         }),
         dueAt: values.dueAt || ""
       });
+      if (repairOrder) {
+        await postRepairOrderWorkflowSignal(repairOrder, {
+          eventLabel: "Transport workflow updated",
+          details: {
+            "Transport Type": titleCase(String(values.transportType || "").replaceAll("_", " ")),
+            "Status": titleCase(String(values.status || "").replaceAll("_", " ")),
+            "Provider": values.provider,
+            "Advisor Owner": values.assignedUser || ""
+          },
+          appointmentUpdate: {
+            transport: values.transportType || "",
+            notes: `Transport updated to ${values.transportType || "standard"} from service workflow.`
+          }
+        });
+      } else if (nextAppointment?.id || nextAppointment?.appointmentId) {
+        await fetch("/.netlify/functions/appointments-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+            transport: values.transportType || "",
+            notes: `Transport updated to ${values.transportType || "standard"} from service workflow.`
+          })
+        }).catch((err) => console.error("startLoanerTask appointment update error:", err));
+        await loadAppointments();
+      }
       setCustomer360ComposerStatus("Transportation workflow created.", "success");
     }
   });
@@ -6192,25 +6296,40 @@ async function startServiceEtaUpdate() {
     ],
     onSubmit: async (values) => {
       const promiseLabel = `${values.promiseDate || ""} ${values.promiseTime || ""}`.trim();
-      if (nextAppointment?.id || nextAppointment?.appointmentId) {
-        await fetch("/.netlify/functions/appointments-update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+      if (activeRepairOrder) {
+        await postRepairOrderWorkflowSignal(activeRepairOrder, {
+          eventLabel: "ETA updated",
+          details: {
+            "Promised Time": promiseLabel,
+            "Customer Posture": titleCase(String(values.customerState || "").replaceAll("_", " ")),
+            "Next Communication": titleCase(String(values.channel || "").replaceAll("_", " ")),
+            "Advisor Notes": String(values.body || "").trim()
+          },
+          appointmentUpdate: {
             notes: `Promised time updated to ${promiseLabel}.`
+          }
+        });
+      } else {
+        if (nextAppointment?.id || nextAppointment?.appointmentId) {
+          await fetch("/.netlify/functions/appointments-update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              appointmentId: nextAppointment.id || nextAppointment.appointmentId,
+              notes: `Promised time updated to ${promiseLabel}.`
+            })
+          }).catch((err) => console.error("startServiceEtaUpdate appointment update error:", err));
+          await loadAppointments();
+        }
+        await createQuickNoteRecord({
+          noteType: "internal",
+          body: buildStructuredDetailLines(String(values.body || "").trim(), {
+            "Promised Time": promiseLabel,
+            "Customer Posture": titleCase(String(values.customerState || "").replaceAll("_", " ")),
+            "Next Communication": titleCase(String(values.channel || "").replaceAll("_", " "))
           })
-        }).catch((err) => console.error("startServiceEtaUpdate appointment update error:", err));
-        await loadAppointments();
+        });
       }
-      await createQuickNoteRecord({
-        noteType: "internal",
-        body: buildStructuredDetailLines(String(values.body || "").trim(), {
-          "Promised Time": promiseLabel,
-          "Customer Posture": titleCase(String(values.customerState || "").replaceAll("_", " ")),
-          "Next Communication": titleCase(String(values.channel || "").replaceAll("_", " "))
-        })
-      });
       setCustomer360ComposerStatus("ETA update recorded.", "success");
     }
   });
