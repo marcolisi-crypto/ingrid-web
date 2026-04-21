@@ -2832,74 +2832,100 @@ function getDmsActionModalFieldByName(fieldName = "") {
   return (currentDmsActionModalConfig?.fields || []).find((field) => field?.name === fieldName) || null;
 }
 
-function getDmsActionEntitySearchItems(field = {}) {
+function buildDmsActionCustomerSearchItem(customer = null) {
+  if (!customer) return null;
+  const phones = (customer.phones || []).map((phone) => formatPhonePretty(phone)).filter(Boolean);
+  const primaryPhone = phones[0] || customer.primaryPhone || "";
+  return {
+    id: customer.id,
+    label: customerDisplayName(customer),
+    inputLabel: customerDisplayName(customer),
+    meta: [primaryPhone, customer.email].filter(Boolean).join(" • ") || "Customer record"
+  };
+}
+
+function buildDmsActionVehicleSearchItem(vehicle = null, { linkedVehicleIds = null } = {}) {
+  if (!vehicle) return null;
+  const owner = getVehicleOwnerCustomer(vehicle);
+  const isLinked = linkedVehicleIds ? linkedVehicleIds.has(String(vehicle.id)) : false;
+  return {
+    id: vehicle.id,
+    label: vehicleDisplayName(vehicle),
+    inputLabel: vehicle?.vin ? `${vehicle.vin} • ${vehicleDisplayName(vehicle)}` : vehicleDisplayName(vehicle),
+    meta: [vehicle.vin, owner ? customerDisplayName(owner) : "", isLinked ? "Linked customer" : ""].filter(Boolean).join(" • ") || "Vehicle record"
+  };
+}
+
+function getDmsActionEntitySearchSelectedItem(field = {}, value = "") {
+  if (!value) return null;
   if (field.entity === "customer") {
-    return (currentCustomers || []).map((customer) => {
-      const phones = (customer.phones || []).map((phone) => formatPhonePretty(phone)).filter(Boolean);
-      const primaryPhone = phones[0] || customer.primaryPhone || "";
-      return {
-        id: customer.id,
-        label: customerDisplayName(customer),
-        inputLabel: customerDisplayName(customer),
-        meta: [primaryPhone, customer.email].filter(Boolean).join(" • ") || "Customer record",
-        searchText: [
-          customerDisplayName(customer),
-          customer.email,
-          ...(customer.phones || []),
-          ...(phones || [])
-        ].join(" ").toLowerCase()
-      };
-    });
+    return buildDmsActionCustomerSearchItem(getCustomerById(value));
+  }
+  if (field.entity === "vehicle") {
+    const selectedCustomer = getCustomerById(document.querySelector('[name="customerId"]')?.value || selectedCustomerId);
+    const linkedVehicleIds = new Set(Array.isArray(selectedCustomer?.vehicleIds) ? selectedCustomer.vehicleIds.map(String) : []);
+    return buildDmsActionVehicleSearchItem(getVehicleById(value), { linkedVehicleIds });
+  }
+  return null;
+}
+
+function getDmsActionEntitySearchVisibleItems(field = {}, query = "", limit = 12) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const matches = [];
+
+  if (field.entity === "customer") {
+    if (!normalizedQuery || normalizedQuery.length < 2) {
+      return matches;
+    }
+    const customers = Array.isArray(currentCustomers) ? currentCustomers : [];
+    for (let index = 0; index < customers.length; index += 1) {
+      const customer = customers[index];
+      const phones = customer?.phones || [];
+      const haystack = [
+        customerDisplayName(customer),
+        customer?.email,
+        customer?.primaryPhone,
+        ...phones
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(normalizedQuery)) continue;
+      matches.push(buildDmsActionCustomerSearchItem(customer));
+      if (matches.length >= limit) break;
+    }
+    return matches;
   }
 
   if (field.entity === "vehicle") {
     const selectedCustomer = getCustomerById(document.querySelector('[name="customerId"]')?.value || selectedCustomerId);
     const linkedVehicleIds = new Set(Array.isArray(selectedCustomer?.vehicleIds) ? selectedCustomer.vehicleIds.map(String) : []);
-    const vehicleSource = selectedCustomer
+    const vehicles = selectedCustomer
       ? (currentVehicles || []).filter((vehicle) => linkedVehicleIds.has(String(vehicle.id)))
       : (currentVehicles || []);
-    return vehicleSource.map((vehicle) => {
+
+    if (!normalizedQuery) {
+      for (let index = 0; index < vehicles.length && matches.length < limit; index += 1) {
+        matches.push(buildDmsActionVehicleSearchItem(vehicles[index], { linkedVehicleIds }));
+      }
+      return matches;
+    }
+
+    for (let index = 0; index < vehicles.length; index += 1) {
+      const vehicle = vehicles[index];
       const owner = getVehicleOwnerCustomer(vehicle);
-      return {
-        id: vehicle.id,
-        label: vehicleDisplayName(vehicle),
-        inputLabel: vehicle?.vin ? `${vehicle.vin} • ${vehicleDisplayName(vehicle)}` : vehicleDisplayName(vehicle),
-        meta: [vehicle.vin, owner ? customerDisplayName(owner) : "", linkedVehicleIds.has(String(vehicle.id)) ? "Linked customer" : ""].filter(Boolean).join(" • ") || "Vehicle record",
-        searchText: [
-          vehicle.vin,
-          vehicle.year,
-          vehicle.make,
-          vehicle.model,
-          vehicle.stockNumber,
-          owner ? customerDisplayName(owner) : ""
-        ].join(" ").toLowerCase(),
-        rankBoost: linkedVehicleIds.has(String(vehicle.id)) ? 1 : 0
-      };
-    }).sort((left, right) => (right.rankBoost || 0) - (left.rankBoost || 0));
+      const haystack = [
+        vehicle?.vin,
+        vehicle?.stockNumber,
+        vehicle?.year,
+        vehicle?.make,
+        vehicle?.model,
+        owner ? customerDisplayName(owner) : ""
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(normalizedQuery)) continue;
+      matches.push(buildDmsActionVehicleSearchItem(vehicle, { linkedVehicleIds }));
+      if (matches.length >= limit) break;
+    }
+    return matches;
   }
 
-  return [];
-}
-
-function getDmsActionEntitySearchSelectedItem(field = {}, value = "") {
-  if (!value) return null;
-  return getDmsActionEntitySearchItems(field).find((item) => String(item.id) === String(value)) || null;
-}
-
-function getDmsActionEntitySearchVisibleItems(field = {}, query = "", limit = 12) {
-  const normalizedQuery = String(query || "").trim().toLowerCase();
-  const items = getDmsActionEntitySearchItems(field);
-  if (!normalizedQuery) {
-    return items.slice(0, limit);
-  }
-
-  const matches = [];
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (!item?.searchText?.includes(normalizedQuery)) continue;
-    matches.push(item);
-    if (matches.length >= limit) break;
-  }
   return matches;
 }
 
