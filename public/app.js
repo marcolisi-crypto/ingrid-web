@@ -8209,8 +8209,20 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
   const totalSpecialOrders = allRepairOrders.reduce((sum, repairOrder) => sum + getRepairOrderPartOrders(repairOrder).length, 0);
   const totalArInvoices = (currentAccountsReceivableInvoices || []).length;
   const totalApBills = (currentAccountsPayableBills || []).length;
-  const totalWarrantyReceivables = allRepairOrders.reduce((sum, repairOrder) => sum + (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims.filter((claim) => !["paid", "closed", "posted"].includes(String(claim.receivableStatus || "").toLowerCase())).length : 0), 0);
-  const totalWip = (currentWorkInProgress || []).length;
+  const totalAccountingWorkflowTasks = allOpenTasks.filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return getTaskAssignedDepartment(task) === "accounting" && (
+      haystack.includes("wip") ||
+      haystack.includes("warranty receivable") ||
+      haystack.includes("reconciliation review") ||
+      haystack.includes("cash receipt") ||
+      haystack.includes("ap settlement")
+    );
+  });
+  const totalWarrantyReceivables = allRepairOrders.reduce((sum, repairOrder) => sum + (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims.filter((claim) => !["paid", "closed", "posted"].includes(String(claim.receivableStatus || "").toLowerCase())).length : 0), 0)
+    + totalAccountingWorkflowTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("warranty receivable")).length;
+  const totalWip = (currentWorkInProgress || []).length
+    + totalAccountingWorkflowTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("wip")).length;
   const totalGlAccounts = (currentGlAccounts || []).length;
   const totalRoMedia = (currentMediaAssets || []).filter((item) => String(item.contextType || "").toLowerCase() === "repair_order").length;
   const tomorrowStart = new Date();
@@ -8830,11 +8842,47 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         cta: "Open AP"
       });
     });
-  const wipRows = (currentWorkInProgress || [])
+  const accountingWorkflowTasks = allOpenTasks.filter((task) => {
+    const haystack = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+    return getTaskAssignedDepartment(task) === "accounting" && (
+      haystack.includes("wip") ||
+      haystack.includes("warranty receivable") ||
+      haystack.includes("reconciliation review") ||
+      haystack.includes("cash receipt") ||
+      haystack.includes("ap settlement")
+    );
+  });
+  const wipRows = [
+    ...(currentWorkInProgress || []).map((item) => ({ type: "record", item })),
+    ...accountingWorkflowTasks.filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("wip")).map((task) => ({ type: "task", task }))
+  ]
     .slice()
-    .sort((a, b) => new Date(b.updatedAtUtc || b.createdAtUtc || 0) - new Date(a.updatedAtUtc || a.createdAtUtc || 0))
+    .sort((left, right) => {
+      const leftAt = left.type === "record" ? (left.item.updatedAtUtc || left.item.createdAtUtc || 0) : (left.task.updatedAtUtc || left.task.createdAtUtc || 0);
+      const rightAt = right.type === "record" ? (right.item.updatedAtUtc || right.item.createdAtUtc || 0) : (right.task.updatedAtUtc || right.task.createdAtUtc || 0);
+      return new Date(rightAt).getTime() - new Date(leftAt).getTime();
+    })
     .slice(0, 8)
-    .map((item) => {
+    .map((entry) => {
+      if (entry.type === "task") {
+        const task = entry.task;
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "WIP review",
+          meta: task.description || "WIP review and posting follow-through",
+          owner: task.assignedUser || "Accounting queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
+          badges: ["WIP", getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','accounting','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open WIP"
+        });
+      }
+      const item = entry.item;
       const repairOrder = allRepairOrders.find((ro) => String(ro.id || "") === String(item.repairOrderId || ""));
       const rowCustomer = getCustomerById(repairOrder?.customerId);
       const rowVehicle = getVehicleById(repairOrder?.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
@@ -8853,11 +8901,35 @@ function buildDepartmentDashboardMarkup(customer, vehicle, tasks = [], appointme
         cta: "Open WIP"
       });
     });
-  const warrantyReceivableRows = allRepairOrders
-    .flatMap((repairOrder) => (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims.map((claim) => ({ repairOrder, claim })) : []))
-    .filter(({ claim }) => !["paid", "closed", "posted"].includes(String(claim.receivableStatus || "").toLowerCase()))
+  const warrantyReceivableRows = [
+    ...allRepairOrders
+      .flatMap((repairOrder) => (Array.isArray(repairOrder.warrantyClaims) ? repairOrder.warrantyClaims.map((claim) => ({ type: "record", repairOrder, claim })) : []))
+      .filter(({ claim }) => !["paid", "closed", "posted"].includes(String(claim.receivableStatus || "").toLowerCase())),
+    ...accountingWorkflowTasks
+      .filter((task) => `${task.title || ""} ${task.description || ""}`.toLowerCase().includes("warranty receivable"))
+      .map((task) => ({ type: "task", task }))
+  ]
     .slice(0, 8)
-    .map(({ repairOrder, claim }) => {
+    .map((entry) => {
+      if (entry.type === "task") {
+        const task = entry.task;
+        const rowCustomer = getCustomerById(task.customerId);
+        const rowVehicle = getVehicleById(task.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
+        return buildDepartmentQueueRow({
+          customer: rowCustomer,
+          vehicle: rowVehicle,
+          title: task.title || "Warranty receivable",
+          meta: task.description || "Warranty receivable follow-through",
+          owner: task.assignedUser || "Accounting queue",
+          status: titleCase(task.status || "open"),
+          dueAt: task.dueAtUtc || "",
+          updatedAt: task.updatedAtUtc || task.createdAtUtc || "",
+          badges: ["Warranty", getJourneyArtifactSla(task.dueAtUtc || task.updatedAtUtc || task.createdAtUtc).label],
+          action: `openDepartmentQueueRecord('${escapeHtml(String(task.customerId || ""))}','accounting','tasks','${escapeHtml(String(task.id || task.taskId || ""))}')`,
+          cta: "Open Claim"
+        });
+      }
+      const { repairOrder, claim } = entry;
       const rowCustomer = getCustomerById(repairOrder.customerId);
       const rowVehicle = getVehicleById(repairOrder.vehicleId) || getCustomerPrimaryVehicle(rowCustomer);
       return buildDepartmentQueueRow({

@@ -47,6 +47,7 @@ Additional storage:
 - [Service / Fixed Ops User Manual](./docs/SERVICE_FIXED_OPS_USER_MANUAL.md)
 - [Parts User Manual](./docs/PARTS_USER_MANUAL.md)
 - [Accounting User Manual](./docs/ACCOUNTING_USER_MANUAL.md)
+- [MVP Release Checklist](./docs/MVP_RELEASE_CHECKLIST.md)
 - [INGRID DMS Object Map](./docs/INGRID_DMS_OBJECT_MAP.md)
 
 ## Call Dashboard

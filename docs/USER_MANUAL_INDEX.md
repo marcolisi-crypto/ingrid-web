@@ -7,7 +7,8 @@ This folder contains end-user documentation for the INGRID DMS MVP.
 1. [Service / Fixed Ops User Manual](./SERVICE_FIXED_OPS_USER_MANUAL.md)
 2. [Parts User Manual](./PARTS_USER_MANUAL.md)
 3. [Accounting User Manual](./ACCOUNTING_USER_MANUAL.md)
-4. [INGRID DMS Object Map](./INGRID_DMS_OBJECT_MAP.md)
+4. [MVP Release Checklist](./MVP_RELEASE_CHECKLIST.md)
+5. [INGRID DMS Object Map](./INGRID_DMS_OBJECT_MAP.md)
 
 ## Recommended Reading Order
 
