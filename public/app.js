@@ -2855,7 +2855,7 @@ function getDmsActionEntitySearchItems(field = {}) {
   if (field.entity === "vehicle") {
     const selectedCustomer = getCustomerById(document.querySelector('[name="customerId"]')?.value || selectedCustomerId);
     const linkedVehicleIds = new Set(Array.isArray(selectedCustomer?.vehicleIds) ? selectedCustomer.vehicleIds.map(String) : []);
-    const vehicleSource = linkedVehicleIds.size
+    const vehicleSource = selectedCustomer
       ? (currentVehicles || []).filter((vehicle) => linkedVehicleIds.has(String(vehicle.id)))
       : (currentVehicles || []);
     return vehicleSource.map((vehicle) => {
@@ -2886,13 +2886,25 @@ function getDmsActionEntitySearchSelectedItem(field = {}, value = "") {
   return getDmsActionEntitySearchItems(field).find((item) => String(item.id) === String(value)) || null;
 }
 
-function renderDmsActionEntitySearchResults(field = {}, query = "") {
+function getDmsActionEntitySearchVisibleItems(field = {}, query = "", limit = 12) {
   const normalizedQuery = String(query || "").trim().toLowerCase();
   const items = getDmsActionEntitySearchItems(field);
-  const filtered = normalizedQuery
-    ? items.filter((item) => item.searchText.includes(normalizedQuery))
-    : items;
-  const visible = filtered.slice(0, 12);
+  if (!normalizedQuery) {
+    return items.slice(0, limit);
+  }
+
+  const matches = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item?.searchText?.includes(normalizedQuery)) continue;
+    matches.push(item);
+    if (matches.length >= limit) break;
+  }
+  return matches;
+}
+
+function renderDmsActionEntitySearchResults(field = {}, query = "") {
+  const visible = getDmsActionEntitySearchVisibleItems(field, query, 12);
   if (field.entity === "vehicle" && field.allowBlank) {
     visible.unshift({
       id: "",
@@ -2926,20 +2938,25 @@ function updateDmsActionEntitySearchSelection(fieldName = "") {
   const results = document.querySelector(`[data-entity-search-results="${fieldName}"]`);
   if (!field || !hidden || !queryInput || !selection || !results) return;
 
-  const selectedItem = getDmsActionEntitySearchSelectedItem(field, hidden.value);
-  if (selectedItem) {
-    queryInput.value = selectedItem.inputLabel || selectedItem.label || "";
-    queryInput.dataset.selectedLabel = queryInput.value;
-    selection.textContent = `${selectedItem.label}${selectedItem.meta ? ` • ${selectedItem.meta}` : ""}`;
-  } else {
-    queryInput.dataset.selectedLabel = "";
-    if (!queryInput.value) {
-      selection.textContent = field.entity === "vehicle"
-        ? (field.allowBlank ? field.blankLabel || "Walk-in / select vehicle later" : "Search and choose a VIN-linked vehicle")
-        : "Search and choose a customer record";
+  try {
+    const selectedItem = getDmsActionEntitySearchSelectedItem(field, hidden.value);
+    if (selectedItem) {
+      queryInput.value = selectedItem.inputLabel || selectedItem.label || "";
+      queryInput.dataset.selectedLabel = queryInput.value;
+      selection.textContent = `${selectedItem.label}${selectedItem.meta ? ` • ${selectedItem.meta}` : ""}`;
+    } else {
+      queryInput.dataset.selectedLabel = "";
+      if (!queryInput.value) {
+        selection.textContent = field.entity === "vehicle"
+          ? (field.allowBlank ? field.blankLabel || "Walk-in / select vehicle later" : "Search and choose a VIN-linked vehicle")
+          : "Search and choose a customer record";
+      }
     }
+    results.innerHTML = renderDmsActionEntitySearchResults(field, queryInput.value);
+  } catch (err) {
+    console.error("updateDmsActionEntitySearchSelection error:", err);
+    results.innerHTML = `<div class="dms-action-modal-entity-empty">Search is unavailable right now. Clear the field and try again.</div>`;
   }
-  results.innerHTML = renderDmsActionEntitySearchResults(field, queryInput.value);
 }
 
 function syncDmsActionEntitySearchRelationship(fieldName = "", selectedValue = "") {
