@@ -2247,11 +2247,17 @@ function getDefaultAdvisorForLens() {
 function getModalContextMarkup() {
   const customer = getSelectedCustomerRecord();
   const vehicle = getSelectedVehicleRecord();
-  if (!customer && !vehicle) return "";
+  const repairOrder = getActiveRepairOrderRecord();
+  const appointment = (currentAppointments || []).find((item) => item.customerId === selectedCustomerId && String(item.status || "").toLowerCase() !== "completed") || null;
+  const serviceReception = getActiveServiceReceptionRecord();
+  if (!customer && !vehicle && !repairOrder && !appointment && !serviceReception) return "";
   return `
     <div class="dms-action-modal-context">
       ${customer ? `<span><strong>Customer</strong>${escapeHtml(customerDisplayName(customer))}</span>` : ""}
       ${vehicle ? `<span><strong>Vehicle</strong>${escapeHtml(vehicleDisplayName(vehicle))}${vehicle?.vin ? ` • ${escapeHtml(vehicle.vin)}` : ""}</span>` : ""}
+      ${repairOrder ? `<span><strong>Repair Order</strong>${escapeHtml(repairOrder.repairOrderNumber || "Open RO")}${repairOrder?.status ? ` • ${escapeHtml(titleCase(repairOrder.status))}` : ""}</span>` : ""}
+      ${serviceReception ? `<span><strong>Write-Up</strong>${escapeHtml(serviceReception.receptionNumber || "Open write-up")}${serviceReception?.advisor ? ` • ${escapeHtml(serviceReception.advisor)}` : ""}</span>` : ""}
+      ${appointment ? `<span><strong>Appointment</strong>${escapeHtml(appointment.service || "Visit")}${appointment?.date ? ` • ${escapeHtml(appointment.date)}` : ""}${appointment?.time ? ` ${escapeHtml(appointment.time)}` : ""}</span>` : ""}
     </div>
   `;
 }
@@ -2412,6 +2418,7 @@ function renderDmsActionLineItems(field = {}, fieldIndex = 0) {
           <small>Running Total</small>
           <strong data-line-items-total="${fieldIndex}">$0.00</strong>
         </div>
+        <div class="dms-action-line-items-validation" data-line-items-validation="${fieldIndex}"></div>
       </div>
     </div>
   `;
@@ -2449,10 +2456,11 @@ function renderDmsActionField(field = {}) {
   }
 
   return `
-    <label class="dms-action-modal-field ${field.full ? "full" : ""}">
+    <label class="dms-action-modal-field ${field.full ? "full" : ""}" data-field-container="${escapeHtml(field.name || "")}">
       <span>${label}</span>
       ${control}
       ${help}
+      <div class="dms-action-modal-field-error" data-field-error="${escapeHtml(field.name || "")}"></div>
     </label>
   `;
 }
@@ -2484,6 +2492,7 @@ function renderDmsActionModal(config = {}) {
   status.textContent = "";
   submit.textContent = config.submitLabel || "Save";
   initDmsActionModalLineItems();
+  wireDmsActionModalDerivedFields();
 }
 
 function buildDmsActionLineItemRow(field = {}, fieldIndex = 0, row = {}) {
@@ -2525,6 +2534,64 @@ function calculateDmsActionLineItemsTotal(field = {}, rows = []) {
   }, 0);
 }
 
+function clearDmsActionModalValidation() {
+  document.querySelectorAll("[data-field-container]").forEach((container) => container.classList.remove("invalid"));
+  document.querySelectorAll("[data-field-error]").forEach((el) => {
+    el.textContent = "";
+  });
+  document.querySelectorAll(".dms-action-line-items-cell").forEach((cell) => cell.classList.remove("invalid"));
+  document.querySelectorAll("[data-line-items-validation]").forEach((el) => {
+    el.textContent = "";
+  });
+}
+
+function setDmsActionFieldError(fieldName = "", message = "") {
+  const container = document.querySelector(`[data-field-container="${fieldName}"]`);
+  const error = document.querySelector(`[data-field-error="${fieldName}"]`);
+  if (container) container.classList.add("invalid");
+  if (error) error.textContent = message;
+}
+
+function setDmsActionLineItemsError(fieldIndex = 0, message = "") {
+  const error = document.querySelector(`[data-line-items-validation="${fieldIndex}"]`);
+  if (error) error.textContent = message;
+}
+
+function validateDmsActionModalValues(values = {}) {
+  const fields = currentDmsActionModalConfig?.fields || [];
+  clearDmsActionModalValidation();
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index];
+    if (!field || field.type === "section") continue;
+    if (field.type === "lineItems") {
+      const rows = Array.isArray(values[field.name]) ? values[field.name] : [];
+      if (!rows.length) {
+        setDmsActionLineItemsError(index, "Add at least one line before saving.");
+        throw new Error(field.validationMessage || "Add at least one line before saving.");
+      }
+      const columns = field.columns || [];
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        const row = rows[rowIndex] || {};
+        const hasAnyValue = Object.values(row).some((value) => String(value ?? "").trim());
+        if (!hasAnyValue) continue;
+        for (const column of columns) {
+          if (!column.required) continue;
+          if (String(row[column.name] ?? "").trim()) continue;
+          const rowElement = document.querySelector(`[data-line-items-index="${index}"] .dms-action-line-items-row:nth-child(${rowIndex + 1}) [data-line-item-column="${column.name}"]`)?.closest(".dms-action-line-items-cell");
+          if (rowElement) rowElement.classList.add("invalid");
+          setDmsActionLineItemsError(index, `${column.label || column.name} is required on every line.`);
+          throw new Error(field.validationMessage || `${column.label || column.name} is required on every line.`);
+        }
+      }
+      continue;
+    }
+    if (field.required && !String(values[field.name] ?? "").trim()) {
+      setDmsActionFieldError(field.name, `${field.label || "This field"} is required.`);
+      throw new Error(`${field.label || "This field"} is required.`);
+    }
+  }
+}
+
 function collectDmsActionLineItemRows(container) {
   if (!container) return [];
   return Array.from(container.querySelectorAll(".dms-action-line-items-row")).map((row) => {
@@ -2543,6 +2610,23 @@ function updateDmsActionLineItemsTotal(fieldIndex = 0) {
   if (!container || !totalEl || !field) return;
   const rows = collectDmsActionLineItemRows(container);
   totalEl.textContent = formatMoney(calculateDmsActionLineItemsTotal(field, rows));
+}
+
+function wireDmsActionModalDerivedFields() {
+  const subtotal = document.querySelector('[name="subtotal"]');
+  const tax = document.querySelector('[name="taxAmount"]');
+  const fees = document.querySelector('[name="feesAmount"]');
+  const total = document.querySelector('[name="amount"]');
+  if (subtotal && tax && fees && total && total.hasAttribute("readonly")) {
+    const sync = () => {
+      const amount = Number(subtotal.value || 0) + Number(tax.value || 0) + Number(fees.value || 0);
+      total.value = String(Number(amount.toFixed(2)));
+    };
+    [subtotal, tax, fees].forEach((input) => {
+      input.addEventListener("input", sync);
+    });
+    sync();
+  }
 }
 
 function initDmsActionModalLineItems() {
@@ -2618,6 +2702,7 @@ async function submitDmsActionModal() {
 
   try {
     if (status) status.textContent = "";
+    validateDmsActionModalValues(values);
     if (submit) {
       submit.disabled = true;
       submit.textContent = currentDmsActionModalConfig.submittingLabel || "Saving...";
@@ -3905,11 +3990,11 @@ async function createServiceQuote(payload = null) {
           addLabel: "Add Labor Line",
           help: "Build the quote with multiple labor or diagnostic lines and a running total.",
           columns: [
-            { name: "opCode", label: "Op Code", type: "text", value: "DIAG" },
-            { name: "description", label: "Description", type: "text", value: "Diagnostic inspection" },
+            { name: "opCode", label: "Op Code", type: "text", value: "DIAG", required: true },
+            { name: "description", label: "Description", type: "text", value: "Diagnostic inspection", required: true },
             { name: "serviceCategory", label: "Category", type: "select", value: "diagnostic", options: ["diagnostic", "maintenance", "repair", "warranty", "sublet"] },
-            { name: "quantity", label: "Hours", type: "number", value: "1.0", min: 0, step: 0.1 },
-            { name: "unitPrice", label: "Rate", type: "number", value: "149", min: 0, step: 0.01 },
+            { name: "quantity", label: "Hours", type: "number", value: "1.0", min: 0, step: 0.1, required: true },
+            { name: "unitPrice", label: "Rate", type: "number", value: "149", min: 0, step: 0.01, required: true },
             { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "pending", "approved", "declined"] }
           ],
           rows: [createLineItemRowDefaults([
@@ -3919,7 +4004,8 @@ async function createServiceQuote(payload = null) {
             { name: "quantity", value: "1.0" },
             { name: "unitPrice", value: "149" },
             { name: "status", value: "quoted" }
-          ])]
+          ])],
+          validationMessage: "Complete each service quote line before saving."
         },
         { type: "section", label: "Approval path" },
         { name: "approvalPath", label: "Approval path", type: "select", value: "advisor_review", options: ["advisor_review", "sms_estimate", "esignature", "walkin_approval"] }
@@ -4036,10 +4122,10 @@ async function createPartsQuote(payload = null) {
           help: "Build the quote with multiple parts, sourcing details, and a running total.",
           variant: "parts",
           columns: [
-            { name: "partNumber", label: "Part #", type: "text", value: "PART-REQ" },
-            { name: "description", label: "Description", type: "text", value: "Requested service part" },
-            { name: "quantity", label: "Qty", type: "number", value: "1", min: 0, step: 1 },
-            { name: "unitPrice", label: "Price", type: "number", value: "89", min: 0, step: 0.01 },
+            { name: "partNumber", label: "Part #", type: "text", value: "PART-REQ", required: true },
+            { name: "description", label: "Description", type: "text", value: "Requested service part", required: true },
+            { name: "quantity", label: "Qty", type: "number", value: "1", min: 0, step: 1, required: true },
+            { name: "unitPrice", label: "Price", type: "number", value: "89", min: 0, step: 0.01, required: true },
             { name: "source", label: "Source", type: "select", value: "stock", options: ["stock", "oem", "aftermarket", "transfer"] },
             { name: "status", label: "Status", type: "select", value: "quoted", options: ["quoted", "requested", "approved", "declined"] },
             { name: "binLocation", label: "Bin", type: "text", value: "" },
@@ -4054,7 +4140,8 @@ async function createPartsQuote(payload = null) {
             { name: "status", value: "quoted" },
             { name: "binLocation", value: "" },
             { name: "etaDate", value: "" }
-          ])]
+          ])],
+          validationMessage: "Complete each parts quote line before saving."
         }
       ],
       onSubmit: async (values) => createPartsQuote({ ...values, __submit: true })
@@ -4585,7 +4672,7 @@ async function createServiceInvoice(payload = null) {
         { name: "subtotal", label: "Subtotal", type: "number", required: true, value: String(defaultAmount), min: 0, step: 0.01 },
         { name: "taxAmount", label: "Tax", type: "number", value: String(defaultTax), min: 0, step: 0.01 },
         { name: "feesAmount", label: "Shop fees", type: "number", value: "0", min: 0, step: 0.01 },
-        { name: "amount", label: "Total", type: "number", required: true, value: String(Number((defaultAmount + defaultTax).toFixed(2))), min: 0, step: 0.01 },
+        { name: "amount", label: "Total", type: "number", required: true, value: String(Number((defaultAmount + defaultTax).toFixed(2))), min: 0, step: 0.01, readonly: true, help: "Total is calculated from subtotal, tax, and shop fees." },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
       ],
@@ -4679,7 +4766,7 @@ async function createPartsInvoice(payload = null) {
         { name: "subtotal", label: "Subtotal", type: "number", required: true, value: String(defaultSubtotal), min: 0, step: 0.01 },
         { name: "taxAmount", label: "Tax", type: "number", value: String(defaultTax), min: 0, step: 0.01 },
         { name: "feesAmount", label: "Fees", type: "number", value: "0", min: 0, step: 0.01 },
-        { name: "amount", label: "Total", type: "number", required: true, value: String(Number((defaultSubtotal + defaultTax).toFixed(2))), min: 0, step: 0.01 },
+        { name: "amount", label: "Total", type: "number", required: true, value: String(Number((defaultSubtotal + defaultTax).toFixed(2))), min: 0, step: 0.01, readonly: true, help: "Total is calculated from subtotal, tax, and fees." },
         { name: "dueAt", label: "Due date", type: "date", value: toLocalDateInputValue(addDays(new Date(), 7)) },
         { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid"] }
       ],

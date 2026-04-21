@@ -740,6 +740,11 @@
     .dms-action-modal-context{display:flex;gap:8px;flex-wrap:wrap;padding:14px 22px 0}
     .dms-action-modal-context span{display:inline-grid;gap:4px;padding:10px 12px;border-radius:12px;background:#eaf1fb;color:#2a3c56;font-size:12px;font-weight:700}
     .dms-action-modal-context strong{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#56729a}
+    .dms-action-modal-window.service .dms-action-modal-context span{background:#e7f1ff}
+    .dms-action-modal-window.parts .dms-action-modal-context span{background:#fff2dc}
+    .dms-action-modal-window.accounting .dms-action-modal-context span{background:#eef3f8}
+    .dms-action-modal-window.crm .dms-action-modal-context span{background:#f3ebff}
+    .dms-action-modal-window.operations .dms-action-modal-context span{background:#e7f5ed}
     .dms-action-modal-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:14px 22px 0}
     .dms-action-modal-summary-card{display:grid;gap:4px;padding:12px 14px;border-radius:14px;border:1px solid rgba(30,41,59,.08);background:rgba(255,255,255,.72)}
     .dms-action-modal-summary-card small{font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#64748b}
@@ -756,8 +761,11 @@
     .dms-action-modal-field span{font-size:12px;font-weight:800;color:#20324e}
     .dms-action-modal-field .required{color:#c53030}
     .dms-action-modal-field input,.dms-action-modal-field select,.dms-action-modal-field textarea{width:100%;border:1px solid #c9d7e8;border-radius:12px;background:#fff;color:#15253a;padding:12px 13px;font-size:14px;box-sizing:border-box}
+    .dms-action-modal-field input[readonly],.dms-action-modal-field select[disabled],.dms-action-line-items-cell input[readonly]{background:#f7fafc;color:#51657d}
     .dms-action-modal-field textarea{min-height:110px;resize:vertical}
     .dms-action-modal-field small{font-size:11px;line-height:1.45;color:#68809e}
+    .dms-action-modal-field.invalid input,.dms-action-modal-field.invalid select,.dms-action-modal-field.invalid textarea,.dms-action-line-items-cell.invalid input,.dms-action-line-items-cell.invalid select{border-color:#c53030;box-shadow:0 0 0 3px rgba(197,48,48,.12)}
+    .dms-action-modal-field-error{font-size:11px;font-weight:700;color:#b42318}
     .dms-action-modal-section-title{grid-column:1/-1;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#6780a3;padding-top:8px;margin-top:2px;border-top:1px solid rgba(103,128,163,.16)}
     .dms-action-line-items{grid-column:1/-1;display:grid;gap:12px;padding:14px;border-radius:16px;border:1px solid rgba(103,128,163,.18);background:rgba(255,255,255,.78)}
     .dms-action-line-items-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -773,6 +781,7 @@
     .dms-action-line-items-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
     .dms-action-line-items-total{font-size:13px;color:#51657d}
     .dms-action-line-items-total strong{display:block;font-size:18px;color:#17304d}
+    .dms-action-line-items-validation{font-size:12px;font-weight:700;color:#b42318}
     .dms-action-modal-notes{padding:2px 22px 0}
     .dms-action-modal-note{padding:11px 13px;border-radius:12px;background:rgba(255,255,255,.74);border:1px dashed rgba(90,110,138,.22);font-size:12px;line-height:1.55;color:#51657d}
     .dms-action-modal-note strong{display:block;margin-bottom:4px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b7f99}
