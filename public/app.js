@@ -2207,7 +2207,7 @@ async function createQuickAppointmentRecord({ service = "", advisor = "", date =
   const [firstName = "", ...rest] = customerDisplayName(customer).split(" ");
   const lastName = rest.join(" ");
 
-  const res = await fetch("/.netlify/functions/book-appointment", {
+  const res = await fetch("/.netlify/functions/appointments-create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -9683,7 +9683,7 @@ async function createCustomer360Appointment() {
   const [firstName = "", ...rest] = customerDisplayName(customer).split(" ");
   const lastName = rest.join(" ");
 
-  const res = await fetch("/.netlify/functions/book-appointment", {
+  const res = await fetch("/.netlify/functions/appointments-create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -12504,7 +12504,7 @@ async function bookAppointment() {
       notes: getValue("apptNotes"),
     };
 
-    const res = await fetch("/.netlify/functions/book-appointment", {
+    const res = await fetch("/.netlify/functions/appointments-create", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify(payload),

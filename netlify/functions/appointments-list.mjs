@@ -52,6 +52,8 @@ export default async () => {
     const normalizedAppointments = appointments
       .map((item) => ({
         id: item.id || item.appointmentId || "",
+        customerId: item.customerId || "",
+        vehicleId: item.vehicleId || "",
         firstName: item.firstName || "",
         lastName: item.lastName || "",
         phone: item.phone || "",
@@ -67,10 +69,16 @@ export default async () => {
         time: item.time || "",
         transport: item.transport || "",
         notes: item.notes || "",
+        status: item.status || "scheduled",
+        scheduledStartUtc: item.scheduledStartUtc || "",
+        updatedAtUtc: item.updatedAtUtc || item.updatedAt || item.createdAtUtc || item.createdAt || "",
+        createdAtUtc: item.createdAtUtc || item.createdAt || "",
         confirmationNumber:
           item.confirmationNumber || item.confirmationId || "",
         createdAt:
+          item.createdAtUtc ||
           item.createdAt ||
+          item.updatedAtUtc ||
           item.updatedAt ||
           "",
       }))

@@ -23,7 +23,7 @@ export default async (req) => {
 
     let apiRes;
     try {
-      apiRes = await fetch(`${backendUrl}/api/appointments/book`, {
+      apiRes = await fetch(`${backendUrl}/api/appointments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -50,15 +50,15 @@ export default async (req) => {
 
     if (!apiRes.ok) {
       return Response.json(
-        { error: data.error || "Failed to book appointment" },
+        { error: data.error || "Failed to create appointment" },
         { status: apiRes.status }
       );
     }
 
     return Response.json({
-      success: data.success ?? true,
-      confirmationNumber: data.confirmationNumber || data.confirmationId || "",
-      appointment: data.appointment || null,
+      success: true,
+      confirmationNumber: data.id || data.confirmationNumber || data.confirmationId || "",
+      appointment: data.appointment || data || null,
     });
   } catch (err) {
     console.error("book-appointment error:", err);
