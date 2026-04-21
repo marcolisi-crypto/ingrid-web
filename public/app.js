@@ -2312,23 +2312,22 @@ function buildCustomerVehicleFieldBlock({ allowNoVehicle = true } = {}) {
     {
       name: "customerId",
       label: "Customer",
-      type: "select",
-      required: true,
+      type: "entitySearch",
+      entity: "customer",
       value: selectedCustomerId || currentCustomers[0]?.id || "",
-      options: (currentCustomers || []).map((customer) => ({
-        value: customer.id,
-        label: `${customerDisplayName(customer)}${customer?.primaryPhone ? ` • ${formatPhonePretty(customer.primaryPhone)}` : ""}`
-      }))
+      placeholder: "Search customer name, phone, or email",
+      help: "Search the DMS customer file instead of scrolling a full store list."
     },
     {
       name: "vehicleId",
       label: "Vehicle / VIN",
-      type: "select",
+      type: "entitySearch",
+      entity: "vehicle",
       value: getSelectedVehicleRecord()?.id || "",
-      options: getCustomerVehicleSelectOptions({
-        includeBlank: allowNoVehicle,
-        blankLabel: allowNoVehicle ? "Walk-in / select vehicle later" : "Select linked vehicle"
-      })
+      placeholder: "Search VIN, stock, year, make, or model",
+      allowBlank: allowNoVehicle,
+      blankLabel: allowNoVehicle ? "Walk-in / select vehicle later" : "Select linked vehicle",
+      help: allowNoVehicle ? "Search by VIN to attach the correct vehicle, or leave this blank for walk-in intake." : "Choose the VIN-linked vehicle for this record."
     }
   ];
 }
@@ -2585,7 +2584,28 @@ function renderDmsActionField(field = {}) {
   const common = `id="${id}" name="${escapeHtml(field.name || "")}" ${field.required ? "required" : ""} ${field.readonly ? "readonly" : ""} ${field.min !== undefined ? `min="${escapeHtml(String(field.min))}"` : ""} ${field.max !== undefined ? `max="${escapeHtml(String(field.max))}"` : ""} ${field.step !== undefined ? `step="${escapeHtml(String(field.step))}"` : ""} placeholder="${escapeHtml(field.placeholder || "")}"`;
 
   let control = "";
-  if (field.type === "textarea") {
+  if (field.type === "entitySearch") {
+    const hiddenValue = escapeHtml(String(value));
+    const emptySelectionCopy = field.entity === "vehicle"
+      ? (field.allowBlank ? field.blankLabel || "Walk-in / select vehicle later" : "Search and choose a VIN-linked vehicle")
+      : "Search and choose a customer record";
+    control = `
+      <div class="dms-action-modal-entity-search" data-entity-search-name="${escapeHtml(field.name || "")}">
+        <input
+          type="text"
+          id="${id}_query"
+          data-entity-search-query="${escapeHtml(field.name || "")}"
+          data-entity-search-entity="${escapeHtml(field.entity || "")}"
+          value=""
+          placeholder="${escapeHtml(field.placeholder || "")}"
+          autocomplete="off"
+        />
+        <input type="hidden" id="${id}" name="${escapeHtml(field.name || "")}" value="${hiddenValue}" />
+        <div class="dms-action-modal-entity-selection" data-entity-search-selection="${escapeHtml(field.name || "")}">${escapeHtml(emptySelectionCopy)}</div>
+        <div class="dms-action-modal-entity-results" data-entity-search-results="${escapeHtml(field.name || "")}"></div>
+      </div>
+    `;
+  } else if (field.type === "textarea") {
     control = `<textarea ${common}>${escapeHtml(String(value))}</textarea>`;
   } else if (field.type === "select") {
     const options = (field.options || []).map((option) => {
@@ -2637,6 +2657,7 @@ function renderDmsActionModal(config = {}) {
   submit.textContent = config.submitLabel || "Save";
   initDmsActionModalLineItems();
   wireDmsActionModalDerivedFields();
+  initDmsActionModalEntitySearches();
 }
 
 function buildDmsActionLineItemRow(field = {}, fieldIndex = 0, row = {}) {
@@ -2807,13 +2828,186 @@ function initDmsActionModalLineItems() {
   });
 }
 
+function getDmsActionModalFieldByName(fieldName = "") {
+  return (currentDmsActionModalConfig?.fields || []).find((field) => field?.name === fieldName) || null;
+}
+
+function getDmsActionEntitySearchItems(field = {}) {
+  if (field.entity === "customer") {
+    return (currentCustomers || []).map((customer) => {
+      const phones = (customer.phones || []).map((phone) => formatPhonePretty(phone)).filter(Boolean);
+      const primaryPhone = phones[0] || customer.primaryPhone || "";
+      return {
+        id: customer.id,
+        label: customerDisplayName(customer),
+        inputLabel: customerDisplayName(customer),
+        meta: [primaryPhone, customer.email].filter(Boolean).join(" • ") || "Customer record",
+        searchText: [
+          customerDisplayName(customer),
+          customer.email,
+          ...(customer.phones || []),
+          ...(phones || [])
+        ].join(" ").toLowerCase()
+      };
+    });
+  }
+
+  if (field.entity === "vehicle") {
+    const selectedCustomer = getCustomerById(document.querySelector('[name="customerId"]')?.value || selectedCustomerId);
+    const linkedVehicleIds = new Set(Array.isArray(selectedCustomer?.vehicleIds) ? selectedCustomer.vehicleIds.map(String) : []);
+    return (currentVehicles || []).map((vehicle) => {
+      const owner = getVehicleOwnerCustomer(vehicle);
+      return {
+        id: vehicle.id,
+        label: vehicleDisplayName(vehicle),
+        inputLabel: vehicle?.vin ? `${vehicle.vin} • ${vehicleDisplayName(vehicle)}` : vehicleDisplayName(vehicle),
+        meta: [vehicle.vin, owner ? customerDisplayName(owner) : "", linkedVehicleIds.has(String(vehicle.id)) ? "Linked customer" : ""].filter(Boolean).join(" • ") || "Vehicle record",
+        searchText: [
+          vehicle.vin,
+          vehicle.year,
+          vehicle.make,
+          vehicle.model,
+          vehicle.stockNumber,
+          owner ? customerDisplayName(owner) : ""
+        ].join(" ").toLowerCase(),
+        rankBoost: linkedVehicleIds.has(String(vehicle.id)) ? 1 : 0
+      };
+    }).sort((left, right) => (right.rankBoost || 0) - (left.rankBoost || 0));
+  }
+
+  return [];
+}
+
+function getDmsActionEntitySearchSelectedItem(field = {}, value = "") {
+  if (!value) return null;
+  return getDmsActionEntitySearchItems(field).find((item) => String(item.id) === String(value)) || null;
+}
+
+function renderDmsActionEntitySearchResults(field = {}, query = "") {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const items = getDmsActionEntitySearchItems(field);
+  const filtered = normalizedQuery
+    ? items.filter((item) => item.searchText.includes(normalizedQuery))
+    : items;
+  const visible = filtered.slice(0, 12);
+  if (field.entity === "vehicle" && field.allowBlank) {
+    visible.unshift({
+      id: "",
+      label: field.blankLabel || "Walk-in / select vehicle later",
+      inputLabel: "",
+      meta: "Continue without choosing a vehicle right now"
+    });
+  }
+  if (!visible.length) {
+    return `<div class="dms-action-modal-entity-empty">No matching ${escapeHtml(field.entity || "records")} found.</div>`;
+  }
+  return visible.map((item) => `
+    <button
+      type="button"
+      class="dms-action-modal-entity-result"
+      data-entity-search-pick="${escapeHtml(field.name || "")}"
+      data-entity-search-value="${escapeHtml(String(item.id || ""))}"
+      data-entity-search-label="${escapeHtml(String(item.inputLabel || item.label || ""))}"
+    >
+      <strong>${escapeHtml(item.label || "")}</strong>
+      <span>${escapeHtml(item.meta || "")}</span>
+    </button>
+  `).join("");
+}
+
+function updateDmsActionEntitySearchSelection(fieldName = "") {
+  const field = getDmsActionModalFieldByName(fieldName);
+  const hidden = document.querySelector(`[name="${fieldName}"]`);
+  const queryInput = document.querySelector(`[data-entity-search-query="${fieldName}"]`);
+  const selection = document.querySelector(`[data-entity-search-selection="${fieldName}"]`);
+  const results = document.querySelector(`[data-entity-search-results="${fieldName}"]`);
+  if (!field || !hidden || !queryInput || !selection || !results) return;
+
+  const selectedItem = getDmsActionEntitySearchSelectedItem(field, hidden.value);
+  if (selectedItem) {
+    queryInput.value = selectedItem.inputLabel || selectedItem.label || "";
+    queryInput.dataset.selectedLabel = queryInput.value;
+    selection.textContent = `${selectedItem.label}${selectedItem.meta ? ` • ${selectedItem.meta}` : ""}`;
+  } else {
+    queryInput.dataset.selectedLabel = "";
+    if (!queryInput.value) {
+      selection.textContent = field.entity === "vehicle"
+        ? (field.allowBlank ? field.blankLabel || "Walk-in / select vehicle later" : "Search and choose a VIN-linked vehicle")
+        : "Search and choose a customer record";
+    }
+  }
+  results.innerHTML = renderDmsActionEntitySearchResults(field, queryInput.value);
+}
+
+function syncDmsActionEntitySearchRelationship(fieldName = "", selectedValue = "") {
+  if (fieldName === "vehicleId") {
+    const vehicle = getVehicleById(selectedValue);
+    const owner = getVehicleOwnerCustomer(vehicle);
+    const customerHidden = document.querySelector('[name="customerId"]');
+    if (owner && customerHidden) {
+      customerHidden.value = owner.id || "";
+      updateDmsActionEntitySearchSelection("customerId");
+    }
+    return;
+  }
+
+  if (fieldName === "customerId") {
+    const customerHidden = document.querySelector('[name="customerId"]');
+    const vehicleHidden = document.querySelector('[name="vehicleId"]');
+    if (!customerHidden || !vehicleHidden || !vehicleHidden.value) return;
+    const vehicle = getVehicleById(vehicleHidden.value);
+    const owner = getVehicleOwnerCustomer(vehicle);
+    if (vehicle && owner && String(owner.id || "") !== String(customerHidden.value || "")) {
+      vehicleHidden.value = "";
+      const vehicleQuery = document.querySelector('[data-entity-search-query="vehicleId"]');
+      if (vehicleQuery) vehicleQuery.value = "";
+      updateDmsActionEntitySearchSelection("vehicleId");
+    }
+  }
+}
+
+function initDmsActionModalEntitySearches() {
+  document.querySelectorAll("[data-entity-search-name]").forEach((container) => {
+    const fieldName = container.dataset.entitySearchName || "";
+    const field = getDmsActionModalFieldByName(fieldName);
+    const hidden = container.querySelector(`[name="${fieldName}"]`);
+    const queryInput = container.querySelector(`[data-entity-search-query="${fieldName}"]`);
+    const results = container.querySelector(`[data-entity-search-results="${fieldName}"]`);
+    if (!field || !hidden || !queryInput || !results) return;
+
+    const rerender = () => {
+      if (String(queryInput.value || "") !== String(queryInput.dataset.selectedLabel || "")) {
+        hidden.value = "";
+      }
+      updateDmsActionEntitySearchSelection(fieldName);
+    };
+
+    queryInput.addEventListener("focus", () => {
+      updateDmsActionEntitySearchSelection(fieldName);
+    });
+    queryInput.addEventListener("input", rerender);
+
+    results.onclick = (event) => {
+      const button = event.target?.closest?.(`[data-entity-search-pick="${fieldName}"]`);
+      if (!button) return;
+      hidden.value = button.dataset.entitySearchValue || "";
+      queryInput.value = button.dataset.entitySearchLabel || "";
+      queryInput.dataset.selectedLabel = queryInput.value;
+      syncDmsActionEntitySearchRelationship(fieldName, hidden.value);
+      updateDmsActionEntitySearchSelection(fieldName);
+    };
+
+    updateDmsActionEntitySearchSelection(fieldName);
+  });
+}
+
 function openDmsActionModal(config = {}) {
   currentDmsActionModalConfig = config;
   renderDmsActionModal(config);
   const modal = document.getElementById("dmsActionModal");
   if (modal) modal.style.display = "flex";
   window.requestAnimationFrame(() => {
-    document.querySelector("#dmsActionModalBody input, #dmsActionModalBody select, #dmsActionModalBody textarea")?.focus();
+    document.querySelector("#dmsActionModalBody [data-entity-search-query], #dmsActionModalBody input, #dmsActionModalBody select, #dmsActionModalBody textarea")?.focus();
   });
 }
 
@@ -4036,8 +4230,15 @@ async function openRepairOrderFrom360(payload = null) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to open repair order");
+    const createdRepairOrder = data.repairOrder || null;
+    const createdCustomerId = createdRepairOrder?.customerId || customer.id;
+    const createdVehicleId = createdRepairOrder?.vehicleId || vehicle?.id || "";
+    setSelectedCustomerVehicleContext(createdCustomerId, createdVehicleId);
     await loadAppointments();
+    await loadRepairOrders();
+    await loadServiceReceptions();
     await refreshSelectedCustomer360();
+    renderCustomer360();
     completeCreateLanding({ lens: "service" });
     setCustomer360ComposerStatus(`Repair order ${data.repairOrderNumber || data.repairOrder?.repairOrderNumber || "opened"} created.`, "success");
   } catch (err) {
