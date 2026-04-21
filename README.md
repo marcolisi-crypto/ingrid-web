@@ -41,6 +41,12 @@ Additional storage:
 
 # 📦 Features
 
+## User Manuals
+
+- [User Manual Index](./docs/USER_MANUAL_INDEX.md)
+- [Service / Fixed Ops User Manual](./docs/SERVICE_FIXED_OPS_USER_MANUAL.md)
+- [INGRID DMS Object Map](./docs/INGRID_DMS_OBJECT_MAP.md)
+
 ## Call Dashboard
 - Live call list (auto-refresh)
 - Transcript viewer
