@@ -4217,7 +4217,7 @@ async function addTechnicianClockEvent(eventType = "clock_in") {
   }
 }
 
-async function addAccountingRepairOrderEntry() {
+async function addAccountingRepairOrderEntry(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     await ensureRepairOrderContext(null, {
@@ -4229,16 +4229,44 @@ async function addAccountingRepairOrderEntry() {
     return;
   }
 
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "accounting",
+      eyebrow: "Accounting Entry",
+      title: "Post Accounting Entry",
+      subtitle: "Stage the accounting movement tied to this repair order.",
+      submitLabel: "Post Entry",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Accounting posting will stay tied to this service job." },
+        { label: "Balance", value: formatMoney(getRepairOrderAmounts(repairOrder).balance), detail: "Use the current balance as a guide for payment or posting amount." },
+        { label: "Department", value: "Accounting", detail: "Entry will be visible from the accounting desk and RO record." }
+      ],
+      notes: [
+        { label: "Back-office control", body: "Use this window for payment requests, deposits, adjustments, or review-stage accounting entries against the live RO." }
+      ],
+      fields: [
+        { type: "section", label: "Entry type" },
+        { name: "entryType", label: "Entry type", type: "select", required: true, value: "payment_request", options: ["payment_request", "deposit", "adjustment", "invoice_review"] },
+        { name: "status", label: "Status", type: "select", value: "open", options: ["open", "posted", "paid", "review"] },
+        { type: "section", label: "Amount and detail" },
+        { name: "amount", label: "Amount", type: "number", required: true, value: String(Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0)), min: 0, step: 0.01 },
+        { name: "description", label: "Description", type: "textarea", required: true, full: true, value: `Accounting entry for ${repairOrder.repairOrderNumber || "active RO"}\nPosting detail:\nReference:` }
+      ],
+      onSubmit: async (values) => addAccountingRepairOrderEntry({ ...values, __submit: true })
+    });
+    return;
+  }
+
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-accounting-entry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        entryType: "payment_request",
-        description: "Payment request staged from Customer + Vehicle 360",
-        amount: Number(repairOrder.balanceDue || repairOrder.totalEstimate || 0),
-        status: "open"
+        entryType: payload.entryType || "payment_request",
+        description: payload.description || "Payment request staged from Customer + Vehicle 360",
+        amount: Number(payload.amount || repairOrder.balanceDue || repairOrder.totalEstimate || 0),
+        status: payload.status || "open"
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -4252,7 +4280,7 @@ async function addAccountingRepairOrderEntry() {
   }
 }
 
-async function addRepairOrderLaborOp() {
+async function addRepairOrderLaborOp(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     await ensureRepairOrderContext(null, {
@@ -4264,20 +4292,53 @@ async function addRepairOrderLaborOp() {
     return;
   }
 
+  const technicianOptions = getDepartmentRoster("technicians");
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "operations",
+      eyebrow: "Labor Dispatch",
+      title: "Add Labor Operation",
+      subtitle: "Dispatch real labor work against the active repair order.",
+      submitLabel: "Add Labor Op",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "The labor op will be attached to this repair order." },
+        { label: "Technician desk", value: technicianOptions[0] || "Tech queue", detail: "Assign the op to a technician or foreman now." },
+        { label: "Pay type", value: "Customer", detail: "Use pay split and warranty tools separately when needed." }
+      ],
+      notes: [
+        { label: "Dispatch control", body: "Use a labor op for flat-rate work, diagnostics, and technician dispatch that should show up on the RO and shop dashboard." }
+      ],
+      fields: [
+        { type: "section", label: "Operation setup" },
+        { name: "opCode", label: "Op code", type: "text", required: true, value: "DIAG" },
+        { name: "description", label: "Description", type: "text", required: true, value: "Diagnostic and dispatch labor op" },
+        { name: "technicianName", label: "Technician", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
+        { type: "section", label: "Time and status" },
+        { name: "soldHours", label: "Sold hours", type: "number", required: true, value: "1.5", min: 0, step: 0.1 },
+        { name: "flatRateHours", label: "Flat-rate hours", type: "number", value: "1.2", min: 0, step: 0.1 },
+        { name: "actualHours", label: "Actual hours", type: "number", value: "0", min: 0, step: 0.1 },
+        { name: "dispatchStatus", label: "Dispatch status", type: "select", value: "dispatched", options: ["queued", "dispatched", "in_progress", "complete"] },
+        { name: "payType", label: "Pay type", type: "select", value: "customer", options: ["customer", "warranty", "internal", "maintenance"] }
+      ],
+      onSubmit: async (values) => addRepairOrderLaborOp({ ...values, __submit: true })
+    });
+    return;
+  }
+
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-labor-op", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        opCode: "DIAG",
-        description: "Diagnostic and dispatch labor op",
-        technicianName: "Miguel Santos",
-        soldHours: 1.5,
-        flatRateHours: 1.2,
-        actualHours: 0,
-        dispatchStatus: "dispatched",
-        payType: "customer",
+        opCode: payload.opCode || "DIAG",
+        description: payload.description || "Diagnostic and dispatch labor op",
+        technicianName: payload.technicianName || technicianOptions[0] || "Miguel Santos",
+        soldHours: Number(payload.soldHours || 1.5),
+        flatRateHours: Number(payload.flatRateHours || 1.2),
+        actualHours: Number(payload.actualHours || 0),
+        dispatchStatus: payload.dispatchStatus || "dispatched",
+        payType: payload.payType || "customer",
         dispatchedAtUtc: new Date().toISOString()
       })
     });
@@ -4292,7 +4353,7 @@ async function addRepairOrderLaborOp() {
   }
 }
 
-async function addRepairOrderInspection() {
+async function addRepairOrderInspection(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     await ensureRepairOrderContext(null, {
@@ -4304,18 +4365,49 @@ async function addRepairOrderInspection() {
     return;
   }
 
+  const technicianOptions = getDepartmentRoster("technicians");
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "operations",
+      eyebrow: "MPI Workflow",
+      title: "Add MPI Item",
+      subtitle: "Record a multi-point inspection result against the active repair order.",
+      submitLabel: "Save MPI",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Inspection result will be attached to this service job." },
+        { label: "Current MPI", value: formatCountLabel((repairOrder.multiPointInspections || []).length, "item"), detail: "Use this to add the next inspection result." },
+        { label: "Technician", value: technicianOptions[0] || "Tech queue", detail: "Inspection ownership stays visible to the advisor." }
+      ],
+      notes: [
+        { label: "Inspection result", body: "Use MPI items for red/yellow/green conditions that should drive advisor approval, parts quoting, and follow-up." }
+      ],
+      fields: [
+        { type: "section", label: "Inspection item" },
+        { name: "category", label: "Category", type: "select", required: true, value: "Brakes", options: ["Brakes", "Tires", "Battery", "Fluids", "Alignment", "Engine", "Suspension"] },
+        { name: "itemName", label: "Item", type: "text", required: true, value: "Front brake pad measurement" },
+        { name: "result", label: "Result", type: "select", required: true, value: "yellow", options: ["green", "yellow", "red"] },
+        { name: "severity", label: "Severity", type: "select", value: "attention", options: ["ok", "attention", "critical"] },
+        { type: "section", label: "Technician note" },
+        { name: "technicianName", label: "Technician", type: "select", required: true, value: technicianOptions[0] || "Miguel Santos", options: technicianOptions.length ? technicianOptions : ["Miguel Santos"] },
+        { name: "notes", label: "Notes", type: "textarea", required: true, full: true, value: "Pads nearing replacement threshold." }
+      ],
+      onSubmit: async (values) => addRepairOrderInspection({ ...values, __submit: true })
+    });
+    return;
+  }
+
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-inspection", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        category: "Brakes",
-        itemName: "Front brake pad measurement",
-        result: "yellow",
-        severity: "attention",
-        notes: "Pads nearing replacement threshold.",
-        technicianName: "Miguel Santos",
+        category: payload.category || "Brakes",
+        itemName: payload.itemName || "Front brake pad measurement",
+        result: payload.result || "yellow",
+        severity: payload.severity || "attention",
+        notes: payload.notes || "Pads nearing replacement threshold.",
+        technicianName: payload.technicianName || technicianOptions[0] || "Miguel Santos",
         inspectedAtUtc: new Date().toISOString()
       })
     });
@@ -4330,7 +4422,7 @@ async function addRepairOrderInspection() {
   }
 }
 
-async function addRepairOrderWarrantyClaim() {
+async function addRepairOrderWarrantyClaim(payload = null) {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     await ensureRepairOrderContext(null, {
@@ -4342,19 +4434,51 @@ async function addRepairOrderWarrantyClaim() {
     return;
   }
 
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "service",
+      eyebrow: "Warranty Claim",
+      title: "Create Warranty Claim",
+      subtitle: "Capture the claim details that should follow this repair order into warranty processing.",
+      submitLabel: "Create Claim",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Warranty claim will stay attached to this service job." },
+        { label: "Coverage", value: "Warranty", detail: "Use customer/internal splits separately when the job is not fully covered." },
+        { label: "Estimate", value: formatMoney(getRepairOrderAmounts(repairOrder).estimate), detail: "Use this as a guide for claim amount." }
+      ],
+      notes: [
+        { label: "Warranty processing", body: "Use this window for failure code, cause, correction, and claim amount so service and accounting can track warranty posture clearly." }
+      ],
+      fields: [
+        { type: "section", label: "Claim identity" },
+        { name: "claimType", label: "Claim type", type: "select", value: "warranty", options: ["warranty", "goodwill", "policy"] },
+        { name: "opCode", label: "Op code", type: "text", required: true, value: "DIAG" },
+        { name: "failureCode", label: "Failure code", type: "text", required: true, value: "CHKENG" },
+        { type: "section", label: "Cause and correction" },
+        { name: "cause", label: "Cause", type: "textarea", required: true, full: true, value: "Check engine light concern" },
+        { name: "correction", label: "Correction", type: "textarea", required: true, full: true, value: "Diagnostic and warranty review" },
+        { type: "section", label: "Claim amount" },
+        { name: "claimAmount", label: "Claim amount", type: "number", required: true, value: "149", min: 0, step: 0.01 },
+        { name: "status", label: "Status", type: "select", value: "submitted", options: ["draft", "submitted", "approved", "posted"] }
+      ],
+      onSubmit: async (values) => addRepairOrderWarrantyClaim({ ...values, __submit: true })
+    });
+    return;
+  }
+
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-warranty-claim", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        claimType: "warranty",
-        opCode: "DIAG",
-        failureCode: "CHKENG",
-        cause: "Check engine light concern",
-        correction: "Diagnostic and warranty review",
-        claimAmount: 149,
-        status: "submitted",
+        claimType: payload.claimType || "warranty",
+        opCode: payload.opCode || "DIAG",
+        failureCode: payload.failureCode || "CHKENG",
+        cause: payload.cause || "Check engine light concern",
+        correction: payload.correction || "Diagnostic and warranty review",
+        claimAmount: Number(payload.claimAmount || 149),
+        status: payload.status || "submitted",
         submittedAtUtc: new Date().toISOString()
       })
     });
@@ -4369,7 +4493,7 @@ async function addRepairOrderWarrantyClaim() {
   }
 }
 
-async function addRepairOrderPaySplit(payType = "customer") {
+async function addRepairOrderPaySplit(payload = "customer") {
   const repairOrder = getActiveRepairOrderRecord();
   if (!repairOrder) {
     await ensureRepairOrderContext(null, {
@@ -4382,7 +4506,37 @@ async function addRepairOrderPaySplit(payType = "customer") {
   }
 
   const total = Number(repairOrder.totalEstimate || repairOrder.balanceDue || 0);
-  const amount = payType === "warranty" ? Math.max(0, total * 0.6) : payType === "internal" ? Math.max(0, total * 0.15) : Math.max(0, total);
+  const requestedPayType = typeof payload === "string" ? payload : payload?.payType || "customer";
+  const defaultAmount = requestedPayType === "warranty" ? Math.max(0, total * 0.6) : requestedPayType === "internal" ? Math.max(0, total * 0.15) : Math.max(0, total);
+
+  if (!payload?.__submit) {
+    openDmsActionModal({
+      theme: "service",
+      eyebrow: "Pay Split",
+      title: "Set Repair Order Pay Split",
+      subtitle: "Stage the customer, warranty, or internal portion of this repair order.",
+      submitLabel: "Save Pay Split",
+      summaryItems: [
+        { label: "Repair order", value: repairOrder.repairOrderNumber || "Active RO", detail: "Pay split will be attached to this repair order." },
+        { label: "RO total", value: formatMoney(total), detail: "Use this as the base when splitting the job." },
+        { label: "Suggested split", value: formatMoney(defaultAmount), detail: `${titleCase(requestedPayType)} portion based on the current RO balance.` }
+      ],
+      notes: [
+        { label: "Pay-type posture", body: "Use pay splits to separate customer, warranty, maintenance, or internal responsibility before invoicing and accounting review." }
+      ],
+      fields: [
+        { type: "section", label: "Split type" },
+        { name: "payType", label: "Pay type", type: "select", value: requestedPayType, options: ["customer", "warranty", "internal", "maintenance"] },
+        { name: "status", label: "Status", type: "select", value: "open", options: ["open", "approved", "posted"] },
+        { type: "section", label: "Split amount" },
+        { name: "amount", label: "Amount", type: "number", required: true, value: String(Number(defaultAmount.toFixed(2))), min: 0, step: 0.01 },
+        { name: "percentage", label: "Percentage", type: "number", value: total > 0 ? String(Number(((defaultAmount / total) * 100).toFixed(2))) : "0", min: 0, max: 100, step: 0.01, help: "Shown as a percent of the current RO total." },
+        { name: "notes", label: "Notes", type: "textarea", full: true, value: `${titleCase(requestedPayType)} split staged from Customer + Vehicle 360` }
+      ],
+      onSubmit: async (values) => addRepairOrderPaySplit({ ...values, __submit: true })
+    });
+    return;
+  }
 
   try {
     const res = await fetch("/.netlify/functions/service-repair-order-pay-split", {
@@ -4390,18 +4544,20 @@ async function addRepairOrderPaySplit(payType = "customer") {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repairOrderId: repairOrder.id,
-        payType,
-        amount,
-        percentage: total > 0 ? amount / total : 0,
-        status: "open",
-        notes: `${titleCase(payType)} split staged from Customer + Vehicle 360`
+        payType: payload.payType || requestedPayType,
+        amount: Number(payload.amount || defaultAmount),
+        percentage: payload.percentage !== undefined && payload.percentage !== ""
+          ? Number(payload.percentage) / 100
+          : total > 0 ? Number(payload.amount || defaultAmount) / total : 0,
+        status: payload.status || "open",
+        notes: payload.notes || `${titleCase(requestedPayType)} split staged from Customer + Vehicle 360`
       })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Failed to add pay split");
     await refreshSelectedCustomer360();
     renderCustomer360();
-    setCustomer360ComposerStatus(`${titleCase(payType)} pay split added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
+    setCustomer360ComposerStatus(`${titleCase(payload.payType || requestedPayType)} pay split added to ${repairOrder.repairOrderNumber || "active RO"}.`, "success");
   } catch (err) {
     console.error("addRepairOrderPaySplit error:", err);
     setCustomer360ComposerStatus(err.message || "Unable to add pay split.", "error");
